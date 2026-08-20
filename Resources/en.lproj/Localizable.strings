@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>About</key>
+	<string>About</string>
+	<key>Accessibility</key>
+	<string>Accessibility</string>
+	<key>Activate</key>
+	<string>Activate</string>
+	<key>Activation failed. Please try again.</key>
+	<string>Activation failed. Please try again.</string>
+	<key>Active app indicator</key>
+	<string>Active app indicator</string>
+	<key>Add to folder</key>
+	<string>Add to folder</string>
+	<key>All displays</key>
+	<string>All displays</string>
+	<key>Appearance</key>
+	<string>Appearance</string>
+	<key>Apps</key>
+	<string>Apps</string>
+	<key>Automatic</key>
+	<string>Automatic</string>
+	<key>Automation</key>
+	<string>Automation</string>
+	<key>Back</key>
+	<string>Back</string>
+	<key>Background</key>
+	<string>Background</string>
+	<key>Battery</key>
+	<string>Battery</string>
+	<key>Battery — Charging</key>
+	<string>Battery — Charging</string>
+	<key>Blur</key>
+	<string>Blur</string>
+	<key>Border</key>
+	<string>Border</string>
+	<key>Bottom</key>
+	<string>Bottom</string>
+	<key>Clear color</key>
+	<string>Clear color</string>
+	<key>Clock</key>
+	<string>Clock</string>
+	<key>Connected</key>
+	<string>Connected</string>
+	<key>Couldn’t reach the server. Check your connection.</key>
+	<string>Couldn’t reach the server. Check your connection.</string>
+	<key>Custom</key>
+	<string>Custom</string>
+	<key>Dark</key>
+	<string>Dark</string>
+	<key>Delete folder</key>
+	<string>Delete folder</string>
+	<key>Disconnect</key>
+	<string>Disconnect</string>
+	<key>Done</key>
+	<string>Done</string>
+	<key>Drop an app or file here to add a shortcut</key>
+	<string>Drop an app or file here to add a shortcut</string>
+	<key>Features</key>
+	<string>Features</string>
+	<key>Fit windows</key>
+	<string>Fit windows</string>
+	<key>Folder</key>
+	<string>Folder</string>
+	<key>General</key>
+	<string>General</string>
+	<key>Get Started</key>
+	<string>Get Started</string>
+	<key>Global Hotkeys</key>
+	<string>Global Hotkeys</string>
+	<key>Grant Accessibility</key>
+	<string>Grant Accessibility</string>
+	<key>Grant accessibility access so WinTaskbar can manage windows.</key>
+	<string>Grant accessibility access so WinTaskbar can manage windows.</string>
+	<key>Grant permission</key>
+	<string>Grant permission</string>
+	<key>Granted</key>
+	<string>Granted</string>
+	<key>Height</key>
+	<string>Height</string>
+	<key>Hidden network</key>
+	<string>Hidden network</string>
+	<key>Hide system Dock</key>
+	<string>Hide system Dock</string>
+	<key>Hide the system Dock</key>
+	<string>Hide the system Dock</string>
+	<key>Highlight style</key>
+	<string>Highlight style</string>
+	<key>Hotkeys</key>
+	<string>Hotkeys</string>
+	<key>Icon padding</key>
+	<string>Icon padding</string>
+	<key>Icon size</key>
+	<string>Icon size</string>
+	<key>Input source</key>
+	<string>Input source</string>
+	<key>Join</key>
+	<string>Join</string>
+	<key>Later</key>
+	<string>Later</string>
+	<key>Launch at login</key>
+	<string>Launch at login</string>
+	<key>Launch pinned apps</key>
+	<string>Launch pinned apps</string>
+	<key>Left</key>
+	<string>Left</string>
+	<key>Light</key>
+	<string>Light</string>
+	<key>Lock Screen</key>
+	<string>Lock Screen</string>
+	<key>Log Out</key>
+	<string>Log Out</string>
+	<key>Mac</key>
+	<string>Mac</string>
+	<key>Menu</key>
+	<string>Menu</string>
+	<key>Menu button</key>
+	<string>Menu button</string>
+	<key>More apps</key>
+	<string>More apps</string>
+	<key>Mute</key>
+	<string>Mute</string>
+	<key>Network</key>
+	<string>Network</string>
+	<key>New Folder</key>
+	<string>New Folder</string>
+	<key>New Window</key>
+	<string>New Window</string>
+	<key>New folder</key>
+	<string>New folder</string>
+	<key>Next</key>
+	<string>Next</string>
+	<key>No apps found</key>
+	<string>No apps found</string>
+	<key>No networks found</key>
+	<string>No networks found</string>
+	<key>No open windows</key>
+	<string>No open windows</string>
+	<key>None</key>
+	<string>None</string>
+	<key>Not connected</key>
+	<string>Not connected</string>
+	<key>Not granted</key>
+	<string>Not granted</string>
+	<key>Off</key>
+	<string>Off</string>
+	<key>Open</key>
+	<string>Open</string>
+	<key>Open Network Settings…</key>
+	<string>Open Network Settings…</string>
+	<key>Open System Settings</key>
+	<string>Open System Settings</string>
+	<key>Open menu</key>
+	<string>Open menu</string>
+	<key>Opposite end</key>
+	<string>Opposite end</string>
+	<key>Output</key>
+	<string>Output</string>
+	<key>Panel color</key>
+	<string>Panel color</string>
+	<key>Panel opacity</key>
+	<string>Panel opacity</string>
+	<key>Password</key>
+	<string>Password</string>
+	<key>Permissions</key>
+	<string>Permissions</string>
+	<key>Pin to Taskbar</key>
+	<string>Pin to Taskbar</string>
+	<key>Position</key>
+	<string>Position</string>
+	<key>Primary only</key>
+	<string>Primary only</string>
+	<key>Quit</key>
+	<string>Quit</string>
+	<key>Recent</key>
+	<string>Recent</string>
+	<key>Remove</key>
+	<string>Remove</string>
+	<key>Remove from folder</key>
+	<string>Remove from folder</string>
+	<key>Rename folder</key>
+	<string>Rename folder</string>
+	<key>Rescan</key>
+	<string>Rescan</string>
+	<key>Restart</key>
+	<string>Restart</string>
+	<key>Restore system Dock</key>
+	<string>Restore system Dock</string>
+	<key>Right</key>
+	<string>Right</string>
+	<key>Scanning…</key>
+	<string>Scanning…</string>
+	<key>Screen Recording</key>
+	<string>Screen Recording</string>
+	<key>Search apps</key>
+	<string>Search apps</string>
+	<key>Settings</key>
+	<string>Settings</string>
+	<key>Show Desktop</key>
+	<string>Show Desktop</string>
+	<key>Show Finder in running apps</key>
+	<string>Show Finder in running apps</string>
+	<key>Show app labels under icons</key>
+	<string>Show app labels under icons</string>
+	<key>Show in Finder</key>
+	<string>Show in Finder</string>
+	<key>Show on</key>
+	<string>Show on</string>
+	<key>Show running indicators</key>
+	<string>Show running indicators</string>
+	<key>Shut Down</key>
+	<string>Shut Down</string>
+	<key>Signal</key>
+	<string>Signal</string>
+	<key>Skip</key>
+	<string>Skip</string>
+	<key>Sleep</key>
+	<string>Sleep</string>
+	<key>Standard</key>
+	<string>Standard</string>
+	<key>Start</key>
+	<string>Start</string>
+	<key>Start button label</key>
+	<string>Start button label</string>
+	<key>Status</key>
+	<string>Status</string>
+	<key>Strong</key>
+	<string>Strong</string>
+	<key>Subtle</key>
+	<string>Subtle</string>
+	<key>System Tray</key>
+	<string>System Tray</string>
+	<key>Theme</key>
+	<string>Theme</string>
+	<key>This key has been revoked.</key>
+	<string>This key has been revoked.</string>
+	<key>This key is already used on another device.</key>
+	<string>This key is already used on another device.</string>
+	<key>Toggle Start Menu</key>
+	<string>Toggle Start Menu</string>
+	<key>Top</key>
+	<string>Top</string>
+	<key>Translucency</key>
+	<string>Translucency</string>
+	<key>Underline</key>
+	<string>Underline</string>
+	<key>Unmute</key>
+	<string>Unmute</string>
+	<key>Unpin</key>
+	<string>Unpin</string>
+	<key>Version</key>
+	<string>Version</string>
+	<key>Volume</key>
+	<string>Volume</string>
+	<key>Welcome to WinTaskbar</key>
+	<string>Welcome to WinTaskbar</string>
+	<key>Wi-Fi</key>
+	<string>Wi-Fi</string>
+	<key>Wi-Fi off</key>
+	<string>Wi-Fi off</string>
+	<key>WinTaskbar can hide the macOS Dock so only the taskbar shows. You can restore it anytime in Settings.</key>
+	<string>WinTaskbar can hide the macOS Dock so only the taskbar shows. You can restore it anytime in Settings.</string>
+	<key>WinTaskbar needs Accessibility access to list and manage app windows.</key>
+	<string>WinTaskbar needs Accessibility access to list and manage app windows.</string>
+	<key>WinTaskbar replaces the Dock with a Windows-style taskbar.</key>
+	<string>WinTaskbar replaces the Dock with a Windows-style taskbar.</string>
+	<key>Window Previews</key>
+	<string>Window Previews</string>
+	<key>Window previews need Screen Recording permission.</key>
+	<string>Window previews need Screen Recording permission.</string>
+	<key>Windows</key>
+	<string>Windows</string>
+</dict>
+</plist>

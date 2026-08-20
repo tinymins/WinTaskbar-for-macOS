@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>About</key>
+	<string>Acerca de</string>
+	<key>Accessibility</key>
+	<string>Accesibilidad</string>
+	<key>Active app indicator</key>
+	<string>Indicador de app activa</string>
+	<key>Add to folder</key>
+	<string>Añadir a carpeta</string>
+	<key>All displays</key>
+	<string>Todas las pantallas</string>
+	<key>Appearance</key>
+	<string>Apariencia</string>
+	<key>Apps</key>
+	<string>Apps</string>
+	<key>Automatic</key>
+	<string>Automático</string>
+	<key>Automation</key>
+	<string>Automatización</string>
+	<key>Back</key>
+	<string>Atrás</string>
+	<key>Background</key>
+	<string>Fondo</string>
+	<key>Battery</key>
+	<string>Batería</string>
+	<key>Battery — Charging</key>
+	<string>Batería — Cargando</string>
+	<key>Blur</key>
+	<string>Desenfoque</string>
+	<key>Border</key>
+	<string>Borde</string>
+	<key>Bottom</key>
+	<string>Abajo</string>
+	<key>Clear color</key>
+	<string>Sin color</string>
+	<key>Clock</key>
+	<string>Reloj</string>
+	<key>Connected</key>
+	<string>Conectado</string>
+	<key>Custom</key>
+	<string>Personalizado</string>
+	<key>Dark</key>
+	<string>Oscuro</string>
+	<key>Delete folder</key>
+	<string>Eliminar carpeta</string>
+	<key>Disconnect</key>
+	<string>Desconectar</string>
+	<key>Done</key>
+	<string>Listo</string>
+	<key>Drop an app or file here to add a shortcut</key>
+	<string>Suelta una app o archivo aquí para añadir un acceso directo</string>
+	<key>Features</key>
+	<string>Funciones</string>
+	<key>Fit windows</key>
+	<string>Ajustar ventanas</string>
+	<key>Folder</key>
+	<string>Carpeta</string>
+	<key>General</key>
+	<string>General</string>
+	<key>Get Started</key>
+	<string>Empezar</string>
+	<key>Global Hotkeys</key>
+	<string>Atajos globales</string>
+	<key>Grant Accessibility</key>
+	<string>Conceder accesibilidad</string>
+	<key>Grant accessibility access so WinTaskbar can manage windows.</key>
+	<string>Concede acceso de accesibilidad para que WinTaskbar pueda gestionar ventanas.</string>
+	<key>Grant permission</key>
+	<string>Conceder permiso</string>
+	<key>Granted</key>
+	<string>Concedido</string>
+	<key>Height</key>
+	<string>Altura</string>
+	<key>Hidden network</key>
+	<string>Red oculta</string>
+	<key>Hide system Dock</key>
+	<string>Ocultar el Dock del sistema</string>
+	<key>Hide the system Dock</key>
+	<string>Ocultar el Dock del sistema</string>
+	<key>Highlight style</key>
+	<string>Estilo de resaltado</string>
+	<key>Hotkeys</key>
+	<string>Atajos</string>
+	<key>Icon padding</key>
+	<string>Margen de iconos</string>
+	<key>Icon size</key>
+	<string>Tamaño de iconos</string>
+	<key>Input source</key>
+	<string>Fuente de entrada</string>
+	<key>Join</key>
+	<string>Conectar</string>
+	<key>Launch at login</key>
+	<string>Abrir al iniciar sesión</string>
+	<key>Launch pinned apps</key>
+	<string>Abrir apps ancladas</string>
+	<key>Left</key>
+	<string>Izquierda</string>
+	<key>Light</key>
+	<string>Claro</string>
+	<key>Lock Screen</key>
+	<string>Bloquear pantalla</string>
+	<key>Log Out</key>
+	<string>Cerrar sesión</string>
+	<key>Mac</key>
+	<string>Mac</string>
+	<key>Menu</key>
+	<string>Menú</string>
+	<key>Menu button</key>
+	<string>Botón de menú</string>
+	<key>More apps</key>
+	<string>Más apps</string>
+	<key>Mute</key>
+	<string>Silenciar</string>
+	<key>Network</key>
+	<string>Red</string>
+	<key>New Folder</key>
+	<string>Nueva carpeta</string>
+	<key>New Window</key>
+	<string>Nueva ventana</string>
+	<key>New folder</key>
+	<string>Nueva carpeta</string>
+	<key>Next</key>
+	<string>Siguiente</string>
+	<key>No apps found</key>
+	<string>No se encontraron apps</string>
+	<key>No networks found</key>
+	<string>No se encontraron redes</string>
+	<key>No open windows</key>
+	<string>No hay ventanas abiertas</string>
+	<key>None</key>
+	<string>Ninguno</string>
+	<key>Not connected</key>
+	<string>No conectado</string>
+	<key>Not granted</key>
+	<string>No concedido</string>
+	<key>Off</key>
+	<string>Desactivado</string>
+	<key>Open</key>
+	<string>Abrir</string>
+	<key>Open Network Settings…</key>
+	<string>Abrir ajustes de red…</string>
+	<key>Open System Settings</key>
+	<string>Abrir ajustes del sistema</string>
+	<key>Open menu</key>
+	<string>Abrir menú</string>
+	<key>Opposite end</key>
+	<string>Extremo opuesto</string>
+	<key>Output</key>
+	<string>Salida</string>
+	<key>Panel color</key>
+	<string>Color del panel</string>
+	<key>Panel opacity</key>
+	<string>Opacidad del panel</string>
+	<key>Password</key>
+	<string>Contraseña</string>
+	<key>Permissions</key>
+	<string>Permisos</string>
+	<key>Pin to Taskbar</key>
+	<string>Anclar a la barra de tareas</string>
+	<key>Position</key>
+	<string>Posición</string>
+	<key>Primary only</key>
+	<string>Solo principal</string>
+	<key>Quit</key>
+	<string>Salir</string>
+	<key>Recent</key>
+	<string>Recientes</string>
+	<key>Remove</key>
+	<string>Quitar</string>
+	<key>Remove from folder</key>
+	<string>Quitar de la carpeta</string>
+	<key>Rename folder</key>
+	<string>Renombrar carpeta</string>
+	<key>Rescan</key>
+	<string>Reescanear</string>
+	<key>Restart</key>
+	<string>Reiniciar</string>
+	<key>Restore system Dock</key>
+	<string>Restaurar el Dock del sistema</string>
+	<key>Right</key>
+	<string>Derecha</string>
+	<key>Scanning…</key>
+	<string>Buscando…</string>
+	<key>Screen Recording</key>
+	<string>Grabación de pantalla</string>
+	<key>Search apps</key>
+	<string>Buscar apps</string>
+	<key>Settings</key>
+	<string>Ajustes</string>
+	<key>Show Desktop</key>
+	<string>Mostrar escritorio</string>
+	<key>Show Finder in running apps</key>
+	<string>Mostrar Finder en apps en ejecución</string>
+	<key>Show app labels under icons</key>
+	<string>Mostrar nombres bajo los iconos</string>
+	<key>Show in Finder</key>
+	<string>Mostrar en Finder</string>
+	<key>Show on</key>
+	<string>Mostrar en</string>
+	<key>Show running indicators</key>
+	<string>Mostrar indicadores de apps en ejecución</string>
+	<key>Shut Down</key>
+	<string>Apagar</string>
+	<key>Signal</key>
+	<string>Señal</string>
+	<key>Skip</key>
+	<string>Omitir</string>
+	<key>Sleep</key>
+	<string>Reposo</string>
+	<key>Standard</key>
+	<string>Estándar</string>
+	<key>Start</key>
+	<string>Inicio</string>
+	<key>Start button label</key>
+	<string>Etiqueta del botón de inicio</string>
+	<key>Status</key>
+	<string>Estado</string>
+	<key>Strong</key>
+	<string>Fuerte</string>
+	<key>Subtle</key>
+	<string>Sutil</string>
+	<key>System Tray</key>
+	<string>Bandeja del sistema</string>
+	<key>Theme</key>
+	<string>Tema</string>
+	<key>Toggle Start Menu</key>
+	<string>Alternar menú de inicio</string>
+	<key>Top</key>
+	<string>Arriba</string>
+	<key>Translucency</key>
+	<string>Translucidez</string>
+	<key>Underline</key>
+	<string>Subrayado</string>
+	<key>Unmute</key>
+	<string>Activar sonido</string>
+	<key>Unpin</key>
+	<string>Desanclar</string>
+	<key>Version</key>
+	<string>Versión</string>
+	<key>Volume</key>
+	<string>Volumen</string>
+	<key>Welcome to WinTaskbar</key>
+	<string>Te damos la bienvenida a WinTaskbar</string>
+	<key>Wi-Fi</key>
+	<string>Wi-Fi</string>
+	<key>Wi-Fi off</key>
+	<string>Wi-Fi desactivado</string>
+	<key>WinTaskbar can hide the macOS Dock so only the taskbar shows. You can restore it anytime in Settings.</key>
+	<string>WinTaskbar puede ocultar el Dock de macOS para mostrar solo la barra de tareas. Puedes restaurarlo cuando quieras en Ajustes.</string>
+	<key>WinTaskbar needs Accessibility access to list and manage app windows.</key>
+	<string>WinTaskbar necesita acceso de accesibilidad para listar y gestionar las ventanas de las apps.</string>
+	<key>WinTaskbar replaces the Dock with a Windows-style taskbar.</key>
+	<string>WinTaskbar reemplaza el Dock por una barra de tareas estilo Windows.</string>
+	<key>Window Previews</key>
+	<string>Vistas previas de ventanas</string>
+	<key>Window previews need Screen Recording permission.</key>
+	<string>Las vistas previas de ventanas requieren permiso de grabación de pantalla.</string>
+	<key>Windows</key>
+	<string>Windows</string>
+</dict>
+</plist>

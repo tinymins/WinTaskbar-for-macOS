@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>About</key>
+	<string>Despre</string>
+	<key>Accessibility</key>
+	<string>Accesibilitate</string>
+	<key>Active app indicator</key>
+	<string>Indicator aplicație activă</string>
+	<key>Add to folder</key>
+	<string>Adaugă în dosar</string>
+	<key>All displays</key>
+	<string>Toate ecranele</string>
+	<key>Appearance</key>
+	<string>Aspect</string>
+	<key>Apps</key>
+	<string>Aplicații</string>
+	<key>Automatic</key>
+	<string>Automat</string>
+	<key>Automation</key>
+	<string>Automatizare</string>
+	<key>Back</key>
+	<string>Înapoi</string>
+	<key>Background</key>
+	<string>Fundal</string>
+	<key>Battery</key>
+	<string>Baterie</string>
+	<key>Battery — Charging</key>
+	<string>Baterie — Se încarcă</string>
+	<key>Blur</key>
+	<string>Estompare</string>
+	<key>Border</key>
+	<string>Chenar</string>
+	<key>Bottom</key>
+	<string>Jos</string>
+	<key>Clear color</key>
+	<string>Fără culoare</string>
+	<key>Clock</key>
+	<string>Ceas</string>
+	<key>Connected</key>
+	<string>Conectat</string>
+	<key>Custom</key>
+	<string>Personalizat</string>
+	<key>Dark</key>
+	<string>Întunecat</string>
+	<key>Delete folder</key>
+	<string>Șterge dosarul</string>
+	<key>Disconnect</key>
+	<string>Deconectează</string>
+	<key>Done</key>
+	<string>Gata</string>
+	<key>Drop an app or file here to add a shortcut</key>
+	<string>Trage o aplicație sau un fișier aici pentru a adăuga o scurtătură</string>
+	<key>Features</key>
+	<string>Funcții</string>
+	<key>Fit windows</key>
+	<string>Potrivește ferestrele</string>
+	<key>Folder</key>
+	<string>Dosar</string>
+	<key>General</key>
+	<string>General</string>
+	<key>Get Started</key>
+	<string>Începe</string>
+	<key>Global Hotkeys</key>
+	<string>Scurtături globale</string>
+	<key>Grant Accessibility</key>
+	<string>Acordă accesibilitate</string>
+	<key>Grant accessibility access so WinTaskbar can manage windows.</key>
+	<string>Acordă acces la accesibilitate pentru ca WinTaskbar să poată gestiona ferestrele.</string>
+	<key>Grant permission</key>
+	<string>Acordă permisiunea</string>
+	<key>Granted</key>
+	<string>Acordat</string>
+	<key>Height</key>
+	<string>Înălțime</string>
+	<key>Hidden network</key>
+	<string>Rețea ascunsă</string>
+	<key>Hide system Dock</key>
+	<string>Ascunde Dock-ul de sistem</string>
+	<key>Hide the system Dock</key>
+	<string>Ascunde Dock-ul de sistem</string>
+	<key>Highlight style</key>
+	<string>Stil de evidențiere</string>
+	<key>Hotkeys</key>
+	<string>Scurtături</string>
+	<key>Icon padding</key>
+	<string>Spațiere pictograme</string>
+	<key>Icon size</key>
+	<string>Dimensiune pictograme</string>
+	<key>Input source</key>
+	<string>Sursă de intrare</string>
+	<key>Join</key>
+	<string>Conectează</string>
+	<key>Launch at login</key>
+	<string>Pornește la autentificare</string>
+	<key>Launch pinned apps</key>
+	<string>Pornește aplicațiile fixate</string>
+	<key>Left</key>
+	<string>Stânga</string>
+	<key>Light</key>
+	<string>Luminos</string>
+	<key>Lock Screen</key>
+	<string>Blochează ecranul</string>
+	<key>Log Out</key>
+	<string>Deconectare</string>
+	<key>Mac</key>
+	<string>Mac</string>
+	<key>Menu</key>
+	<string>Meniu</string>
+	<key>Menu button</key>
+	<string>Buton de meniu</string>
+	<key>More apps</key>
+	<string>Mai multe aplicații</string>
+	<key>Mute</key>
+	<string>Dezactivează sunetul</string>
+	<key>Network</key>
+	<string>Rețea</string>
+	<key>New Folder</key>
+	<string>Dosar nou</string>
+	<key>New Window</key>
+	<string>Fereastră nouă</string>
+	<key>New folder</key>
+	<string>Dosar nou</string>
+	<key>Next</key>
+	<string>Înainte</string>
+	<key>No apps found</key>
+	<string>Nicio aplicație găsită</string>
+	<key>No networks found</key>
+	<string>Nicio rețea găsită</string>
+	<key>No open windows</key>
+	<string>Nicio fereastră deschisă</string>
+	<key>None</key>
+	<string>Niciuna</string>
+	<key>Not connected</key>
+	<string>Neconectat</string>
+	<key>Not granted</key>
+	<string>Neacordat</string>
+	<key>Off</key>
+	<string>Oprit</string>
+	<key>Open</key>
+	<string>Deschide</string>
+	<key>Open Network Settings…</key>
+	<string>Deschide setările de rețea…</string>
+	<key>Open System Settings</key>
+	<string>Deschide Setări sistem</string>
+	<key>Open menu</key>
+	<string>Deschide meniul</string>
+	<key>Opposite end</key>
+	<string>Capătul opus</string>
+	<key>Output</key>
+	<string>Ieșire</string>
+	<key>Panel color</key>
+	<string>Culoarea panoului</string>
+	<key>Panel opacity</key>
+	<string>Opacitatea panoului</string>
+	<key>Password</key>
+	<string>Parolă</string>
+	<key>Permissions</key>
+	<string>Permisiuni</string>
+	<key>Pin to Taskbar</key>
+	<string>Fixează în bara de activități</string>
+	<key>Position</key>
+	<string>Poziție</string>
+	<key>Primary only</key>
+	<string>Doar principalul</string>
+	<key>Quit</key>
+	<string>Ieșire</string>
+	<key>Recent</key>
+	<string>Recente</string>
+	<key>Remove</key>
+	<string>Elimină</string>
+	<key>Remove from folder</key>
+	<string>Elimină din dosar</string>
+	<key>Rename folder</key>
+	<string>Redenumește dosarul</string>
+	<key>Rescan</key>
+	<string>Scanează din nou</string>
+	<key>Restart</key>
+	<string>Repornește</string>
+	<key>Restore system Dock</key>
+	<string>Restaurează Dock-ul de sistem</string>
+	<key>Right</key>
+	<string>Dreapta</string>
+	<key>Scanning…</key>
+	<string>Se scanează…</string>
+	<key>Screen Recording</key>
+	<string>Înregistrarea ecranului</string>
+	<key>Search apps</key>
+	<string>Caută aplicații</string>
+	<key>Settings</key>
+	<string>Setări</string>
+	<key>Show Desktop</key>
+	<string>Arată biroul</string>
+	<key>Show Finder in running apps</key>
+	<string>Arată Finder în aplicațiile pornite</string>
+	<key>Show app labels under icons</key>
+	<string>Arată numele sub pictograme</string>
+	<key>Show in Finder</key>
+	<string>Arată în Finder</string>
+	<key>Show on</key>
+	<string>Arată pe</string>
+	<key>Show running indicators</key>
+	<string>Arată indicatorii aplicațiilor pornite</string>
+	<key>Shut Down</key>
+	<string>Oprește</string>
+	<key>Signal</key>
+	<string>Semnal</string>
+	<key>Skip</key>
+	<string>Omite</string>
+	<key>Sleep</key>
+	<string>Repaus</string>
+	<key>Standard</key>
+	<string>Standard</string>
+	<key>Start</key>
+	<string>Start</string>
+	<key>Start button label</key>
+	<string>Eticheta butonului Start</string>
+	<key>Status</key>
+	<string>Stare</string>
+	<key>Strong</key>
+	<string>Puternic</string>
+	<key>Subtle</key>
+	<string>Subtil</string>
+	<key>System Tray</key>
+	<string>Zona de notificare</string>
+	<key>Theme</key>
+	<string>Temă</string>
+	<key>Toggle Start Menu</key>
+	<string>Comută meniul Start</string>
+	<key>Top</key>
+	<string>Sus</string>
+	<key>Translucency</key>
+	<string>Transparență</string>
+	<key>Underline</key>
+	<string>Subliniere</string>
+	<key>Unmute</key>
+	<string>Activează sunetul</string>
+	<key>Unpin</key>
+	<string>Anulează fixarea</string>
+	<key>Version</key>
+	<string>Versiune</string>
+	<key>Volume</key>
+	<string>Volum</string>
+	<key>Welcome to WinTaskbar</key>
+	<string>Bun venit la WinTaskbar</string>
+	<key>Wi-Fi</key>
+	<string>Wi-Fi</string>
+	<key>Wi-Fi off</key>
+	<string>Wi-Fi oprit</string>
+	<key>WinTaskbar can hide the macOS Dock so only the taskbar shows. You can restore it anytime in Settings.</key>
+	<string>WinTaskbar poate ascunde Dock-ul macOS pentru a afișa doar bara de activități. Îl poți restaura oricând din Setări.</string>
+	<key>WinTaskbar needs Accessibility access to list and manage app windows.</key>
+	<string>WinTaskbar are nevoie de acces la accesibilitate pentru a lista și gestiona ferestrele aplicațiilor.</string>
+	<key>WinTaskbar replaces the Dock with a Windows-style taskbar.</key>
+	<string>WinTaskbar înlocuiește Dock-ul cu o bară de activități în stil Windows.</string>
+	<key>Window Previews</key>
+	<string>Previzualizări ferestre</string>
+	<key>Window previews need Screen Recording permission.</key>
+	<string>Previzualizările ferestrelor necesită permisiunea de înregistrare a ecranului.</string>
+	<key>Windows</key>
+	<string>Windows</string>
+</dict>
+</plist>

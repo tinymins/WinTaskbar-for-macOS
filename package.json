@@ -1,0 +1,8 @@
+{
+  "name": "wintaskbar-for-macos",
+  "private": true,
+  "scripts": {
+    "lint": "bash Scripts/lint.sh",
+    "tsc": "bash Scripts/typecheck.sh"
+  }
+}

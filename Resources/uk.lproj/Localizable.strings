@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>About</key>
+	<string>Про програму</string>
+	<key>Accessibility</key>
+	<string>Доступність</string>
+	<key>Activate</key>
+	<string>Активувати</string>
+	<key>Activation failed. Please try again.</key>
+	<string>Активація не вдалася. Спробуйте ще раз.</string>
+	<key>Active app indicator</key>
+	<string>Індикатор активної програми</string>
+	<key>Add to folder</key>
+	<string>Додати в папку</string>
+	<key>All displays</key>
+	<string>Усі дисплеї</string>
+	<key>Appearance</key>
+	<string>Вигляд</string>
+	<key>Apps</key>
+	<string>Програми</string>
+	<key>Automatic</key>
+	<string>Автоматично</string>
+	<key>Automation</key>
+	<string>Автоматизація</string>
+	<key>Back</key>
+	<string>Назад</string>
+	<key>Background</key>
+	<string>Фон</string>
+	<key>Battery</key>
+	<string>Батарея</string>
+	<key>Battery — Charging</key>
+	<string>Батарея — Заряджається</string>
+	<key>Blur</key>
+	<string>Розмиття</string>
+	<key>Border</key>
+	<string>Рамка</string>
+	<key>Bottom</key>
+	<string>Знизу</string>
+	<key>Clear color</key>
+	<string>Скинути колір</string>
+	<key>Clock</key>
+	<string>Годинник</string>
+	<key>Connected</key>
+	<string>Підключено</string>
+	<key>Couldn’t reach the server. Check your connection.</key>
+	<string>Не вдалося зв'язатися із сервером. Перевірте з'єднання.</string>
+	<key>Custom</key>
+	<string>Власний</string>
+	<key>Dark</key>
+	<string>Темна</string>
+	<key>Delete folder</key>
+	<string>Видалити папку</string>
+	<key>Disconnect</key>
+	<string>Відключити</string>
+	<key>Done</key>
+	<string>Готово</string>
+	<key>Drop an app or file here to add a shortcut</key>
+	<string>Перетягніть сюди додаток або файл, щоб додати ярлик</string>
+	<key>Features</key>
+	<string>Функції</string>
+	<key>Fit windows</key>
+	<string>Заповнити простір</string>
+	<key>Folder</key>
+	<string>Папка</string>
+	<key>General</key>
+	<string>Загальні</string>
+	<key>Get Started</key>
+	<string>Почати</string>
+	<key>Global Hotkeys</key>
+	<string>Глобальні гарячі клавіші</string>
+	<key>Grant Accessibility</key>
+	<string>Надати доступ</string>
+	<key>Grant accessibility access so WinTaskbar can manage windows.</key>
+	<string>Надайте доступ до Доступності, щоб WinTaskbar міг керувати вікнами.</string>
+	<key>Grant permission</key>
+	<string>Надати дозвіл</string>
+	<key>Granted</key>
+	<string>Надано</string>
+	<key>Height</key>
+	<string>Висота</string>
+	<key>Hidden network</key>
+	<string>Прихована мережа</string>
+	<key>Hide system Dock</key>
+	<string>Сховати системний Dock</string>
+	<key>Hide the system Dock</key>
+	<string>Сховати системний Dock</string>
+	<key>Highlight style</key>
+	<string>Стиль виділення</string>
+	<key>Hotkeys</key>
+	<string>Гарячі клавіші</string>
+	<key>Icon padding</key>
+	<string>Відступ іконок</string>
+	<key>Icon size</key>
+	<string>Розмір іконок</string>
+	<key>Input source</key>
+	<string>Розкладка</string>
+	<key>Join</key>
+	<string>Підключитися</string>
+	<key>Later</key>
+	<string>Пізніше</string>
+	<key>Launch at login</key>
+	<string>Запускати при вході</string>
+	<key>Launch pinned apps</key>
+	<string>Запуск закріплених програм</string>
+	<key>Left</key>
+	<string>Ліворуч</string>
+	<key>Light</key>
+	<string>Світла</string>
+	<key>Lock Screen</key>
+	<string>Заблокувати екран</string>
+	<key>Log Out</key>
+	<string>Вийти</string>
+	<key>Mac</key>
+	<string>Mac</string>
+	<key>Menu</key>
+	<string>Меню</string>
+	<key>Menu button</key>
+	<string>Кнопка меню</string>
+	<key>More apps</key>
+	<string>Більше програм</string>
+	<key>Mute</key>
+	<string>Вимкнути звук</string>
+	<key>Network</key>
+	<string>Мережа</string>
+	<key>New Folder</key>
+	<string>Нова папка</string>
+	<key>New Window</key>
+	<string>Нове вікно</string>
+	<key>New folder</key>
+	<string>Нова папка</string>
+	<key>Next</key>
+	<string>Далі</string>
+	<key>No apps found</key>
+	<string>Нічого не знайдено</string>
+	<key>No networks found</key>
+	<string>Мереж не знайдено</string>
+	<key>No open windows</key>
+	<string>Немає відкритих вікон</string>
+	<key>None</key>
+	<string>Немає</string>
+	<key>Not connected</key>
+	<string>Не підключено</string>
+	<key>Not granted</key>
+	<string>Не надано</string>
+	<key>Off</key>
+	<string>Вимк.</string>
+	<key>Open</key>
+	<string>Відкрити</string>
+	<key>Open Network Settings…</key>
+	<string>Відкрити налаштування мережі…</string>
+	<key>Open System Settings</key>
+	<string>Відкрити Системні налаштування</string>
+	<key>Open menu</key>
+	<string>Відкрити меню</string>
+	<key>Opposite end</key>
+	<string>Протилежний кінець</string>
+	<key>Output</key>
+	<string>Вихід</string>
+	<key>Panel color</key>
+	<string>Колір панелі</string>
+	<key>Panel opacity</key>
+	<string>Прозорість панелі</string>
+	<key>Password</key>
+	<string>Пароль</string>
+	<key>Permissions</key>
+	<string>Дозволи</string>
+	<key>Pin to Taskbar</key>
+	<string>Закріпити на панелі</string>
+	<key>Position</key>
+	<string>Розташування</string>
+	<key>Primary only</key>
+	<string>Лише основний</string>
+	<key>Quit</key>
+	<string>Завершити</string>
+	<key>Recent</key>
+	<string>Останні</string>
+	<key>Remove</key>
+	<string>Прибрати</string>
+	<key>Remove from folder</key>
+	<string>Прибрати з папки</string>
+	<key>Rename folder</key>
+	<string>Перейменувати папку</string>
+	<key>Rescan</key>
+	<string>Сканувати знову</string>
+	<key>Restart</key>
+	<string>Перезавантажити</string>
+	<key>Restore system Dock</key>
+	<string>Відновити системний Dock</string>
+	<key>Right</key>
+	<string>Праворуч</string>
+	<key>Scanning…</key>
+	<string>Сканування…</string>
+	<key>Screen Recording</key>
+	<string>Запис екрана</string>
+	<key>Search apps</key>
+	<string>Пошук програм</string>
+	<key>Settings</key>
+	<string>Налаштування</string>
+	<key>Show Desktop</key>
+	<string>Показати робочий стіл</string>
+	<key>Show Finder in running apps</key>
+	<string>Показувати Finder серед запущених</string>
+	<key>Show app labels under icons</key>
+	<string>Показувати підписи під іконками</string>
+	<key>Show in Finder</key>
+	<string>Показати у Finder</string>
+	<key>Show on</key>
+	<string>Показувати на</string>
+	<key>Show running indicators</key>
+	<string>Показувати індикатори запущених</string>
+	<key>Shut Down</key>
+	<string>Вимкнути</string>
+	<key>Signal</key>
+	<string>Сигнал</string>
+	<key>Skip</key>
+	<string>Пропустити</string>
+	<key>Sleep</key>
+	<string>Сон</string>
+	<key>Standard</key>
+	<string>Стандартно</string>
+	<key>Start</key>
+	<string>Старт</string>
+	<key>Start button label</key>
+	<string>Підпис кнопки Старт</string>
+	<key>Status</key>
+	<string>Статус</string>
+	<key>Strong</key>
+	<string>Сильна</string>
+	<key>Subtle</key>
+	<string>Помірна</string>
+	<key>System Tray</key>
+	<string>Системний трей</string>
+	<key>Theme</key>
+	<string>Тема</string>
+	<key>This key has been revoked.</key>
+	<string>Цей ключ відкликано.</string>
+	<key>This key is already used on another device.</key>
+	<string>Цей ключ уже використано на іншому пристрої.</string>
+	<key>Toggle Start Menu</key>
+	<string>Перемкнути меню Пуск</string>
+	<key>Top</key>
+	<string>Зверху</string>
+	<key>Translucency</key>
+	<string>Прозорість</string>
+	<key>Underline</key>
+	<string>Підкреслення</string>
+	<key>Unmute</key>
+	<string>Увімкнути звук</string>
+	<key>Unpin</key>
+	<string>Відкріпити</string>
+	<key>Version</key>
+	<string>Версія</string>
+	<key>Volume</key>
+	<string>Гучність</string>
+	<key>Welcome to WinTaskbar</key>
+	<string>Ласкаво просимо до WinTaskbar</string>
+	<key>Wi-Fi</key>
+	<string>Wi-Fi</string>
+	<key>Wi-Fi off</key>
+	<string>Wi-Fi вимкнено</string>
+	<key>WinTaskbar can hide the macOS Dock so only the taskbar shows. You can restore it anytime in Settings.</key>
+	<string>WinTaskbar може сховати Dock, щоб лишалась тільки панель задач. Відновити можна будь-коли в налаштуваннях.</string>
+	<key>WinTaskbar needs Accessibility access to list and manage app windows.</key>
+	<string>WinTaskbar потребує доступу до Доступності, щоб бачити й керувати вікнами програм.</string>
+	<key>WinTaskbar replaces the Dock with a Windows-style taskbar.</key>
+	<string>WinTaskbar замінює Dock панеллю задач у стилі Windows.</string>
+	<key>Window Previews</key>
+	<string>Прев'ю вікон</string>
+	<key>Window previews need Screen Recording permission.</key>
+	<string>Прев'ю вікон потребують дозволу на Запис екрана.</string>
+	<key>Windows</key>
+	<string>Windows</string>
+</dict>
+</plist>

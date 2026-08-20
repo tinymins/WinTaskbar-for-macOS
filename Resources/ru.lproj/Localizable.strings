@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>About</key>
+	<string>О программе</string>
+	<key>Accessibility</key>
+	<string>Универсальный доступ</string>
+	<key>Active app indicator</key>
+	<string>Индикатор активного приложения</string>
+	<key>Add to folder</key>
+	<string>Добавить в папку</string>
+	<key>All displays</key>
+	<string>Все дисплеи</string>
+	<key>Appearance</key>
+	<string>Оформление</string>
+	<key>Apps</key>
+	<string>Программы</string>
+	<key>Automatic</key>
+	<string>Автоматически</string>
+	<key>Automation</key>
+	<string>Автоматизация</string>
+	<key>Back</key>
+	<string>Назад</string>
+	<key>Background</key>
+	<string>Фон</string>
+	<key>Battery</key>
+	<string>Батарея</string>
+	<key>Battery — Charging</key>
+	<string>Батарея — Зарядка</string>
+	<key>Blur</key>
+	<string>Размытие</string>
+	<key>Border</key>
+	<string>Рамка</string>
+	<key>Bottom</key>
+	<string>Снизу</string>
+	<key>Clear color</key>
+	<string>Без цвета</string>
+	<key>Clock</key>
+	<string>Часы</string>
+	<key>Connected</key>
+	<string>Подключено</string>
+	<key>Custom</key>
+	<string>Свой</string>
+	<key>Dark</key>
+	<string>Тёмная</string>
+	<key>Delete folder</key>
+	<string>Удалить папку</string>
+	<key>Disconnect</key>
+	<string>Отключить</string>
+	<key>Done</key>
+	<string>Готово</string>
+	<key>Drop an app or file here to add a shortcut</key>
+	<string>Перетащите программу или файл сюда, чтобы добавить ярлык</string>
+	<key>Features</key>
+	<string>Функции</string>
+	<key>Fit windows</key>
+	<string>Подогнать окна</string>
+	<key>Folder</key>
+	<string>Папка</string>
+	<key>General</key>
+	<string>Основные</string>
+	<key>Get Started</key>
+	<string>Начать</string>
+	<key>Global Hotkeys</key>
+	<string>Глобальные горячие клавиши</string>
+	<key>Grant Accessibility</key>
+	<string>Разрешить универсальный доступ</string>
+	<key>Grant accessibility access so WinTaskbar can manage windows.</key>
+	<string>Предоставьте доступ к универсальному доступу, чтобы WinTaskbar мог управлять окнами.</string>
+	<key>Grant permission</key>
+	<string>Предоставить доступ</string>
+	<key>Granted</key>
+	<string>Предоставлено</string>
+	<key>Height</key>
+	<string>Высота</string>
+	<key>Hidden network</key>
+	<string>Скрытая сеть</string>
+	<key>Hide system Dock</key>
+	<string>Скрыть системный Dock</string>
+	<key>Hide the system Dock</key>
+	<string>Скрыть системный Dock</string>
+	<key>Highlight style</key>
+	<string>Стиль выделения</string>
+	<key>Hotkeys</key>
+	<string>Горячие клавиши</string>
+	<key>Icon padding</key>
+	<string>Отступ значков</string>
+	<key>Icon size</key>
+	<string>Размер значков</string>
+	<key>Input source</key>
+	<string>Источник ввода</string>
+	<key>Join</key>
+	<string>Подключиться</string>
+	<key>Launch at login</key>
+	<string>Запускать при входе</string>
+	<key>Launch pinned apps</key>
+	<string>Запуск закреплённых программ</string>
+	<key>Left</key>
+	<string>Слева</string>
+	<key>Light</key>
+	<string>Светлая</string>
+	<key>Lock Screen</key>
+	<string>Заблокировать экран</string>
+	<key>Log Out</key>
+	<string>Выйти</string>
+	<key>Mac</key>
+	<string>Mac</string>
+	<key>Menu</key>
+	<string>Меню</string>
+	<key>Menu button</key>
+	<string>Кнопка меню</string>
+	<key>More apps</key>
+	<string>Ещё программы</string>
+	<key>Mute</key>
+	<string>Без звука</string>
+	<key>Network</key>
+	<string>Сеть</string>
+	<key>New Folder</key>
+	<string>Новая папка</string>
+	<key>New Window</key>
+	<string>Новое окно</string>
+	<key>New folder</key>
+	<string>Новая папка</string>
+	<key>Next</key>
+	<string>Далее</string>
+	<key>No apps found</key>
+	<string>Программы не найдены</string>
+	<key>No networks found</key>
+	<string>Сети не найдены</string>
+	<key>No open windows</key>
+	<string>Нет открытых окон</string>
+	<key>None</key>
+	<string>Нет</string>
+	<key>Not connected</key>
+	<string>Не подключено</string>
+	<key>Not granted</key>
+	<string>Не предоставлено</string>
+	<key>Off</key>
+	<string>Выкл.</string>
+	<key>Open</key>
+	<string>Открыть</string>
+	<key>Open Network Settings…</key>
+	<string>Открыть настройки сети…</string>
+	<key>Open System Settings</key>
+	<string>Открыть системные настройки</string>
+	<key>Open menu</key>
+	<string>Открыть меню</string>
+	<key>Opposite end</key>
+	<string>Противоположный край</string>
+	<key>Output</key>
+	<string>Вывод</string>
+	<key>Panel color</key>
+	<string>Цвет панели</string>
+	<key>Panel opacity</key>
+	<string>Непрозрачность панели</string>
+	<key>Password</key>
+	<string>Пароль</string>
+	<key>Permissions</key>
+	<string>Разрешения</string>
+	<key>Pin to Taskbar</key>
+	<string>Закрепить на панели задач</string>
+	<key>Position</key>
+	<string>Положение</string>
+	<key>Primary only</key>
+	<string>Только основной</string>
+	<key>Quit</key>
+	<string>Завершить</string>
+	<key>Recent</key>
+	<string>Недавние</string>
+	<key>Remove</key>
+	<string>Удалить</string>
+	<key>Remove from folder</key>
+	<string>Убрать из папки</string>
+	<key>Rename folder</key>
+	<string>Переименовать папку</string>
+	<key>Rescan</key>
+	<string>Сканировать снова</string>
+	<key>Restart</key>
+	<string>Перезагрузить</string>
+	<key>Restore system Dock</key>
+	<string>Восстановить системный Dock</string>
+	<key>Right</key>
+	<string>Справа</string>
+	<key>Scanning…</key>
+	<string>Сканирование…</string>
+	<key>Screen Recording</key>
+	<string>Запись экрана</string>
+	<key>Search apps</key>
+	<string>Поиск программ</string>
+	<key>Settings</key>
+	<string>Настройки</string>
+	<key>Show Desktop</key>
+	<string>Показать рабочий стол</string>
+	<key>Show Finder in running apps</key>
+	<string>Показывать Finder среди запущенных</string>
+	<key>Show app labels under icons</key>
+	<string>Показывать названия под значками</string>
+	<key>Show in Finder</key>
+	<string>Показать в Finder</string>
+	<key>Show on</key>
+	<string>Показывать на</string>
+	<key>Show running indicators</key>
+	<string>Показывать индикаторы запущенных</string>
+	<key>Shut Down</key>
+	<string>Выключить</string>
+	<key>Signal</key>
+	<string>Сигнал</string>
+	<key>Skip</key>
+	<string>Пропустить</string>
+	<key>Sleep</key>
+	<string>Сон</string>
+	<key>Standard</key>
+	<string>Стандартно</string>
+	<key>Start</key>
+	<string>Пуск</string>
+	<key>Start button label</key>
+	<string>Текст кнопки «Пуск»</string>
+	<key>Status</key>
+	<string>Состояние</string>
+	<key>Strong</key>
+	<string>Сильная</string>
+	<key>Subtle</key>
+	<string>Слабая</string>
+	<key>System Tray</key>
+	<string>Системный лоток</string>
+	<key>Theme</key>
+	<string>Тема</string>
+	<key>Toggle Start Menu</key>
+	<string>Открыть/закрыть меню «Пуск»</string>
+	<key>Top</key>
+	<string>Сверху</string>
+	<key>Translucency</key>
+	<string>Прозрачность</string>
+	<key>Underline</key>
+	<string>Подчёркивание</string>
+	<key>Unmute</key>
+	<string>Включить звук</string>
+	<key>Unpin</key>
+	<string>Открепить</string>
+	<key>Version</key>
+	<string>Версия</string>
+	<key>Volume</key>
+	<string>Громкость</string>
+	<key>Welcome to WinTaskbar</key>
+	<string>Добро пожаловать в WinTaskbar</string>
+	<key>Wi-Fi</key>
+	<string>Wi-Fi</string>
+	<key>Wi-Fi off</key>
+	<string>Wi-Fi выкл.</string>
+	<key>WinTaskbar can hide the macOS Dock so only the taskbar shows. You can restore it anytime in Settings.</key>
+	<string>WinTaskbar может скрыть Dock macOS, оставив только панель задач. Вы можете восстановить его в любой момент в настройках.</string>
+	<key>WinTaskbar needs Accessibility access to list and manage app windows.</key>
+	<string>WinTaskbar нужен доступ к универсальному доступу, чтобы перечислять окна приложений и управлять ими.</string>
+	<key>WinTaskbar replaces the Dock with a Windows-style taskbar.</key>
+	<string>WinTaskbar заменяет Dock панелью задач в стиле Windows.</string>
+	<key>Window Previews</key>
+	<string>Превью окон</string>
+	<key>Window previews need Screen Recording permission.</key>
+	<string>Для превью окон нужно разрешение на запись экрана.</string>
+	<key>Windows</key>
+	<string>Windows</string>
+</dict>
+</plist>

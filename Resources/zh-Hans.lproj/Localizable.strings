@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>About</key>
+	<string>关于</string>
+	<key>Accessibility</key>
+	<string>辅助功能</string>
+	<key>Active app indicator</key>
+	<string>活动应用指示器</string>
+	<key>Add to folder</key>
+	<string>添加到文件夹</string>
+	<key>All displays</key>
+	<string>所有显示器</string>
+	<key>Appearance</key>
+	<string>外观</string>
+	<key>Apps</key>
+	<string>应用</string>
+	<key>Automatic</key>
+	<string>自动</string>
+	<key>Automation</key>
+	<string>自动化</string>
+	<key>Back</key>
+	<string>返回</string>
+	<key>Background</key>
+	<string>背景</string>
+	<key>Battery</key>
+	<string>电池</string>
+	<key>Battery — Charging</key>
+	<string>电池 — 充电中</string>
+	<key>Blur</key>
+	<string>模糊</string>
+	<key>Border</key>
+	<string>边框</string>
+	<key>Bottom</key>
+	<string>底部</string>
+	<key>Clear color</key>
+	<string>无颜色</string>
+	<key>Clock</key>
+	<string>时钟</string>
+	<key>Connected</key>
+	<string>已连接</string>
+	<key>Custom</key>
+	<string>自定义</string>
+	<key>Dark</key>
+	<string>深色</string>
+	<key>Delete folder</key>
+	<string>删除文件夹</string>
+	<key>Disconnect</key>
+	<string>断开连接</string>
+	<key>Done</key>
+	<string>完成</string>
+	<key>Drop an app or file here to add a shortcut</key>
+	<string>将应用或文件拖到此处以添加快捷方式</string>
+	<key>Features</key>
+	<string>功能</string>
+	<key>Fit windows</key>
+	<string>调整窗口</string>
+	<key>Folder</key>
+	<string>文件夹</string>
+	<key>General</key>
+	<string>通用</string>
+	<key>Get Started</key>
+	<string>开始</string>
+	<key>Global Hotkeys</key>
+	<string>全局快捷键</string>
+	<key>Grant Accessibility</key>
+	<string>授予辅助功能</string>
+	<key>Grant accessibility access so WinTaskbar can manage windows.</key>
+	<string>授予辅助功能权限，以便 WinTaskbar 管理窗口。</string>
+	<key>Grant permission</key>
+	<string>授予权限</string>
+	<key>Granted</key>
+	<string>已授予</string>
+	<key>Height</key>
+	<string>高度</string>
+	<key>Hidden network</key>
+	<string>隐藏网络</string>
+	<key>Hide system Dock</key>
+	<string>隐藏系统程序坞</string>
+	<key>Hide the system Dock</key>
+	<string>隐藏系统程序坞</string>
+	<key>Highlight style</key>
+	<string>高亮样式</string>
+	<key>Hotkeys</key>
+	<string>快捷键</string>
+	<key>Icon padding</key>
+	<string>图标内边距</string>
+	<key>Icon size</key>
+	<string>图标大小</string>
+	<key>Input source</key>
+	<string>输入源</string>
+	<key>Join</key>
+	<string>加入</string>
+	<key>Launch at login</key>
+	<string>登录时启动</string>
+	<key>Launch pinned apps</key>
+	<string>启动固定的应用</string>
+	<key>Left</key>
+	<string>左侧</string>
+	<key>Light</key>
+	<string>浅色</string>
+	<key>Lock Screen</key>
+	<string>锁定屏幕</string>
+	<key>Log Out</key>
+	<string>注销</string>
+	<key>Mac</key>
+	<string>Mac</string>
+	<key>Menu</key>
+	<string>菜单</string>
+	<key>Menu button</key>
+	<string>菜单按钮</string>
+	<key>More apps</key>
+	<string>更多应用</string>
+	<key>Mute</key>
+	<string>静音</string>
+	<key>Network</key>
+	<string>网络</string>
+	<key>New Folder</key>
+	<string>新建文件夹</string>
+	<key>New Window</key>
+	<string>新建窗口</string>
+	<key>New folder</key>
+	<string>新建文件夹</string>
+	<key>Next</key>
+	<string>下一步</string>
+	<key>No apps found</key>
+	<string>未找到应用</string>
+	<key>No networks found</key>
+	<string>未找到网络</string>
+	<key>No open windows</key>
+	<string>没有打开的窗口</string>
+	<key>None</key>
+	<string>无</string>
+	<key>Not connected</key>
+	<string>未连接</string>
+	<key>Not granted</key>
+	<string>未授予</string>
+	<key>Off</key>
+	<string>关闭</string>
+	<key>Open</key>
+	<string>打开</string>
+	<key>Open Network Settings…</key>
+	<string>打开网络设置…</string>
+	<key>Open System Settings</key>
+	<string>打开系统设置</string>
+	<key>Open menu</key>
+	<string>打开菜单</string>
+	<key>Opposite end</key>
+	<string>另一端</string>
+	<key>Output</key>
+	<string>输出</string>
+	<key>Panel color</key>
+	<string>面板颜色</string>
+	<key>Panel opacity</key>
+	<string>面板不透明度</string>
+	<key>Password</key>
+	<string>密码</string>
+	<key>Permissions</key>
+	<string>权限</string>
+	<key>Pin to Taskbar</key>
+	<string>固定到任务栏</string>
+	<key>Position</key>
+	<string>位置</string>
+	<key>Primary only</key>
+	<string>仅主显示器</string>
+	<key>Quit</key>
+	<string>退出</string>
+	<key>Recent</key>
+	<string>最近</string>
+	<key>Remove</key>
+	<string>移除</string>
+	<key>Remove from folder</key>
+	<string>从文件夹移除</string>
+	<key>Rename folder</key>
+	<string>重命名文件夹</string>
+	<key>Rescan</key>
+	<string>重新扫描</string>
+	<key>Restart</key>
+	<string>重新启动</string>
+	<key>Restore system Dock</key>
+	<string>恢复系统程序坞</string>
+	<key>Right</key>
+	<string>右侧</string>
+	<key>Scanning…</key>
+	<string>正在扫描…</string>
+	<key>Screen Recording</key>
+	<string>屏幕录制</string>
+	<key>Search apps</key>
+	<string>搜索应用</string>
+	<key>Settings</key>
+	<string>设置</string>
+	<key>Show Desktop</key>
+	<string>显示桌面</string>
+	<key>Show Finder in running apps</key>
+	<string>在运行的应用中显示访达</string>
+	<key>Show app labels under icons</key>
+	<string>在图标下显示应用名称</string>
+	<key>Show in Finder</key>
+	<string>在访达中显示</string>
+	<key>Show on</key>
+	<string>显示于</string>
+	<key>Show running indicators</key>
+	<string>显示运行中应用指示器</string>
+	<key>Shut Down</key>
+	<string>关机</string>
+	<key>Signal</key>
+	<string>信号</string>
+	<key>Skip</key>
+	<string>跳过</string>
+	<key>Sleep</key>
+	<string>睡眠</string>
+	<key>Standard</key>
+	<string>标准</string>
+	<key>Start</key>
+	<string>开始</string>
+	<key>Start button label</key>
+	<string>开始按钮标签</string>
+	<key>Status</key>
+	<string>状态</string>
+	<key>Strong</key>
+	<string>强</string>
+	<key>Subtle</key>
+	<string>轻微</string>
+	<key>System Tray</key>
+	<string>系统托盘</string>
+	<key>Theme</key>
+	<string>主题</string>
+	<key>Toggle Start Menu</key>
+	<string>切换开始菜单</string>
+	<key>Top</key>
+	<string>顶部</string>
+	<key>Translucency</key>
+	<string>半透明</string>
+	<key>Underline</key>
+	<string>下划线</string>
+	<key>Unmute</key>
+	<string>取消静音</string>
+	<key>Unpin</key>
+	<string>取消固定</string>
+	<key>Version</key>
+	<string>版本</string>
+	<key>Volume</key>
+	<string>音量</string>
+	<key>Welcome to WinTaskbar</key>
+	<string>欢迎使用 WinTaskbar</string>
+	<key>Wi-Fi</key>
+	<string>Wi-Fi</string>
+	<key>Wi-Fi off</key>
+	<string>Wi-Fi 已关闭</string>
+	<key>WinTaskbar can hide the macOS Dock so only the taskbar shows. You can restore it anytime in Settings.</key>
+	<string>WinTaskbar 可以隐藏 macOS 程序坞，仅显示任务栏。你可以随时在设置中恢复。</string>
+	<key>WinTaskbar needs Accessibility access to list and manage app windows.</key>
+	<string>WinTaskbar 需要辅助功能权限来列出和管理应用窗口。</string>
+	<key>WinTaskbar replaces the Dock with a Windows-style taskbar.</key>
+	<string>WinTaskbar 用 Windows 风格的任务栏取代程序坞。</string>
+	<key>Window Previews</key>
+	<string>窗口预览</string>
+	<key>Window previews need Screen Recording permission.</key>
+	<string>窗口预览需要屏幕录制权限。</string>
+	<key>Windows</key>
+	<string>Windows</string>
+</dict>
+</plist>
