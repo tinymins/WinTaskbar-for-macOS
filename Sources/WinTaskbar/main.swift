@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Combine
 import Foundation
 
@@ -72,10 +73,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   let app = self.apps.app(bundleIdentifier: self.preferences.pinnedBundleIDs[index]) else { return }
             self.apps.open(app)
         }
-        globalHotkeysService.setEnabled(preferences.globalHotkeysEnabled)
-        preferences.$globalHotkeysEnabled
-            .removeDuplicates()
-            .sink { [weak self] enabled in self?.globalHotkeysService.setEnabled(enabled) }
+        globalHotkeysService.setEnabled(preferences.globalHotkeysEnabled, shortcuts: preferences.hotkeyShortcuts)
+        Publishers.CombineLatest(preferences.$globalHotkeysEnabled, preferences.$hotkeyShortcuts)
+            .sink { [weak self] enabled, shortcuts in
+                self?.globalHotkeysService.setEnabled(enabled, shortcuts: shortcuts)
+            }
             .store(in: &cancellables)
         preferences.$position
             .removeDuplicates()
@@ -165,7 +167,9 @@ func runSelfTest() -> Int32 {
     let preferences = PreferencesStore(defaults: defaults)
     guard preferences.position == .bottom,
           preferences.barHeight == 52,
-          preferences.trayClockEnabled else {
+          preferences.trayClockEnabled,
+          preferences.menuButtonPlacement == .standard,
+          preferences.hotkeyShortcuts.count == 11 else {
         fputs("SELF-TEST FAILED: default values mismatch\n", stderr)
         return 1
     }
@@ -176,11 +180,13 @@ func runSelfTest() -> Int32 {
     preferences.pinnedBundleIDs = ["one", "two", "three"]
     preferences.reorderPinned("three", before: "one")
     preferences.appFolders = [AppFolder(name: "Work", bundleIDs: ["one"])]
+    preferences.hotkeyShortcuts[0] = HotkeyShortcut(keyCode: 0, modifiers: UInt32(cmdKey), keyLabel: "A")
     guard defaults.string(forKey: "wintaskbar.position") == "Left",
           defaults.double(forKey: "wintaskbar.barHeight") == 64,
           defaults.bool(forKey: "wintaskbar.feature.trayWifi") == false,
           preferences.pinnedBundleIDs == ["three", "one", "two"],
           PreferencesStore(defaults: defaults).appFolders.first?.bundleIDs == ["one"],
+          PreferencesStore(defaults: defaults).hotkeyShortcuts.first?.keyLabel == "A",
           DockBadgeService.parseStatusLabel("124 notifications") == "124" else {
         fputs("SELF-TEST FAILED: preference keys did not persist\n", stderr)
         return 1

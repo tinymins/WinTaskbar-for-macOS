@@ -26,8 +26,13 @@ struct StartMenuView: View {
             }
             if preferences.menuActionsSide == .right { Divider(); actionRail }
         }
-        .frame(width: 480, height: preferences.menuHeightMode == .full ? 760 : 560)
-        .background(.ultraThinMaterial)
+        .frame(width: 400, height: preferences.menuHeightMode == .full ? 760 : 480)
+        .background(panelBackground)
+        .clipShape(RoundedRectangle(cornerRadius: menuCornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: menuCornerRadius, style: .continuous)
+                .stroke(Color.primary.opacity(0.22), lineWidth: 1)
+        }
         .onExitCommand { actions.closeStartMenu() }
     }
 
@@ -77,7 +82,8 @@ struct StartMenuView: View {
                     .buttonStyle(.plain)
                 Spacer()
             }
-            .padding(12)
+            .padding(.horizontal, 8)
+            .frame(height: 32)
             Divider()
             SettingsView(preferences: preferences)
         }
@@ -174,7 +180,7 @@ struct StartMenuView: View {
     }
 
     private var actionRail: some View {
-        VStack(spacing: 17) {
+        VStack(spacing: 18) {
             Button { showingSettings = true } label: { Image(systemName: "gearshape") }.help("Settings")
             Button { actions.fitWindows(); actions.closeStartMenu() } label: { Image(systemName: "rectangle.arrowtriangle.2.inward") }.help("Fit windows")
             menuShortcuts
@@ -186,9 +192,9 @@ struct StartMenuView: View {
             Button { actions.performPower(.shutDown) } label: { Image(systemName: "power") }.help("Shut Down")
         }
         .buttonStyle(.plain)
-        .font(.system(size: 16))
-        .padding(.vertical, 18)
-        .frame(width: 54)
+        .font(.system(size: 17))
+        .padding(.vertical, 16)
+        .frame(width: 52)
     }
 
     private var menuShortcuts: some View {
@@ -212,6 +218,23 @@ struct StartMenuView: View {
                     return !urls.isEmpty
                 }
         }
+    }
+
+    private var panelBackground: some View {
+        Rectangle()
+            .fill(.ultraThinMaterial)
+            .overlay(panelTint)
+    }
+
+    private var panelTint: Color {
+        if let color = Color(hex: preferences.panelTintHex) {
+            return color.opacity(preferences.transparencyEnabled ? max(0.08, 1 - preferences.panelOpacity) : 0.2)
+        }
+        return Color.black.opacity(preferences.transparencyEnabled ? max(0.04, 1 - preferences.panelOpacity) : 0.18)
+    }
+
+    private var menuCornerRadius: CGFloat {
+        preferences.menuWindowStyle == .windows ? 9 : 15
     }
 
     private func open(_ app: DiscoveredApp) {

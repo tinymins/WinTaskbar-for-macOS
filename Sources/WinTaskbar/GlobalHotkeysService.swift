@@ -31,6 +31,7 @@ final class GlobalHotkeysService {
     private var handler: EventHandlerRef?
     private var hotKeys: [EventHotKeyRef] = []
     private(set) var isEnabled = false
+    private var shortcuts: [HotkeyShortcut] = []
 
     init() {
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -44,15 +45,14 @@ final class GlobalHotkeysService {
         )
     }
 
-    func setEnabled(_ enabled: Bool) {
-        guard enabled != isEnabled else { return }
+    func setEnabled(_ enabled: Bool, shortcuts: [HotkeyShortcut]? = nil) {
+        if let shortcuts { self.shortcuts = shortcuts }
+        guard enabled != isEnabled || shortcuts != nil else { return }
         unregisterAll()
         if enabled {
-            register(id: 1, keyCode: 49)
-            register(id: 2, keyCode: 2)
-            let numberKeyCodes: [UInt32] = [18, 19, 20, 21, 23, 22, 26, 28, 25]
-            for (index, keyCode) in numberKeyCodes.enumerated() {
-                register(id: 100 + index, keyCode: keyCode)
+            for (index, shortcut) in self.shortcuts.enumerated() {
+                let id = index < 2 ? index + 1 : 100 + index - 2
+                register(id: id, shortcut: shortcut)
             }
         }
         isEnabled = enabled
@@ -67,11 +67,17 @@ final class GlobalHotkeysService {
         }
     }
 
-    private func register(id: Int, keyCode: UInt32) {
+    private func register(id: Int, shortcut: HotkeyShortcut) {
         var reference: EventHotKeyRef?
         let hotKeyID = EventHotKeyID(signature: winTaskbarHotKeySignature, id: UInt32(id))
-        let modifiers = UInt32(cmdKey | optionKey)
-        if RegisterEventHotKey(keyCode, modifiers, hotKeyID, GetApplicationEventTarget(), 0, &reference) == noErr,
+        if RegisterEventHotKey(
+            shortcut.keyCode,
+            shortcut.modifiers,
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &reference
+        ) == noErr,
            let reference {
             hotKeys.append(reference)
         }

@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Foundation
 
 enum TaskbarPosition: String, CaseIterable, Identifiable {
@@ -34,9 +35,9 @@ enum HighlightStyle: String, CaseIterable, Identifiable {
 }
 
 enum MenuButtonPlacement: String, CaseIterable, Identifiable {
-    case start = "Start"
+    case standard = "Standard"
     case beforeTray = "Before tray"
-    case afterTray = "After tray"
+    case oppositeEnd = "Opposite end"
 
     var id: String { rawValue }
 }
@@ -106,6 +107,21 @@ struct PinnedShortcut: Codable, Identifiable, Hashable {
     var url: URL? {
         if let url = URL(string: target), url.scheme != nil { return url }
         return URL(fileURLWithPath: target)
+    }
+}
+
+struct HotkeyShortcut: Codable, Hashable {
+    var keyCode: UInt32
+    var modifiers: UInt32
+    var keyLabel: String
+
+    var displayValue: String {
+        var value = ""
+        if modifiers & UInt32(controlKey) != 0 { value += "⌃" }
+        if modifiers & UInt32(optionKey) != 0 { value += "⌥" }
+        if modifiers & UInt32(shiftKey) != 0 { value += "⇧" }
+        if modifiers & UInt32(cmdKey) != 0 { value += "⌘" }
+        return value + keyLabel
     }
 }
 

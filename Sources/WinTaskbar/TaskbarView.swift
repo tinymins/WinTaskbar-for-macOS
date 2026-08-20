@@ -27,27 +27,27 @@ struct TaskbarView: View {
             Group {
                 if horizontal {
                     HStack(spacing: preferences.iconPadding) {
-                        if showsStartButton(at: .start) { startButton }
+                        if showsStartButtonAtLeadingEdge { startButton }
                         itemButtons(visible, horizontal: true)
                         if !overflow.isEmpty { overflowButton(overflow) }
                         Spacer(minLength: 8)
-                        if showsStartButton(at: .beforeTray) { startButton }
+                        if showsStartButtonBeforeTray { startButton }
                         tray
                         if preferences.showDesktopEnabled { showDesktopStrip(horizontal: true) }
-                        if showsStartButton(at: .afterTray) { startButton }
+                        if showsStartButtonAtOppositeEnd { startButton }
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                 } else {
                     VStack(spacing: preferences.iconPadding) {
-                        if showsStartButton(at: .start) { startButton }
+                        if showsStartButtonAtLeadingEdge { startButton }
                         itemButtons(visible, horizontal: false)
                         if !overflow.isEmpty { overflowButton(overflow) }
                         Spacer(minLength: 8)
-                        if showsStartButton(at: .beforeTray) { startButton }
+                        if showsStartButtonBeforeTray { startButton }
                         tray
                         if preferences.showDesktopEnabled { showDesktopStrip(horizontal: false) }
-                        if showsStartButton(at: .afterTray) { startButton }
+                        if showsStartButtonAtOppositeEnd { startButton }
                     }
                     .padding(.horizontal, 3)
                     .padding(.vertical, 8)
@@ -171,9 +171,18 @@ struct TaskbarView: View {
         return max(1, Int((length - reserved) / max(itemLength, 1)))
     }
 
-    private func showsStartButton(at placement: MenuButtonPlacement) -> Bool {
-        if preferences.startButtonAtEnd { return placement == .afterTray }
-        return preferences.menuButtonPlacement == placement
+    private var showsStartButtonAtLeadingEdge: Bool {
+        if preferences.startButtonAtEnd { return false }
+        return preferences.menuButtonPlacement == .standard
+    }
+
+    private var showsStartButtonBeforeTray: Bool {
+        if preferences.startButtonAtEnd { return false }
+        return preferences.menuButtonPlacement == .beforeTray
+    }
+
+    private var showsStartButtonAtOppositeEnd: Bool {
+        preferences.startButtonAtEnd || preferences.menuButtonPlacement == .oppositeEnd
     }
 
     private func showDesktopStrip(horizontal: Bool) -> some View {
@@ -186,7 +195,13 @@ struct TaskbarView: View {
 
     private var panelBackground: some View {
         Rectangle().fill(.ultraThinMaterial)
-            .overlay(Color.black.opacity(preferences.transparencyEnabled ? max(0.05, 1 - preferences.panelOpacity) : 0.22))
+            .overlay {
+                if let tint = Color(hex: preferences.panelTintHex) {
+                    tint.opacity(preferences.transparencyEnabled ? max(0.08, 1 - preferences.panelOpacity) : 0.2)
+                } else {
+                    Color.black.opacity(preferences.transparencyEnabled ? max(0.04, 1 - preferences.panelOpacity) : 0.18)
+                }
+            }
     }
 
     private var preferredColorScheme: ColorScheme? {

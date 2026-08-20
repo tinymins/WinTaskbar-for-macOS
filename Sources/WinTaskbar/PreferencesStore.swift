@@ -1,4 +1,5 @@
 import Combine
+import Carbon
 import Foundation
 
 @MainActor
@@ -39,6 +40,7 @@ final class PreferencesStore: ObservableObject {
     @Published var windowPreviewsEnabled: Bool { didSet { defaults.set(windowPreviewsEnabled, forKey: "wintaskbar.feature.windowPreviews") } }
     @Published var showDesktopEnabled: Bool { didSet { defaults.set(showDesktopEnabled, forKey: "wintaskbar.feature.showDesktop") } }
     @Published var globalHotkeysEnabled: Bool { didSet { defaults.set(globalHotkeysEnabled, forKey: "wintaskbar.feature.globalHotkeys") } }
+    @Published var hotkeyShortcuts: [HotkeyShortcut] { didSet { Self.store(hotkeyShortcuts, key: "wintaskbar.hotkeyShortcuts", defaults: defaults) } }
     @Published var showRecentInMenu: Bool { didSet { defaults.set(showRecentInMenu, forKey: "wintaskbar.showRecentInMenu") } }
     @Published var showShortcutsInMenu: Bool { didSet { defaults.set(showShortcutsInMenu, forKey: "wintaskbar.showShortcutsInMenu") } }
     @Published var groupStartMenuByCategory: Bool { didSet { defaults.set(groupStartMenuByCategory, forKey: "wintaskbar.groupStartMenuByCategory") } }
@@ -64,7 +66,7 @@ final class PreferencesStore: ObservableObject {
         panelOpacity = defaults.object(forKey: "wintaskbar.panelOpacity") as? Double ?? 0.92
         panelBlurRadius = defaults.object(forKey: "wintaskbar.panelBlurRadius") as? Double ?? 18
         startButtonLabel = defaults.string(forKey: "wintaskbar.startButtonLabel") ?? ""
-        menuButtonPlacement = MenuButtonPlacement(rawValue: defaults.string(forKey: "wintaskbar.menuButtonPlacement") ?? "") ?? .start
+        menuButtonPlacement = MenuButtonPlacement(rawValue: defaults.string(forKey: "wintaskbar.menuButtonPlacement") ?? "") ?? .standard
         startButtonAtEnd = defaults.object(forKey: "wintaskbar.startButtonAtEnd") as? Bool ?? false
         translucency = Translucency(rawValue: defaults.string(forKey: "wintaskbar.translucency") ?? "") ?? .subtle
         panelTintHex = defaults.string(forKey: "wintaskbar.panelTintHex") ?? ""
@@ -82,6 +84,8 @@ final class PreferencesStore: ObservableObject {
         windowPreviewsEnabled = defaults.object(forKey: "wintaskbar.feature.windowPreviews") as? Bool ?? true
         showDesktopEnabled = defaults.object(forKey: "wintaskbar.feature.showDesktop") as? Bool ?? true
         globalHotkeysEnabled = defaults.object(forKey: "wintaskbar.feature.globalHotkeys") as? Bool ?? true
+        hotkeyShortcuts = Self.load([HotkeyShortcut].self, key: "wintaskbar.hotkeyShortcuts", defaults: defaults)
+            ?? Self.defaultHotkeyShortcuts
         showRecentInMenu = defaults.object(forKey: "wintaskbar.showRecentInMenu") as? Bool ?? true
         showShortcutsInMenu = defaults.object(forKey: "wintaskbar.showShortcutsInMenu") as? Bool ?? true
         groupStartMenuByCategory = defaults.object(forKey: "wintaskbar.groupStartMenuByCategory") as? Bool ?? false
@@ -116,7 +120,7 @@ final class PreferencesStore: ObservableObject {
         panelOpacity = 0.92
         panelBlurRadius = 18
         startButtonLabel = ""
-        menuButtonPlacement = .start
+        menuButtonPlacement = .standard
         startButtonAtEnd = false
         translucency = .subtle
         panelTintHex = ""
@@ -134,6 +138,7 @@ final class PreferencesStore: ObservableObject {
         windowPreviewsEnabled = true
         showDesktopEnabled = true
         globalHotkeysEnabled = true
+        hotkeyShortcuts = Self.defaultHotkeyShortcuts
         showRecentInMenu = true
         showShortcutsInMenu = true
         groupStartMenuByCategory = false
@@ -169,5 +174,22 @@ final class PreferencesStore: ObservableObject {
     private static func load<T: Decodable>(_ type: T.Type, key: String, defaults: UserDefaults) -> T? {
         guard let data = defaults.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(type, from: data)
+    }
+
+    private static var defaultHotkeyShortcuts: [HotkeyShortcut] {
+        let modifiers = UInt32(cmdKey | optionKey)
+        return [
+            HotkeyShortcut(keyCode: 49, modifiers: modifiers, keyLabel: "Space"),
+            HotkeyShortcut(keyCode: 2, modifiers: modifiers, keyLabel: "D"),
+            HotkeyShortcut(keyCode: 18, modifiers: modifiers, keyLabel: "1"),
+            HotkeyShortcut(keyCode: 19, modifiers: modifiers, keyLabel: "2"),
+            HotkeyShortcut(keyCode: 20, modifiers: modifiers, keyLabel: "3"),
+            HotkeyShortcut(keyCode: 21, modifiers: modifiers, keyLabel: "4"),
+            HotkeyShortcut(keyCode: 23, modifiers: modifiers, keyLabel: "5"),
+            HotkeyShortcut(keyCode: 22, modifiers: modifiers, keyLabel: "6"),
+            HotkeyShortcut(keyCode: 26, modifiers: modifiers, keyLabel: "7"),
+            HotkeyShortcut(keyCode: 28, modifiers: modifiers, keyLabel: "8"),
+            HotkeyShortcut(keyCode: 25, modifiers: modifiers, keyLabel: "9")
+        ]
     }
 }

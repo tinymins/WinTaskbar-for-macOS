@@ -1,6 +1,28 @@
 import AppKit
 import Combine
+import Darwin
 import SwiftUI
+
+@MainActor
+private enum WindowBlur {
+    private typealias MainConnection = @convention(c) () -> Int32
+    private typealias SetBackgroundBlur = @convention(c) (Int32, Int32, Int32) -> Int32
+
+    private static let handle = dlopen(nil, RTLD_LAZY)
+    private static let connectionID: Int32? = {
+        guard let handle, let symbol = dlsym(handle, "CGSMainConnectionID") else { return nil }
+        return unsafeBitCast(symbol, to: MainConnection.self)()
+    }()
+    private static let setBackgroundBlur: SetBackgroundBlur? = {
+        guard let handle, let symbol = dlsym(handle, "CGSSetWindowBackgroundBlurRadius") else { return nil }
+        return unsafeBitCast(symbol, to: SetBackgroundBlur.self)
+    }()
+
+    static func apply(radius: Int, to window: NSWindow) {
+        guard let connectionID, let setBackgroundBlur else { return }
+        _ = setBackgroundBlur(connectionID, Int32(window.windowNumber), Int32(max(0, radius)))
+    }
+}
 
 final class TaskbarPanel: NSPanel {
     override var canBecomeKey: Bool { false }
@@ -74,6 +96,7 @@ final class TaskbarWindowController {
         }
         for (panel, screen) in zip(panels, NSScreen.screens) {
             panel.setFrame(frame(for: screen), display: true, animate: false)
+            applyAppearance(to: panel)
         }
     }
 
@@ -102,7 +125,24 @@ final class TaskbarWindowController {
             windowsService: windowsService,
             recentDocuments: recentDocuments
         ))
+        applyAppearance(to: panel)
         return panel
+    }
+
+    private func applyAppearance(to panel: NSPanel) {
+        panel.appearance = appearance
+        WindowBlur.apply(
+            radius: preferences.transparencyEnabled ? Int(preferences.panelBlurRadius.rounded()) : 0,
+            to: panel
+        )
+    }
+
+    private var appearance: NSAppearance? {
+        switch preferences.theme {
+        case .automatic: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
+        }
     }
 
     private func frame(for screen: NSScreen) -> NSRect {
@@ -128,6 +168,7 @@ final class StartMenuController {
     private let preferences: PreferencesStore
     private let taskbar: TaskbarWindowController
     private let panel: NSPanel
+    private var cancellable: AnyCancellable?
 
     init(
         preferences: PreferencesStore,
@@ -138,7 +179,7 @@ final class StartMenuController {
         self.preferences = preferences
         self.taskbar = taskbar
         panel = StartMenuPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 480),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -149,6 +190,10 @@ final class StartMenuController {
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.contentView = NSHostingView(rootView: StartMenuView(apps: apps, actions: actions, preferences: preferences))
+        applyAppearance()
+        cancellable = preferences.objectWillChange.sink { [weak self] _ in
+            DispatchQueue.main.async { self?.applyAppearance() }
+        }
     }
 
     func toggle() {
@@ -163,12 +208,24 @@ final class StartMenuController {
 
     func hide() { panel.orderOut(nil) }
 
+    private func applyAppearance() {
+        switch preferences.theme {
+        case .automatic: panel.appearance = nil
+        case .light: panel.appearance = NSAppearance(named: .aqua)
+        case .dark: panel.appearance = NSAppearance(named: .darkAqua)
+        }
+        WindowBlur.apply(
+            radius: preferences.transparencyEnabled ? Int(preferences.panelBlurRadius.rounded()) : 0,
+            to: panel
+        )
+    }
+
     private func positionPanel() {
         let screen = taskbar.activeScreen
         let targetHeight: CGFloat = preferences.menuHeightMode == .full
             ? max(480, screen.visibleFrame.height - CGFloat(preferences.barHeight))
-            : 560
-        panel.setContentSize(NSSize(width: 480, height: targetHeight))
+            : 480
+        panel.setContentSize(NSSize(width: 400, height: targetHeight))
         let size = panel.frame.size
         let barSize = CGFloat(preferences.barHeight)
         let frame: NSRect
