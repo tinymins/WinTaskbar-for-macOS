@@ -202,8 +202,8 @@ struct SettingsView: View {
     private var about: some View {
         VStack(spacing: 18) {
             SettingsSection(title: "WinTaskbar") {
-                LabeledContent("Version", value: "1.0.0")
-                LabeledContent("Architecture", value: "Native Apple Silicon")
+                LabeledContent("Version", value: AppMetadata.version)
+                LabeledContent("Architecture", value: AppMetadata.architecture)
                 Text("A Windows-style taskbar for macOS.")
                     .foregroundStyle(.secondary)
             }

@@ -119,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showAbout(_ sender: Any?) {
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: "WinTaskbar",
-            .applicationVersion: "1.0.0",
+            .applicationVersion: AppMetadata.version,
             .credits: NSAttributedString(string: "A Windows-style taskbar for macOS.")
         ])
         NSApp.activate(ignoringOtherApps: true)

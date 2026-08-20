@@ -1,5 +1,7 @@
 # WinTaskbar for macOS
 
+[![Release](https://github.com/tinymins/WinTaskbar-for-macOS/actions/workflows/release.yml/badge.svg)](https://github.com/tinymins/WinTaskbar-for-macOS/actions/workflows/release.yml)
+
 A Windows-style taskbar for macOS.
 
 WinTaskbar is a native AppKit and SwiftUI application that brings a familiar Windows-style taskbar workflow to macOS, including pinned and running apps, window previews, a searchable Start menu, system tray controls, and multi-display layouts.
@@ -18,6 +20,18 @@ WinTaskbar is a native AppKit and SwiftUI application that brings a familiar Win
 
 - macOS 13 or later
 - Swift 6.2 or later
+
+## Download
+
+Each [GitHub Release](https://github.com/tinymins/WinTaskbar-for-macOS/releases) provides three builds:
+
+| Package | Mac type |
+|---|---|
+| `macos-arm64` | Apple Silicon Macs (M1 and newer) |
+| `macos-x86_64` | Intel Macs |
+| `macos-universal` | Both Apple Silicon and Intel Macs |
+
+Release archives are ad-hoc signed but not Apple-notarized. On first launch, macOS may require opening the app from the Finder context menu.
 
 ## Run from source
 
@@ -44,6 +58,10 @@ bun run tsc
 `bun run tsc` performs a full Swift build and runs the built-in defaults and persistence self-test without requiring a full Xcode installation.
 
 See [FEATURES.md](FEATURES.md) for the item-by-item feature matrix.
+
+## Automated releases
+
+Pushing a semantic version tag such as `v0.0.1` builds, validates, and publishes the three architecture packages with SHA-256 checksum files. The same build matrix can be run without publishing from the Actions tab.
 
 ## Known limitations
 
