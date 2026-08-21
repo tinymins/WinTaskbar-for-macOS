@@ -169,12 +169,13 @@ final class TaskbarWindowController {
 }
 
 @MainActor
-final class StartMenuController {
+final class StartMenuController: NSObject, NSWindowDelegate {
     private let preferences: PreferencesStore
     private let taskbar: TaskbarWindowController
     private let panel: NSPanel
     private let backdrop = NSView()
     private var cancellable: AnyCancellable?
+    private var lastResignDate = Date.distantPast
 
     init(
         preferences: PreferencesStore,
@@ -186,15 +187,19 @@ final class StartMenuController {
         self.taskbar = taskbar
         panel = StartMenuPanel(
             contentRect: NSRect(x: 0, y: 0, width: 400, height: 480),
-            styleMask: [.borderless],
+            styleMask: [.nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
+        super.init()
         panel.level = .statusBar
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+        panel.isMovable = false
+        panel.hidesOnDeactivate = false
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
+        panel.delegate = self
         panel.contentView = NSHostingView(rootView: StartMenuView(apps: apps, actions: actions, preferences: preferences))
         installContentView()
         applyAppearance()
@@ -205,16 +210,21 @@ final class StartMenuController {
 
     func toggle(on screen: NSScreen? = nil) {
         if panel.isVisible {
-            panel.orderOut(nil)
+            hide()
         } else {
+            guard Date().timeIntervalSince(lastResignDate) >= 0.3 else { return }
             positionPanel(on: screen ?? taskbar.activeScreen)
-            NSApp.activate(ignoringOtherApps: true)
             panel.makeKeyAndOrderFront(nil)
             applyBlur()
         }
     }
 
     func hide() { panel.orderOut(nil) }
+
+    func windowDidResignKey(_ notification: Notification) {
+        lastResignDate = Date()
+        hide()
+    }
 
     private func applyAppearance() {
         switch preferences.theme {
