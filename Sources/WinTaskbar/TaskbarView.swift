@@ -11,6 +11,7 @@ struct TaskbarView: View {
     let windowActivator: WindowActivationService
     let windowsService: WindowsService
     let recentDocuments: RecentDocumentsService
+    let screen: NSScreen
 
     var body: some View {
         GeometryReader { geometry in
@@ -70,7 +71,9 @@ struct TaskbarView: View {
     }
 
     private var startButton: some View {
-        Button(action: actions.toggleStartMenu) {
+        Button {
+            actions.toggleStartMenu(on: screen)
+        } label: {
             HStack(spacing: 5) {
                 Image(systemName: "square.grid.2x2")
                     .font(.system(size: preferences.iconScale * 0.52, weight: .medium))

@@ -3,14 +3,14 @@ import Combine
 
 @MainActor
 final class AppActions: ObservableObject {
-    var toggleStartMenuHandler: (() -> Void)?
+    var toggleStartMenuHandler: ((NSScreen?) -> Void)?
     var openSettingsHandler: (() -> Void)?
     var closeStartMenuHandler: (() -> Void)?
     var fitWindowsHandler: (() -> Void)?
     var showDesktopHandler: (() -> Void)?
     var powerHandler: ((PowerAction) -> Void)?
 
-    func toggleStartMenu() { toggleStartMenuHandler?() }
+    func toggleStartMenu(on screen: NSScreen? = nil) { toggleStartMenuHandler?(screen) }
     func openSettings() { openSettingsHandler?() }
     func closeStartMenu() { closeStartMenuHandler?() }
     func fitWindows() { fitWindowsHandler?() }

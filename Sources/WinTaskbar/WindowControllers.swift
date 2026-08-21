@@ -8,19 +8,23 @@ private enum WindowBlur {
     private typealias MainConnection = @convention(c) () -> Int32
     private typealias SetBackgroundBlur = @convention(c) (Int32, Int32, Int32) -> Int32
 
-    private static let handle = dlopen(nil, RTLD_LAZY)
+    private static let defaultHandle = UnsafeMutableRawPointer(bitPattern: -2)
     private static let connectionID: Int32? = {
-        guard let handle, let symbol = dlsym(handle, "CGSMainConnectionID") else { return nil }
+        guard let defaultHandle, let symbol = dlsym(defaultHandle, "CGSMainConnectionID") else { return nil }
         return unsafeBitCast(symbol, to: MainConnection.self)()
     }()
     private static let setBackgroundBlur: SetBackgroundBlur? = {
-        guard let handle, let symbol = dlsym(handle, "CGSSetWindowBackgroundBlurRadius") else { return nil }
+        guard let defaultHandle,
+              let symbol = dlsym(defaultHandle, "CGSSetWindowBackgroundBlurRadius") else { return nil }
         return unsafeBitCast(symbol, to: SetBackgroundBlur.self)
     }()
 
     static func apply(radius: Int, to window: NSWindow) {
-        guard let connectionID, let setBackgroundBlur else { return }
-        _ = setBackgroundBlur(connectionID, Int32(window.windowNumber), Int32(max(0, radius)))
+        let windowNumber = window.windowNumber
+        guard windowNumber > 0,
+              let connectionID,
+              let setBackgroundBlur else { return }
+        _ = setBackgroundBlur(connectionID, Int32(windowNumber), Int32(max(0, radius)))
     }
 }
 
@@ -123,7 +127,8 @@ final class TaskbarWindowController {
             dockBadges: dockBadges,
             windowActivator: windowActivator,
             windowsService: windowsService,
-            recentDocuments: recentDocuments
+            recentDocuments: recentDocuments,
+            screen: screen
         ))
         applyAppearance(to: panel)
         return panel
@@ -168,6 +173,7 @@ final class StartMenuController {
     private let preferences: PreferencesStore
     private let taskbar: TaskbarWindowController
     private let panel: NSPanel
+    private let backdrop = NSView()
     private var cancellable: AnyCancellable?
 
     init(
@@ -184,25 +190,27 @@ final class StartMenuController {
             backing: .buffered,
             defer: false
         )
-        panel.level = .popUpMenu
+        panel.level = .statusBar
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.contentView = NSHostingView(rootView: StartMenuView(apps: apps, actions: actions, preferences: preferences))
+        installContentView()
         applyAppearance()
         cancellable = preferences.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async { self?.applyAppearance() }
         }
     }
 
-    func toggle() {
+    func toggle(on screen: NSScreen? = nil) {
         if panel.isVisible {
             panel.orderOut(nil)
         } else {
-            positionPanel()
+            positionPanel(on: screen ?? taskbar.activeScreen)
             NSApp.activate(ignoringOtherApps: true)
             panel.makeKeyAndOrderFront(nil)
+            applyBlur()
         }
     }
 
@@ -214,32 +222,108 @@ final class StartMenuController {
         case .light: panel.appearance = NSAppearance(named: .aqua)
         case .dark: panel.appearance = NSAppearance(named: .darkAqua)
         }
+        backdrop.wantsLayer = true
+        backdrop.alphaValue = preferences.transparencyEnabled ? preferences.panelOpacity : 1
+        backdrop.layer?.backgroundColor = backdropColor.cgColor
+        backdrop.layer?.cornerRadius = menuCornerRadius
+        backdrop.layer?.masksToBounds = true
+        panel.hasShadow = menuCornerRadius > 0
+        applyBlur()
+    }
+
+    private func installContentView() {
+        guard let hostingView = panel.contentView else { return }
+        let container = NSView()
+        backdrop.translatesAutoresizingMaskIntoConstraints = false
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(backdrop)
+        container.addSubview(hostingView)
+        NSLayoutConstraint.activate([
+            backdrop.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            backdrop.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            backdrop.topAnchor.constraint(equalTo: container.topAnchor),
+            backdrop.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            hostingView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            hostingView.topAnchor.constraint(equalTo: container.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        panel.contentView = container
+    }
+
+    private var backdropColor: NSColor {
+        if let tint = NSColor(hex: preferences.panelTintHex) {
+            return preferences.transparencyEnabled ? tint : tint.withAlphaComponent(1)
+        }
+        return NSColor.windowBackgroundColor.withAlphaComponent(preferences.transparencyEnabled ? 0.4 : 1)
+    }
+
+    private var menuCornerRadius: CGFloat {
+        preferences.menuWindowStyle == .windows ? 10 : 0
+    }
+
+    private func applyBlur() {
         WindowBlur.apply(
             radius: preferences.transparencyEnabled ? Int(preferences.panelBlurRadius.rounded()) : 0,
             to: panel
         )
     }
 
-    private func positionPanel() {
-        let screen = taskbar.activeScreen
-        let targetHeight: CGFloat = preferences.menuHeightMode == .full
-            ? max(480, screen.visibleFrame.height - CGFloat(preferences.barHeight))
-            : 480
-        panel.setContentSize(NSSize(width: 400, height: targetHeight))
-        let size = panel.frame.size
-        let barSize = CGFloat(preferences.barHeight)
-        let frame: NSRect
-        switch preferences.position {
-        case .bottom:
-            frame = NSRect(x: screen.frame.minX, y: screen.frame.minY + barSize, width: size.width, height: size.height)
-        case .top:
-            frame = NSRect(x: screen.frame.minX, y: screen.visibleFrame.maxY - barSize - size.height, width: size.width, height: size.height)
-        case .left:
-            frame = NSRect(x: screen.frame.minX + barSize, y: screen.frame.minY, width: size.width, height: min(size.height, screen.frame.height))
-        case .right:
-            frame = NSRect(x: screen.frame.maxX - barSize - size.width, y: screen.frame.minY, width: size.width, height: min(size.height, screen.frame.height))
-        }
+    private func positionPanel(on screen: NSScreen) {
+        let frame = StartMenuGeometry.frame(
+            screenFrame: screen.frame,
+            visibleFrame: screen.visibleFrame,
+            position: preferences.position,
+            barHeight: CGFloat(preferences.barHeight),
+            heightMode: preferences.menuHeightMode,
+            oppositeEnd: preferences.startButtonAtEnd || preferences.menuButtonPlacement != .standard
+        )
         panel.setFrame(frame, display: true)
+    }
+}
+
+enum StartMenuGeometry {
+    static let width: CGFloat = 400
+    static let standardHeight: CGFloat = 480
+
+    static func frame(
+        screenFrame: NSRect,
+        visibleFrame: NSRect,
+        position: TaskbarPosition,
+        barHeight: CGFloat,
+        heightMode: MenuHeightMode,
+        oppositeEnd: Bool
+    ) -> NSRect {
+        let x: CGFloat
+        let y: CGFloat
+        let height: CGFloat
+
+        switch position {
+        case .bottom:
+            x = oppositeEnd ? screenFrame.maxX - width : screenFrame.minX
+            y = screenFrame.minY + barHeight
+            height = heightMode == .full ? max(0, visibleFrame.maxY - y) : standardHeight
+        case .top:
+            x = oppositeEnd ? screenFrame.maxX - width : screenFrame.minX
+            height = heightMode == .full
+                ? max(0, visibleFrame.maxY - barHeight - visibleFrame.minY)
+                : standardHeight
+            y = visibleFrame.maxY - barHeight - height
+        case .left:
+            x = screenFrame.minX + barHeight
+            height = heightMode == .full ? visibleFrame.height : standardHeight
+            y = heightMode == .full
+                ? visibleFrame.minY
+                : (oppositeEnd ? screenFrame.minY : screenFrame.maxY - height)
+        case .right:
+            x = screenFrame.maxX - barHeight - width
+            height = heightMode == .full ? visibleFrame.height : standardHeight
+            y = heightMode == .full
+                ? visibleFrame.minY
+                : (oppositeEnd ? screenFrame.minY : screenFrame.maxY - height)
+        }
+
+        return NSRect(x: x, y: y, width: width, height: height)
     }
 }
 

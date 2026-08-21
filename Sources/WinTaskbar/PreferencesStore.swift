@@ -62,9 +62,9 @@ final class PreferencesStore: ObservableObject {
         showRunningIndicators = defaults.object(forKey: "wintaskbar.showRunningIndicators") as? Bool ?? true
         showAppLabels = defaults.object(forKey: "wintaskbar.showAppLabels") as? Bool ?? false
         showFinder = defaults.object(forKey: "wintaskbar.showFinderInRunningApps") as? Bool ?? true
-        transparencyEnabled = defaults.object(forKey: "wintaskbar.transparencyEnabled") as? Bool ?? false
-        panelOpacity = defaults.object(forKey: "wintaskbar.panelOpacity") as? Double ?? 0.92
-        panelBlurRadius = defaults.object(forKey: "wintaskbar.panelBlurRadius") as? Double ?? 18
+        transparencyEnabled = defaults.object(forKey: "wintaskbar.transparencyEnabled") as? Bool ?? true
+        panelOpacity = defaults.object(forKey: "wintaskbar.panelOpacity") as? Double ?? 1
+        panelBlurRadius = defaults.object(forKey: "wintaskbar.panelBlurRadius") as? Double ?? 20
         startButtonLabel = defaults.string(forKey: "wintaskbar.startButtonLabel") ?? ""
         menuButtonPlacement = MenuButtonPlacement(rawValue: defaults.string(forKey: "wintaskbar.menuButtonPlacement") ?? "") ?? .standard
         startButtonAtEnd = defaults.object(forKey: "wintaskbar.startButtonAtEnd") as? Bool ?? false
@@ -116,9 +116,9 @@ final class PreferencesStore: ObservableObject {
         showRunningIndicators = true
         showAppLabels = false
         showFinder = true
-        transparencyEnabled = false
-        panelOpacity = 0.92
-        panelBlurRadius = 18
+        transparencyEnabled = true
+        panelOpacity = 1
+        panelBlurRadius = 20
         startButtonLabel = ""
         menuButtonPlacement = .standard
         startButtonAtEnd = false

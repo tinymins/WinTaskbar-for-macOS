@@ -50,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let settings = SettingsWindowController(preferences: preferences)
 
-        actions.toggleStartMenuHandler = { [weak startMenu] in startMenu?.toggle() }
+        actions.toggleStartMenuHandler = { [weak startMenu] screen in startMenu?.toggle(on: screen) }
         actions.closeStartMenuHandler = { [weak startMenu] in startMenu?.hide() }
         actions.openSettingsHandler = { [weak settings, weak startMenu] in
             startMenu?.hide()
@@ -156,7 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @MainActor
-func runSelfTest() -> Int32 {
+func runSelfTest() async -> Int32 {
     let suiteName = "WinTaskbar.SelfTest.\(UUID().uuidString)"
     guard let defaults = UserDefaults(suiteName: suiteName) else {
         fputs("SELF-TEST FAILED: cannot create temporary defaults\n", stderr)
@@ -167,10 +167,26 @@ func runSelfTest() -> Int32 {
     let preferences = PreferencesStore(defaults: defaults)
     guard preferences.position == .bottom,
           preferences.barHeight == 52,
+          preferences.transparencyEnabled,
+          preferences.panelOpacity == 1,
+          preferences.panelBlurRadius == 20,
           preferences.trayClockEnabled,
           preferences.menuButtonPlacement == .standard,
           preferences.hotkeyShortcuts.count == 11 else {
         fputs("SELF-TEST FAILED: default values mismatch\n", stderr)
+        return 1
+    }
+
+    let rightMenuFrame = StartMenuGeometry.frame(
+        screenFrame: NSRect(x: 0, y: 0, width: 1200, height: 800),
+        visibleFrame: NSRect(x: 0, y: 0, width: 1200, height: 775),
+        position: .right,
+        barHeight: 52,
+        heightMode: .standard,
+        oppositeEnd: false
+    )
+    guard rightMenuFrame == NSRect(x: 748, y: 320, width: 400, height: 480) else {
+        fputs("SELF-TEST FAILED: start menu corner anchoring mismatch\n", stderr)
         return 1
     }
 
@@ -191,12 +207,23 @@ func runSelfTest() -> Int32 {
         fputs("SELF-TEST FAILED: preference keys did not persist\n", stderr)
         return 1
     }
-    print("SELF-TEST PASSED: defaults and preference persistence")
+
+    let testAppURL = URL(fileURLWithPath: "/System/Applications/App Store.app")
+    guard let itemProvider = NSItemProvider(contentsOf: testAppURL),
+          FileURLDropLoader.matchingProviders(in: [itemProvider]).count == 1,
+          let loadedURL = await FileURLDropLoader.loadFileURL(from: itemProvider),
+          loadedURL.standardizedFileURL.path == testAppURL.standardizedFileURL.path else {
+        fputs("SELF-TEST FAILED: app URL drag provider did not round-trip\n", stderr)
+        return 1
+    }
+    print("SELF-TEST PASSED: defaults, preference persistence, and app URL drag provider")
     return 0
 }
 
 if CommandLine.arguments.contains("--self-test") {
-    exit(runSelfTest())
+    let application = NSApplication.shared
+    Task { @MainActor in exit(await runSelfTest()) }
+    application.run()
 } else {
     let application = NSApplication.shared
     let delegate = AppDelegate()

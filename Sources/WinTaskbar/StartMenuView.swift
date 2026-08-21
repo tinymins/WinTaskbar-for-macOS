@@ -1,5 +1,21 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
+
+@MainActor
+enum FileURLDropLoader {
+    static func matchingProviders(in providers: [NSItemProvider]) -> [NSItemProvider] {
+        providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
+    }
+
+    static func loadFileURL(from provider: NSItemProvider) async -> URL? {
+        await withCheckedContinuation { continuation in
+            provider.loadObject(ofClass: NSURL.self) { object, _ in
+                continuation.resume(returning: object as? URL)
+            }
+        }
+    }
+}
 
 struct StartMenuView: View {
     @ObservedObject var apps: AppDiscoveryService
@@ -7,6 +23,7 @@ struct StartMenuView: View {
     @ObservedObject var preferences: PreferencesStore
     @State private var query = ""
     @State private var showingSettings = false
+    @State private var shortcutIsDropTarget = false
 
     private var filteredApps: [DiscoveredApp] {
         guard !query.isEmpty else { return apps.installedApps }
@@ -20,39 +37,39 @@ struct StartMenuView: View {
     var body: some View {
         HStack(spacing: 0) {
             if preferences.menuActionsSide == .left { actionRail; Divider() }
-            Group {
-                if showingSettings { settingsPanel }
-                else { appsPanel }
-            }
+            mainPanel
             if preferences.menuActionsSide == .right { Divider(); actionRail }
         }
-        .frame(width: 400, height: preferences.menuHeightMode == .full ? 760 : 480)
-        .background(panelBackground)
-        .clipShape(RoundedRectangle(cornerRadius: menuCornerRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: menuCornerRadius, style: .continuous)
-                .stroke(Color.primary.opacity(0.22), lineWidth: 1)
-        }
+        .frame(width: 400)
+        .frame(maxHeight: .infinity)
+        .animation(.easeInOut(duration: 0.18), value: showingSettings)
         .onExitCommand { actions.closeStartMenu() }
     }
 
+    private var mainPanel: some View {
+        ZStack {
+            appsPanel
+                .opacity(showingSettings ? 0 : 1)
+                .allowsHitTesting(!showingSettings)
+            settingsPanel
+                .opacity(showingSettings ? 1 : 0)
+                .allowsHitTesting(showingSettings)
+        }
+    }
+
     private var appsPanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 2) {
             if preferences.searchFieldPosition == .top { searchField }
-            HStack {
-                Text(query.isEmpty ? "Apps" : "Search results").font(.headline)
-                Spacer()
-                Button { addFolder() } label: { Image(systemName: "folder.badge.plus") }
-                    .buttonStyle(.plain).help("New folder")
-            }
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     if query.isEmpty {
-                        ForEach(Array(preferences.appFolders.enumerated()), id: \.element.id) { index, folder in
-                            folderSection(folder, index: index)
+                        ForEach(preferences.appFolders) { folder in
+                            folderSection(folder)
                         }
                     }
+
+                    appsHeader
 
                     if preferences.groupStartMenuByCategory && query.isEmpty {
                         ForEach(categoryGroups, id: \.0) { category, categoryApps in
@@ -65,6 +82,7 @@ struct StartMenuView: View {
                     }
                 }
             }
+            .padding(.horizontal, -6)
 
             if filteredApps.isEmpty {
                 Text("No apps found").foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -72,7 +90,21 @@ struct StartMenuView: View {
             if preferences.searchFieldPosition == .bottom { searchField }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.top, 10)
+        .padding(.bottom, 5)
+    }
+
+    private var appsHeader: some View {
+        HStack {
+            Text(query.isEmpty ? "Apps" : "Search results")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button { addFolder() } label: { Image(systemName: "folder.badge.plus") }
+                .buttonStyle(.plain)
+                .help("New folder")
+        }
+        .padding(.horizontal, 8)
     }
 
     private var settingsPanel: some View {
@@ -82,19 +114,24 @@ struct StartMenuView: View {
                     .buttonStyle(.plain)
                 Spacer()
             }
-            .padding(.horizontal, 8)
-            .frame(height: 32)
+            .padding(8)
             Divider()
             SettingsView(preferences: preferences)
         }
     }
 
     private var searchField: some View {
-        TextField("Search apps", text: $query)
-            .textFieldStyle(.roundedBorder)
-            .onSubmit {
-                if let first = filteredApps.first { open(first) }
+        MenuSearchField(text: $query, placeholder: "Search apps") {
+            if let first = filteredApps.first { open(first) }
+        }
+            .frame(height: 22)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.primary.opacity(0.08))
             }
+            .padding(.horizontal, -4)
     }
 
     private var ungroupedApps: [DiscoveredApp] {
@@ -118,51 +155,37 @@ struct StartMenuView: View {
     }
 
     @ViewBuilder
-    private func folderSection(_ folder: AppFolder, index: Int) -> some View {
+    private func folderSection(_ folder: AppFolder) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Button {
-                    preferences.appFolders[index].isExpanded.toggle()
-                } label: {
-                    Image(systemName: folder.isExpanded ? "chevron.down" : "chevron.right")
-                    Image(systemName: "folder")
-                    Text(folder.name).fontWeight(.medium)
-                }
-                .buttonStyle(.plain)
-                Spacer()
-            }
-            .padding(.vertical, 5)
-            .contentShape(Rectangle())
-            .dropDestination(for: String.self) { bundleIDs, _ in
-                guard let bundleID = bundleIDs.first else { return false }
-                move(bundleID: bundleID, to: folder.id)
-                return true
-            }
-            .contextMenu {
-                Button("Rename folder") { renameFolder(index) }
-                Button("Delete folder") { preferences.appFolders.remove(at: index) }
-            }
+            StartMenuFolderHeader(
+                folder: Binding(
+                    get: { preferences.appFolders.first(where: { $0.id == folder.id }) ?? folder },
+                    set: { updated in
+                        guard let currentIndex = preferences.appFolders.firstIndex(where: { $0.id == folder.id }) else { return }
+                        preferences.appFolders[currentIndex] = updated
+                    }
+                ),
+                onDrop: { url in
+                    guard let bundleID = Bundle(url: url)?.bundleIdentifier else { return false }
+                    move(bundleID: bundleID, to: folder.id)
+                    return true
+                },
+                onDelete: { preferences.appFolders.removeAll { $0.id == folder.id } }
+            )
 
             if folder.isExpanded {
                 ForEach(folder.bundleIDs.compactMap { apps.app(bundleIdentifier: $0) }) {
                     appRow($0, currentFolderID: folder.id)
+                        .padding(.leading, 12)
                 }
             }
         }
     }
 
     private func appRow(_ app: DiscoveredApp, currentFolderID: String?) -> some View {
-        Button { open(app) } label: {
-            HStack(spacing: 9) {
-                Image(nsImage: app.icon).resizable().interpolation(.high).frame(width: 24, height: 24)
-                Text(app.name).lineLimit(1)
-                Spacer()
-            }
-            .padding(.horizontal, 6).padding(.vertical, 4)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .draggable(app.bundleIdentifier ?? app.url.path)
+        StartMenuAppRow(app: app)
+        .onTapGesture { open(app) }
+        .onDrag { NSItemProvider(contentsOf: app.url) ?? NSItemProvider() }
         .contextMenu {
             if let bundleID = app.bundleIdentifier {
                 Menu("Add to folder") {
@@ -180,21 +203,36 @@ struct StartMenuView: View {
     }
 
     private var actionRail: some View {
-        VStack(spacing: 18) {
-            Button { showingSettings = true } label: { Image(systemName: "gearshape") }.help("Settings")
-            Button { actions.fitWindows(); actions.closeStartMenu() } label: { Image(systemName: "rectangle.arrowtriangle.2.inward") }.help("Fit windows")
+        VStack(spacing: 4) {
+            HoveringIconButton(systemName: "gearshape", help: "Settings") {
+                showingSettings = true
+            }
+            HoveringIconButton(systemName: "rectangle.arrowtriangle.2.inward", help: "Fit windows") {
+                actions.fitWindows()
+                actions.closeStartMenu()
+            }
             menuShortcuts
-            Spacer()
-            Button { actions.performPower(.lockScreen) } label: { Image(systemName: "lock.fill") }.help("Lock Screen")
-            Button { actions.performPower(.sleep) } label: { Image(systemName: "moon.fill") }.help("Sleep")
-            Button { actions.performPower(.logOut) } label: { Image(systemName: "rectangle.portrait.and.arrow.right") }.help("Log Out")
-            Button { actions.performPower(.restart) } label: { Image(systemName: "arrow.clockwise") }.help("Restart")
-            Button { actions.performPower(.shutDown) } label: { Image(systemName: "power") }.help("Shut Down")
+                .frame(maxHeight: .infinity)
+                .padding(.vertical, 8)
+            HoveringIconButton(systemName: "lock.fill", help: "Lock Screen") {
+                actions.performPower(.lockScreen)
+            }
+            HoveringIconButton(systemName: "moon.fill", help: "Sleep") {
+                actions.performPower(.sleep)
+            }
+            HoveringIconButton(systemName: "rectangle.portrait.and.arrow.right", help: "Log Out") {
+                actions.performPower(.logOut)
+            }
+            HoveringIconButton(systemName: "arrow.clockwise", help: "Restart") {
+                actions.performPower(.restart)
+            }
+            HoveringIconButton(systemName: "power", help: "Shut Down") {
+                actions.performPower(.shutDown)
+            }
         }
-        .buttonStyle(.plain)
-        .font(.system(size: 17))
-        .padding(.vertical, 16)
+        .padding(.vertical, 10)
         .frame(width: 52)
+        .frame(maxHeight: .infinity)
     }
 
     private var menuShortcuts: some View {
@@ -209,32 +247,14 @@ struct StartMenuView: View {
             Image(systemName: "plus")
                 .foregroundStyle(.secondary)
                 .frame(width: 30, height: 30)
+                .background {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(shortcutIsDropTarget ? Color.accentColor.opacity(0.18) : .clear)
+                }
                 .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [3])))
                 .help("Drop an app or file here to add a shortcut")
-                .dropDestination(for: URL.self) { urls, _ in
-                    for url in urls where !preferences.menuShortcutPaths.contains(url.path) {
-                        preferences.menuShortcutPaths.append(url.path)
-                    }
-                    return !urls.isEmpty
-                }
+                .onDrop(of: [UTType.fileURL], isTargeted: $shortcutIsDropTarget, perform: handleShortcutDrop)
         }
-    }
-
-    private var panelBackground: some View {
-        Rectangle()
-            .fill(.ultraThinMaterial)
-            .overlay(panelTint)
-    }
-
-    private var panelTint: Color {
-        if let color = Color(hex: preferences.panelTintHex) {
-            return color.opacity(preferences.transparencyEnabled ? max(0.08, 1 - preferences.panelOpacity) : 0.2)
-        }
-        return Color.black.opacity(preferences.transparencyEnabled ? max(0.04, 1 - preferences.panelOpacity) : 0.18)
-    }
-
-    private var menuCornerRadius: CGFloat {
-        preferences.menuWindowStyle == .windows ? 9 : 15
     }
 
     private func open(_ app: DiscoveredApp) {
@@ -243,8 +263,23 @@ struct StartMenuView: View {
     }
 
     private func addFolder() {
-        let number = preferences.appFolders.count + 1
-        preferences.appFolders.append(AppFolder(name: "New Folder \(number)"))
+        preferences.appFolders.append(AppFolder(name: "New Folder"))
+    }
+
+    private func handleShortcutDrop(_ providers: [NSItemProvider]) -> Bool {
+        let matching = FileURLDropLoader.matchingProviders(in: providers)
+        guard !matching.isEmpty else { return false }
+        Task {
+            for provider in matching {
+                guard let url = await FileURLDropLoader.loadFileURL(from: provider) else { continue }
+                await MainActor.run {
+                    if !preferences.menuShortcutPaths.contains(url.path) {
+                        preferences.menuShortcutPaths.append(url.path)
+                    }
+                }
+            }
+        }
+        return true
     }
 
     private func move(bundleID: String, to folderID: String?) {
@@ -257,16 +292,194 @@ struct StartMenuView: View {
         }
     }
 
-    private func renameFolder(_ index: Int) {
-        let alert = NSAlert()
-        alert.messageText = "Rename folder"
-        let field = NSTextField(string: preferences.appFolders[index].name)
-        field.frame = NSRect(x: 0, y: 0, width: 240, height: 24)
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Done")
-        alert.addButton(withTitle: "Cancel")
-        if alert.runModal() == .alertFirstButtonReturn, !field.stringValue.trimmingCharacters(in: .whitespaces).isEmpty {
-            preferences.appFolders[index].name = field.stringValue
+}
+
+private struct StartMenuFolderHeader: View {
+    @Binding var folder: AppFolder
+    let onDrop: (URL) -> Bool
+    let onDelete: () -> Void
+
+    @State private var isEditing = false
+    @State private var isHovering = false
+    @State private var isDropTarget = false
+    @State private var draftName = ""
+    @FocusState private var nameIsFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: folder.isExpanded ? "chevron.down" : "chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+                .frame(width: 14)
+            Image(systemName: "folder")
+                .foregroundStyle(.secondary)
+            if isEditing {
+                TextField("Folder", text: $draftName)
+                    .textFieldStyle(.plain)
+                    .focused($nameIsFocused)
+                    .onSubmit { commitName() }
+                Spacer()
+                Button { commitName() } label: { Image(systemName: "checkmark") }
+                    .buttonStyle(.plain)
+                    .help("Done")
+            } else {
+                Text(folder.name).lineLimit(1)
+                Spacer()
+                if isHovering {
+                    Button { startEditing() } label: { Image(systemName: "pencil") }
+                        .buttonStyle(.plain)
+                        .help("Rename folder")
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isDropTarget ? Color.accentColor.opacity(0.18) : Color.primary.opacity(isHovering ? 0.08 : 0))
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !isEditing else { return }
+            folder.isExpanded.toggle()
+        }
+        .onHover { isHovering = $0 }
+        .onDrop(of: [UTType.fileURL], isTargeted: $isDropTarget) { providers in
+            guard let provider = FileURLDropLoader.matchingProviders(in: providers).first else { return false }
+            Task {
+                guard let url = await FileURLDropLoader.loadFileURL(from: provider) else { return }
+                await MainActor.run { _ = onDrop(url) }
+            }
+            return true
+        }
+        .contextMenu {
+            Button("Rename folder") { startEditing() }
+            Button("Delete folder") { onDelete() }
+        }
+        .onChange(of: nameIsFocused) { focused in
+            if !focused, isEditing { commitName() }
+        }
+    }
+
+    private func startEditing() {
+        draftName = folder.name
+        isEditing = true
+        nameIsFocused = true
+    }
+
+    private func commitName() {
+        let value = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !value.isEmpty { folder.name = value }
+        isEditing = false
+        nameIsFocused = false
+    }
+}
+
+private struct StartMenuAppRow: View {
+    let app: DiscoveredApp
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(nsImage: app.icon)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 28, height: 28)
+            Text(app.name).lineLimit(1)
+            Spacer()
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity)
+        .background {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isHovering ? Color.primary.opacity(0.08) : .clear)
+        }
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+    }
+}
+
+private struct MenuSearchField: NSViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let onSubmit: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, onSubmit: onSubmit)
+    }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField()
+        field.delegate = context.coordinator
+        field.target = context.coordinator
+        field.action = #selector(Coordinator.submit)
+        field.placeholderString = placeholder
+        field.isBordered = false
+        field.isBezeled = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.font = .systemFont(ofSize: 13)
+        field.lineBreakMode = .byTruncatingTail
+        return field
+    }
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+        if field.stringValue != text {
+            field.stringValue = text
+        }
+        field.placeholderString = placeholder
+        context.coordinator.text = $text
+        context.coordinator.onSubmit = onSubmit
+    }
+
+    final class Coordinator: NSObject, NSSearchFieldDelegate {
+        var text: Binding<String>
+        var onSubmit: () -> Void
+
+        init(text: Binding<String>, onSubmit: @escaping () -> Void = {}) {
+            self.text = text
+            self.onSubmit = onSubmit
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            text.wrappedValue = field.stringValue
+        }
+
+        @objc func submit() {
+            onSubmit()
+        }
+    }
+}
+
+private struct HoveringIconButton: View {
+    let systemName: String
+    let help: LocalizedStringKey
+    let action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .imageScale(.medium)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(width: 50, height: 50)
+                .background {
+                    if isHovering {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.primary.opacity(0.08))
+                    }
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .padding(.vertical, -5)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) {
+                isHovering = hovering
+            }
         }
     }
 }
