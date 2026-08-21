@@ -81,8 +81,9 @@ struct StartMenuView: View {
                         ForEach(ungroupedApps) { appRow($0, currentFolderID: nil) }
                     }
                 }
+                .padding(.horizontal, 6)
             }
-            .padding(.horizontal, -6)
+            .padding(.horizontal, -12)
 
             if filteredApps.isEmpty {
                 Text("No apps found").foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
