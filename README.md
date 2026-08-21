@@ -61,7 +61,7 @@ See [FEATURES.md](FEATURES.md) for the item-by-item feature matrix.
 
 ## Automated releases
 
-Pushing a semantic version tag such as `v0.0.1` builds, validates, and publishes the three architecture packages with SHA-256 checksum files. The same build matrix can be run without publishing from the Actions tab.
+Pushing a semantic version tag such as `v0.0.1` builds, validates, and publishes the three architecture packages with SHA-256 checksum files. Tags with a prerelease suffix, such as `v0.0.2-rc.1`, are published as GitHub pre-releases. The same build matrix can be run without publishing from the Actions tab.
 
 ## Known limitations
 
