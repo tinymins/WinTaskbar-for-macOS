@@ -230,6 +230,17 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    guard TaskbarAttentionPolicy.shouldFlash(previous: nil, current: "1"),
+          TaskbarAttentionPolicy.shouldFlash(previous: "1", current: "2"),
+          !TaskbarAttentionPolicy.shouldFlash(previous: "2", current: "1"),
+          !TaskbarAttentionPolicy.shouldFlash(previous: "2", current: "2"),
+          TaskbarAttentionPolicy.shouldFlash(previous: "new", current: "urgent"),
+          !TaskbarAttentionPolicy.shouldFlash(previous: "new", current: "new"),
+          !TaskbarAttentionPolicy.shouldFlash(previous: "1", current: nil) else {
+        fputs("SELF-TEST FAILED: taskbar attention policy mismatch\n", stderr)
+        return 1
+    }
+
     let legacySuiteName = "WinTaskbar.SelfTest.LegacyGeometry.\(UUID().uuidString)"
     guard let legacyDefaults = UserDefaults(suiteName: legacySuiteName) else {
         fputs("SELF-TEST FAILED: cannot create legacy geometry defaults\n", stderr)
@@ -275,7 +286,7 @@ func runSelfTest() async -> Int32 {
         fputs("SELF-TEST FAILED: app URL drag provider did not round-trip\n", stderr)
         return 1
     }
-    print("SELF-TEST PASSED: defaults, indicator geometry, preference persistence, and app URL drag provider")
+    print("SELF-TEST PASSED: defaults, taskbar geometry and attention, preference persistence, and app URL drag provider")
     return 0
 }
 

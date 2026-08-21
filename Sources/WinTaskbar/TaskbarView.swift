@@ -294,6 +294,17 @@ struct WindowPreviewPlacement {
     }
 }
 
+struct TaskbarAttentionPolicy {
+    static func shouldFlash(previous: String?, current: String?) -> Bool {
+        guard let current else { return false }
+        guard let previous else { return true }
+        if let previousCount = Int(previous), let currentCount = Int(current) {
+            return currentCount > previousCount
+        }
+        return current != previous
+    }
+}
+
 private struct TaskbarAppButton: View {
     let item: TaskbarItem
     @ObservedObject var preferences: PreferencesStore
@@ -303,13 +314,14 @@ private struct TaskbarAppButton: View {
     let recentDocuments: RecentDocumentsService
     @State private var showPreview = false
     @State private var showShortcutEditor = false
+    @State private var lastBadge: String?
+    @State private var attentionFlash = false
+    @State private var attentionTask: Task<Void, Never>?
 
     var body: some View {
         appIconCell
         .background {
-            if preferences.activeIndicator == .background && item.isActive {
-                RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.2))
-            }
+            appBackground
         }
         .overlay(alignment: indicatorAlignment) {
             if preferences.showRunningIndicators && !preferences.showAppLabels {
@@ -325,6 +337,12 @@ private struct TaskbarAppButton: View {
         .onTapGesture { windowActivator.activateOrMinimize(item) }
         .accessibilityAddTraits(.isButton)
         .help(item.name)
+        .onAppear {
+            lastBadge = item.badge
+            if item.badge != nil { startAttentionFlash() }
+        }
+        .onChange(of: item.badge) { badge in updateAttention(for: badge) }
+        .onDisappear { stopAttentionFlash() }
         .onHover { hovering in showPreview = hovering && preferences.windowPreviewsEnabled && item.processIdentifier != nil }
         .popover(
             isPresented: $showPreview,
@@ -361,6 +379,57 @@ private struct TaskbarAppButton: View {
                 isPresented: $showShortcutEditor
             )
         }
+    }
+
+    @ViewBuilder
+    private var appBackground: some View {
+        ZStack {
+            if preferences.activeIndicator == .background && item.isActive {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.primary.opacity(0.2))
+            }
+            if item.badge != nil {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.orange.opacity(attentionFlash ? 0.48 : 0.16))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(Color.orange.opacity(attentionFlash ? 0.9 : 0.35), lineWidth: 1)
+                    }
+            }
+        }
+    }
+
+    private func updateAttention(for badge: String?) {
+        let previousBadge = lastBadge
+        lastBadge = badge
+        guard badge != nil else {
+            stopAttentionFlash()
+            return
+        }
+        if TaskbarAttentionPolicy.shouldFlash(previous: previousBadge, current: badge) {
+            startAttentionFlash()
+        }
+    }
+
+    private func startAttentionFlash() {
+        attentionTask?.cancel()
+        attentionTask = Task { @MainActor in
+            for _ in 0..<3 {
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: 0.18)) { attentionFlash = true }
+                try? await Task.sleep(nanoseconds: 180_000_000)
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: 0.18)) { attentionFlash = false }
+                try? await Task.sleep(nanoseconds: 180_000_000)
+            }
+            attentionTask = nil
+        }
+    }
+
+    private func stopAttentionFlash() {
+        attentionTask?.cancel()
+        attentionTask = nil
+        attentionFlash = false
     }
 
     @ViewBuilder
