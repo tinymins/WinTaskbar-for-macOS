@@ -183,8 +183,7 @@ struct StartMenuView: View {
     }
 
     private func appRow(_ app: DiscoveredApp, currentFolderID: String?) -> some View {
-        StartMenuAppRow(app: app)
-        .onTapGesture { open(app) }
+        StartMenuAppRow(app: app) { open(app) }
         .onDrag { NSItemProvider(contentsOf: app.url) ?? NSItemProvider() }
         .contextMenu {
             if let bundleID = app.bundleIdentifier {
@@ -247,14 +246,13 @@ struct StartMenuView: View {
             Image(systemName: "plus")
                 .foregroundStyle(.secondary)
                 .frame(width: 30, height: 30)
-                .background {
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(shortcutIsDropTarget ? Color.accentColor.opacity(0.18) : .clear)
-                }
                 .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [3])))
                 .help("Drop an app or file here to add a shortcut")
-                .onDrop(of: [UTType.fileURL], isTargeted: $shortcutIsDropTarget, perform: handleShortcutDrop)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(shortcutIsDropTarget ? Color.accentColor.opacity(0.18) : .clear)
+        .contentShape(Rectangle())
+        .onDrop(of: [UTType.fileURL], isTargeted: $shortcutIsDropTarget, perform: handleShortcutDrop)
     }
 
     private func open(_ app: DiscoveredApp) {
@@ -376,26 +374,30 @@ private struct StartMenuFolderHeader: View {
 
 private struct StartMenuAppRow: View {
     let app: DiscoveredApp
+    let action: () -> Void
     @State private var isHovering = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(nsImage: app.icon)
-                .resizable()
-                .interpolation(.high)
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 28, height: 28)
-            Text(app.name).lineLimit(1)
-            Spacer()
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(nsImage: app.icon)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 28, height: 28)
+                Text(app.name).lineLimit(1)
+                Spacer()
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity)
+            .background {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isHovering ? Color.primary.opacity(0.08) : .clear)
+            }
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .frame(maxWidth: .infinity)
-        .background {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(isHovering ? Color.primary.opacity(0.08) : .clear)
-        }
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
         .onHover { isHovering = $0 }
     }
 }
