@@ -222,6 +222,14 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    guard WindowPreviewPlacement.arrowEdge(for: .top) == .top,
+          WindowPreviewPlacement.arrowEdge(for: .bottom) == .bottom,
+          WindowPreviewPlacement.arrowEdge(for: .left) == .leading,
+          WindowPreviewPlacement.arrowEdge(for: .right) == .trailing else {
+        fputs("SELF-TEST FAILED: window preview placement mismatch\n", stderr)
+        return 1
+    }
+
     let legacySuiteName = "WinTaskbar.SelfTest.LegacyGeometry.\(UUID().uuidString)"
     guard let legacyDefaults = UserDefaults(suiteName: legacySuiteName) else {
         fputs("SELF-TEST FAILED: cannot create legacy geometry defaults\n", stderr)

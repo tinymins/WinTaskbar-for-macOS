@@ -283,6 +283,17 @@ struct RunningIndicatorLayout: Equatable {
     }
 }
 
+struct WindowPreviewPlacement {
+    static func arrowEdge(for position: TaskbarPosition) -> Edge {
+        switch position {
+        case .top: .top
+        case .bottom: .bottom
+        case .left: .leading
+        case .right: .trailing
+        }
+    }
+}
+
 private struct TaskbarAppButton: View {
     let item: TaskbarItem
     @ObservedObject var preferences: PreferencesStore
@@ -315,7 +326,10 @@ private struct TaskbarAppButton: View {
         .accessibilityAddTraits(.isButton)
         .help(item.name)
         .onHover { hovering in showPreview = hovering && preferences.windowPreviewsEnabled && item.processIdentifier != nil }
-        .popover(isPresented: $showPreview, arrowEdge: preferences.position == .top ? .top : .bottom) {
+        .popover(
+            isPresented: $showPreview,
+            arrowEdge: WindowPreviewPlacement.arrowEdge(for: preferences.position)
+        ) {
             if let pid = item.processIdentifier {
                 WindowPreviewPopover(windows: windowsService.windows(forPID: pid), service: windowsService) {
                     windowActivator.raise(window: $0); showPreview = false
