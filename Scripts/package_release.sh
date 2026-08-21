@@ -6,10 +6,11 @@ VERSION=${1:-}
 ARCHITECTURE=${2:-}
 BUILD_NUMBER=${3:-1}
 
-if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "Version must use MAJOR.MINOR.PATCH format." >&2
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$ ]]; then
+  echo "Version must use MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-PRERELEASE format." >&2
   exit 1
 fi
+MARKETING_VERSION=${VERSION%%-*}
 
 case "$ARCHITECTURE" in
   arm64|x86_64|universal) ;;
@@ -48,9 +49,9 @@ build_architecture() {
 rm -rf "$APP_DIR"
 mkdir -p "$CONTENTS_DIR/MacOS" "$CONTENTS_DIR/Resources"
 cp "$ROOT_DIR/Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$CONTENTS_DIR/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MARKETING_VERSION" "$CONTENTS_DIR/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$CONTENTS_DIR/Info.plist"
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$CONTENTS_DIR/Info.plist")" == "$VERSION" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$CONTENTS_DIR/Info.plist")" == "$MARKETING_VERSION" ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$CONTENTS_DIR/Info.plist")" == "$BUILD_NUMBER" ]]
 
 for localization in "$ROOT_DIR"/Resources/*.lproj; do
