@@ -43,16 +43,14 @@ struct SettingsView: View {
             )
             Slider(
                 value: $preferences.iconScale,
-                in: 24...52,
-                step: 1,
+                in: 0.6...1.2,
                 label: { Text("Icon size") },
                 minimumValueLabel: { Image(systemName: "smallcircle.filled.circle") },
                 maximumValueLabel: { Image(systemName: "largecircle.fill.circle") }
             )
             Slider(
                 value: $preferences.iconPadding,
-                in: 0...14,
-                step: 1,
+                in: 0...0.2,
                 label: { Text("Icon padding") },
                 minimumValueLabel: { Image(systemName: "square.fill") },
                 maximumValueLabel: { Image(systemName: "square.dashed") }

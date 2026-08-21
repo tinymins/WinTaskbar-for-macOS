@@ -166,7 +166,10 @@ func runSelfTest() async -> Int32 {
 
     let preferences = PreferencesStore(defaults: defaults)
     guard preferences.position == .bottom,
-          preferences.barHeight == 52,
+          preferences.barHeight == 48,
+          preferences.iconScale == 1,
+          preferences.iconPadding == 0.06,
+          preferences.highlightStyle == .mac,
           preferences.transparencyEnabled,
           preferences.panelOpacity == 1,
           preferences.panelBlurRadius == 20,
@@ -192,13 +195,13 @@ func runSelfTest() async -> Int32 {
 
     guard RunningIndicatorLayout.underline(
         position: .bottom,
-        iconScale: 40,
+        cellSize: 40,
         isActive: true,
         highlightStyle: .windows
     ) == RunningIndicatorLayout(width: 24, height: 2, opacity: 1, edgePadding: 3),
     RunningIndicatorLayout.underline(
         position: .left,
-        iconScale: 40,
+        cellSize: 40,
         isActive: false,
         highlightStyle: .mac
     ) == RunningIndicatorLayout(width: 2, height: 14, opacity: 0.7, edgePadding: -3),
@@ -207,6 +210,34 @@ func runSelfTest() async -> Int32 {
     RunningIndicatorLayout.dot(highlightStyle: .mac)
         == RunningIndicatorLayout(width: 4, height: 4, opacity: 0.7, edgePadding: -2) else {
         fputs("SELF-TEST FAILED: running indicator geometry mismatch\n", stderr)
+        return 1
+    }
+
+    guard TaskbarItemGeometry.calculate(
+        barHeight: 48,
+        iconScale: 1,
+        iconPadding: 0.06
+    ) == TaskbarItemGeometry(cellSize: 40, iconSize: 35.2) else {
+        fputs("SELF-TEST FAILED: taskbar item geometry mismatch\n", stderr)
+        return 1
+    }
+
+    let legacySuiteName = "WinTaskbar.SelfTest.LegacyGeometry.\(UUID().uuidString)"
+    guard let legacyDefaults = UserDefaults(suiteName: legacySuiteName) else {
+        fputs("SELF-TEST FAILED: cannot create legacy geometry defaults\n", stderr)
+        return 1
+    }
+    defer { legacyDefaults.removePersistentDomain(forName: legacySuiteName) }
+    legacyDefaults.set(52.0, forKey: "wintaskbar.barHeight")
+    legacyDefaults.set(36.0, forKey: "wintaskbar.iconScale")
+    legacyDefaults.set(5.0, forKey: "wintaskbar.iconPadding")
+    let migratedPreferences = PreferencesStore(defaults: legacyDefaults)
+    guard migratedPreferences.barHeight == 48,
+          migratedPreferences.iconScale == 1,
+          migratedPreferences.iconPadding == 0.06,
+          legacyDefaults.double(forKey: "wintaskbar.iconScale") == 1,
+          legacyDefaults.double(forKey: "wintaskbar.iconPadding") == 0.06 else {
+        fputs("SELF-TEST FAILED: recovered geometry migration mismatch\n", stderr)
         return 1
     }
 

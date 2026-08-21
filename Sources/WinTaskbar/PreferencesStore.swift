@@ -54,11 +54,19 @@ final class PreferencesStore: ObservableObject {
         self.defaults = defaults
         position = TaskbarPosition(rawValue: defaults.string(forKey: "wintaskbar.position") ?? "") ?? .bottom
         displayMode = DisplayMode(rawValue: defaults.string(forKey: "wintaskbar.displayMode") ?? "") ?? .all
-        barHeight = defaults.object(forKey: "wintaskbar.barHeight") as? Double ?? 52
-        iconScale = defaults.object(forKey: "wintaskbar.iconScale") as? Double ?? 36
-        iconPadding = defaults.object(forKey: "wintaskbar.iconPadding") as? Double ?? 5
+        let storedBarHeight = defaults.object(forKey: "wintaskbar.barHeight") as? Double
+        let storedIconScale = defaults.object(forKey: "wintaskbar.iconScale") as? Double
+        let storedIconPadding = defaults.object(forKey: "wintaskbar.iconPadding") as? Double
+        let usesPointBasedRecoveryGeometry = storedIconScale.map { $0 > 1.2 } ?? false
+        barHeight = usesPointBasedRecoveryGeometry && storedBarHeight == 52 ? 48 : storedBarHeight ?? 48
+        iconScale = usesPointBasedRecoveryGeometry
+            ? min(max((storedIconScale ?? 36) / 36, 0.6), 1.2)
+            : storedIconScale ?? 1
+        iconPadding = usesPointBasedRecoveryGeometry
+            ? min(max((storedIconPadding ?? 5) * 0.012, 0), 0.2)
+            : storedIconPadding ?? 0.06
         theme = AppTheme(rawValue: defaults.string(forKey: "wintaskbar.theme") ?? "") ?? .automatic
-        highlightStyle = HighlightStyle(rawValue: defaults.string(forKey: "wintaskbar.highlightStyle") ?? "") ?? .windows
+        highlightStyle = HighlightStyle(rawValue: defaults.string(forKey: "wintaskbar.highlightStyle") ?? "") ?? .mac
         showRunningIndicators = defaults.object(forKey: "wintaskbar.showRunningIndicators") as? Bool ?? true
         showAppLabels = defaults.object(forKey: "wintaskbar.showAppLabels") as? Bool ?? false
         showFinder = defaults.object(forKey: "wintaskbar.showFinderInRunningApps") as? Bool ?? true
@@ -95,6 +103,12 @@ final class PreferencesStore: ObservableObject {
         appFolders = Self.load([AppFolder].self, key: "wintaskbar.appFolders", defaults: defaults) ?? []
         pinnedShortcuts = Self.load([String: [PinnedShortcut]].self, key: "wintaskbar.pinnedShortcuts", defaults: defaults) ?? [:]
         hasCompletedOnboarding = defaults.bool(forKey: "wintaskbar.hasCompletedOnboarding")
+
+        if usesPointBasedRecoveryGeometry {
+            defaults.set(barHeight, forKey: "wintaskbar.barHeight")
+            defaults.set(iconScale, forKey: "wintaskbar.iconScale")
+            defaults.set(iconPadding, forKey: "wintaskbar.iconPadding")
+        }
     }
 
     var colorScheme: String? {
@@ -108,11 +122,11 @@ final class PreferencesStore: ObservableObject {
     func reset() {
         position = .bottom
         displayMode = .all
-        barHeight = 52
-        iconScale = 36
-        iconPadding = 5
+        barHeight = 48
+        iconScale = 1
+        iconPadding = 0.06
         theme = .automatic
-        highlightStyle = .windows
+        highlightStyle = .mac
         showRunningIndicators = true
         showAppLabels = false
         showFinder = true

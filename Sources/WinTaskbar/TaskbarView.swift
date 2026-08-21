@@ -27,7 +27,7 @@ struct TaskbarView: View {
 
             Group {
                 if horizontal {
-                    HStack(spacing: preferences.iconPadding) {
+                    HStack(spacing: TaskbarItemGeometry.itemSpacing) {
                         if showsStartButtonAtLeadingEdge { startButton }
                         itemButtons(visible, horizontal: true)
                         if !overflow.isEmpty { overflowButton(overflow) }
@@ -38,9 +38,9 @@ struct TaskbarView: View {
                         if showsStartButtonAtOppositeEnd { startButton }
                     }
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
+                    .frame(height: max(0, geometry.size.height - 0.5))
                 } else {
-                    VStack(spacing: preferences.iconPadding) {
+                    VStack(spacing: TaskbarItemGeometry.itemSpacing) {
                         if showsStartButtonAtLeadingEdge { startButton }
                         itemButtons(visible, horizontal: false)
                         if !overflow.isEmpty { overflowButton(overflow) }
@@ -50,11 +50,11 @@ struct TaskbarView: View {
                         if preferences.showDesktopEnabled { showDesktopStrip(horizontal: false) }
                         if showsStartButtonAtOppositeEnd { startButton }
                     }
-                    .padding(.horizontal, 3)
                     .padding(.vertical, 8)
+                    .frame(width: max(0, geometry.size.width - 0.5))
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: contentAlignment)
             .background(panelBackground)
             .preferredColorScheme(preferredColorScheme)
             .dropDestination(for: URL.self) { urls, _ in
@@ -76,13 +76,13 @@ struct TaskbarView: View {
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "square.grid.2x2")
-                    .font(.system(size: preferences.iconScale * 0.52, weight: .medium))
+                    .font(.system(size: itemGeometry.cellSize * 0.52, weight: .medium))
                 if !preferences.startButtonLabel.isEmpty {
                     Text(preferences.startButtonLabel)
                         .font(.system(size: 12, weight: .medium))
                 }
             }
-            .frame(minWidth: preferences.iconScale, minHeight: preferences.iconScale)
+            .frame(minWidth: itemGeometry.cellSize, minHeight: itemGeometry.cellSize)
             .contentShape(Rectangle())
         }
         .buttonStyle(TaskbarButtonStyle())
@@ -93,13 +93,15 @@ struct TaskbarView: View {
     @ViewBuilder
     private func itemButtons(_ items: [TaskbarItem], horizontal: Bool) -> some View {
         if horizontal {
-            HStack(spacing: preferences.iconPadding) {
+            HStack(spacing: TaskbarItemGeometry.itemSpacing) {
                 ForEach(items) { itemButton($0) }
             }
+            .frame(maxHeight: .infinity)
         } else {
-            VStack(spacing: preferences.iconPadding) {
+            VStack(spacing: TaskbarItemGeometry.itemSpacing) {
                 ForEach(items) { itemButton($0) }
             }
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -133,10 +135,10 @@ struct TaskbarView: View {
             }
         } label: {
             Image(systemName: preferences.position.isHorizontal ? "chevron.up" : "chevron.right")
-                .frame(width: preferences.iconScale, height: preferences.iconScale)
+                .frame(width: itemGeometry.cellSize, height: itemGeometry.cellSize)
         }
         .menuStyle(.borderlessButton)
-        .frame(width: preferences.iconScale + 6)
+        .frame(width: itemGeometry.cellSize + 6)
         .help("More apps")
     }
 
@@ -169,7 +171,7 @@ struct TaskbarView: View {
     }
 
     private func visibleCapacity(length: CGFloat) -> Int {
-        let itemLength = CGFloat(preferences.iconScale + preferences.iconPadding + 8)
+        let itemLength = itemGeometry.cellSize + TaskbarItemGeometry.itemSpacing
         let reserved: CGFloat = preferences.position.isHorizontal ? 250 : 240
         return max(1, Int((length - reserved) / max(itemLength, 1)))
     }
@@ -191,7 +193,7 @@ struct TaskbarView: View {
     private func showDesktopStrip(horizontal: Bool) -> some View {
         Button(action: actions.showDesktop) {
             Rectangle().fill(Color.primary.opacity(0.18))
-                .frame(width: horizontal ? 4 : CGFloat(preferences.iconScale), height: horizontal ? CGFloat(preferences.iconScale) : 4)
+                .frame(width: horizontal ? 4 : itemGeometry.cellSize, height: horizontal ? itemGeometry.cellSize : 4)
         }
         .buttonStyle(.plain).help("Show Desktop")
     }
@@ -211,6 +213,43 @@ struct TaskbarView: View {
         switch preferences.theme { case .automatic: nil; case .light: .light; case .dark: .dark }
     }
 
+    private var contentAlignment: Alignment {
+        switch preferences.position {
+        case .bottom: .bottom
+        case .top: .top
+        case .left: .leading
+        case .right: .trailing
+        }
+    }
+
+    private var itemGeometry: TaskbarItemGeometry {
+        .calculate(
+            barHeight: preferences.barHeight,
+            iconScale: preferences.iconScale,
+            iconPadding: preferences.iconPadding
+        )
+    }
+
+}
+
+struct TaskbarItemGeometry: Equatable {
+    static let itemSpacing: CGFloat = 4
+
+    let cellSize: CGFloat
+    let iconSize: CGFloat
+
+    static func calculate(
+        barHeight: CGFloat,
+        iconScale: CGFloat,
+        iconPadding: CGFloat
+    ) -> TaskbarItemGeometry {
+        let cellSize = min(barHeight - 2, 40 * iconScale)
+        let iconInset = cellSize * iconPadding
+        return TaskbarItemGeometry(
+            cellSize: cellSize,
+            iconSize: max(0, cellSize - (2 * iconInset))
+        )
+    }
 }
 
 struct RunningIndicatorLayout: Equatable {
@@ -221,11 +260,11 @@ struct RunningIndicatorLayout: Equatable {
 
     static func underline(
         position: TaskbarPosition,
-        iconScale: CGFloat,
+        cellSize: CGFloat,
         isActive: Bool,
         highlightStyle: HighlightStyle
     ) -> RunningIndicatorLayout {
-        let length = iconScale * (isActive ? 0.60 : 0.35)
+        let length = cellSize * (isActive ? 0.60 : 0.35)
         return RunningIndicatorLayout(
             width: position.isHorizontal ? length : 2,
             height: position.isHorizontal ? 2 : length,
@@ -255,22 +294,7 @@ private struct TaskbarAppButton: View {
     @State private var showShortcutEditor = false
 
     var body: some View {
-        Button { windowActivator.activateOrMinimize(item) } label: {
-            VStack(spacing: 1) {
-                Image(nsImage: item.icon).resizable().interpolation(.high)
-                    .frame(width: preferences.iconScale, height: preferences.iconScale)
-                    .overlay(alignment: .topTrailing) {
-                        if let badge = item.badge {
-                            Text(badge).font(.system(size: 8, weight: .bold)).padding(3).background(Color.red).clipShape(Capsule())
-                        }
-                    }
-                if preferences.showAppLabels {
-                    Text(item.name).font(.system(size: 9)).lineLimit(1).frame(maxWidth: preferences.iconScale + 18)
-                }
-            }
-            .padding(.horizontal, 2)
-        }
-        .buttonStyle(TaskbarButtonStyle())
+        appIconCell
         .background {
             if preferences.activeIndicator == .background && item.isActive {
                 RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.2))
@@ -286,6 +310,9 @@ private struct TaskbarAppButton: View {
                 RoundedRectangle(cornerRadius: 6).stroke(Color.accentColor, lineWidth: 1)
             }
         }
+        .contentShape(Rectangle())
+        .onTapGesture { windowActivator.activateOrMinimize(item) }
+        .accessibilityAddTraits(.isButton)
         .help(item.name)
         .onHover { hovering in showPreview = hovering && preferences.windowPreviewsEnabled && item.processIdentifier != nil }
         .popover(isPresented: $showPreview, arrowEdge: preferences.position == .top ? .top : .bottom) {
@@ -323,12 +350,50 @@ private struct TaskbarAppButton: View {
     }
 
     @ViewBuilder
+    private var appIconCell: some View {
+        let geometry = TaskbarItemGeometry.calculate(
+            barHeight: preferences.barHeight,
+            iconScale: preferences.iconScale,
+            iconPadding: preferences.iconPadding
+        )
+        let content = VStack(spacing: 1) {
+            Image(nsImage: item.icon).resizable().interpolation(.high)
+                .frame(width: geometry.iconSize, height: geometry.iconSize)
+                .overlay(alignment: .topTrailing) {
+                    if let badge = item.badge {
+                        Text(badge).font(.system(size: 8, weight: .bold)).padding(3).background(Color.red).clipShape(Capsule())
+                    }
+                }
+            if preferences.showAppLabels {
+                Text(item.name).font(.system(size: 9)).lineLimit(1).frame(maxWidth: geometry.cellSize + 18)
+            }
+        }
+        .contentShape(Rectangle())
+
+        if preferences.highlightStyle == .windows && preferences.position.isHorizontal {
+            content
+                .frame(width: geometry.cellSize)
+                .frame(maxHeight: .infinity)
+        } else if preferences.highlightStyle == .windows {
+            content
+                .frame(height: geometry.cellSize)
+                .frame(maxWidth: .infinity)
+        } else {
+            content.frame(width: geometry.cellSize, height: geometry.cellSize)
+        }
+    }
+
+    @ViewBuilder
     private var runningIndicator: some View {
         if item.isRunning {
             if preferences.activeIndicator == .underline {
                 let layout = RunningIndicatorLayout.underline(
                     position: preferences.position,
-                    iconScale: preferences.iconScale,
+                    cellSize: TaskbarItemGeometry.calculate(
+                        barHeight: preferences.barHeight,
+                        iconScale: preferences.iconScale,
+                        iconPadding: preferences.iconPadding
+                    ).cellSize,
                     isActive: item.isActive,
                     highlightStyle: preferences.highlightStyle
                 )
