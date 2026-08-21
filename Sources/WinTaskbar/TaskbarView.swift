@@ -213,6 +213,37 @@ struct TaskbarView: View {
 
 }
 
+struct RunningIndicatorLayout: Equatable {
+    let width: CGFloat
+    let height: CGFloat
+    let opacity: Double
+    let edgePadding: CGFloat
+
+    static func underline(
+        position: TaskbarPosition,
+        iconScale: CGFloat,
+        isActive: Bool,
+        highlightStyle: HighlightStyle
+    ) -> RunningIndicatorLayout {
+        let length = iconScale * (isActive ? 0.60 : 0.35)
+        return RunningIndicatorLayout(
+            width: position.isHorizontal ? length : 2,
+            height: position.isHorizontal ? 2 : length,
+            opacity: isActive ? 1 : 0.7,
+            edgePadding: highlightStyle == .windows ? 3 : -3
+        )
+    }
+
+    static func dot(highlightStyle: HighlightStyle) -> RunningIndicatorLayout {
+        RunningIndicatorLayout(
+            width: 4,
+            height: 4,
+            opacity: 0.7,
+            edgePadding: highlightStyle == .windows ? 3 : -2
+        )
+    }
+}
+
 private struct TaskbarAppButton: View {
     let item: TaskbarItem
     @ObservedObject var preferences: PreferencesStore
@@ -236,24 +267,26 @@ private struct TaskbarAppButton: View {
                 if preferences.showAppLabels {
                     Text(item.name).font(.system(size: 9)).lineLimit(1).frame(maxWidth: preferences.iconScale + 18)
                 }
-                if preferences.showRunningIndicators && item.isRunning && preferences.activeIndicator == .underline {
-                    Capsule().fill(item.isActive ? Color.accentColor : Color.secondary)
-                        .frame(width: preferences.highlightStyle == .windows ? preferences.iconScale * 0.75 : 5, height: 2)
-                }
             }
             .padding(.horizontal, 2)
-            .background {
-                if preferences.activeIndicator == .background && item.isRunning {
-                    RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(item.isActive ? 0.2 : 0.09))
-                }
-            }
-            .overlay {
-                if preferences.activeIndicator == .border && item.isRunning {
-                    RoundedRectangle(cornerRadius: 6).stroke(item.isActive ? Color.accentColor : .secondary, lineWidth: 1)
-                }
+        }
+        .buttonStyle(TaskbarButtonStyle())
+        .background {
+            if preferences.activeIndicator == .background && item.isActive {
+                RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.2))
             }
         }
-        .buttonStyle(TaskbarButtonStyle()).help(item.name)
+        .overlay(alignment: indicatorAlignment) {
+            if preferences.showRunningIndicators && !preferences.showAppLabels {
+                runningIndicator
+            }
+        }
+        .overlay {
+            if preferences.activeIndicator == .border && item.isActive {
+                RoundedRectangle(cornerRadius: 6).stroke(Color.accentColor, lineWidth: 1)
+            }
+        }
+        .help(item.name)
         .onHover { hovering in showPreview = hovering && preferences.windowPreviewsEnabled && item.processIdentifier != nil }
         .popover(isPresented: $showPreview, arrowEdge: preferences.position == .top ? .top : .bottom) {
             if let pid = item.processIdentifier {
@@ -286,6 +319,50 @@ private struct TaskbarAppButton: View {
                 preferences: preferences,
                 isPresented: $showShortcutEditor
             )
+        }
+    }
+
+    @ViewBuilder
+    private var runningIndicator: some View {
+        if item.isRunning {
+            if preferences.activeIndicator == .underline {
+                let layout = RunningIndicatorLayout.underline(
+                    position: preferences.position,
+                    iconScale: preferences.iconScale,
+                    isActive: item.isActive,
+                    highlightStyle: preferences.highlightStyle
+                )
+                RoundedRectangle(cornerRadius: 1, style: .continuous)
+                    .fill(item.isActive ? Color.accentColor : Color.secondary)
+                    .frame(width: layout.width, height: layout.height)
+                    .opacity(layout.opacity)
+                    .padding(indicatorEdge, layout.edgePadding)
+            } else if !item.isActive {
+                let layout = RunningIndicatorLayout.dot(highlightStyle: preferences.highlightStyle)
+                Circle()
+                    .fill(Color.secondary)
+                    .frame(width: layout.width, height: layout.height)
+                    .opacity(layout.opacity)
+                    .padding(indicatorEdge, layout.edgePadding)
+            }
+        }
+    }
+
+    private var indicatorAlignment: Alignment {
+        switch preferences.position {
+        case .bottom: .bottom
+        case .top: .top
+        case .left: .leading
+        case .right: .trailing
+        }
+    }
+
+    private var indicatorEdge: Edge.Set {
+        switch preferences.position {
+        case .bottom: .bottom
+        case .top: .top
+        case .left: .leading
+        case .right: .trailing
         }
     }
 }

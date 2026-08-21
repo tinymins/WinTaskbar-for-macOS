@@ -190,6 +190,26 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    guard RunningIndicatorLayout.underline(
+        position: .bottom,
+        iconScale: 40,
+        isActive: true,
+        highlightStyle: .windows
+    ) == RunningIndicatorLayout(width: 24, height: 2, opacity: 1, edgePadding: 3),
+    RunningIndicatorLayout.underline(
+        position: .left,
+        iconScale: 40,
+        isActive: false,
+        highlightStyle: .mac
+    ) == RunningIndicatorLayout(width: 2, height: 14, opacity: 0.7, edgePadding: -3),
+    RunningIndicatorLayout.dot(highlightStyle: .windows)
+        == RunningIndicatorLayout(width: 4, height: 4, opacity: 0.7, edgePadding: 3),
+    RunningIndicatorLayout.dot(highlightStyle: .mac)
+        == RunningIndicatorLayout(width: 4, height: 4, opacity: 0.7, edgePadding: -2) else {
+        fputs("SELF-TEST FAILED: running indicator geometry mismatch\n", stderr)
+        return 1
+    }
+
     preferences.position = .left
     preferences.barHeight = 64
     preferences.trayWifiEnabled = false
@@ -216,7 +236,7 @@ func runSelfTest() async -> Int32 {
         fputs("SELF-TEST FAILED: app URL drag provider did not round-trip\n", stderr)
         return 1
     }
-    print("SELF-TEST PASSED: defaults, preference persistence, and app URL drag provider")
+    print("SELF-TEST PASSED: defaults, indicator geometry, preference persistence, and app URL drag provider")
     return 0
 }
 
