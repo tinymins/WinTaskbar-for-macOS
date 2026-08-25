@@ -89,6 +89,41 @@ struct TaskbarView: View {
         .buttonStyle(TaskbarButtonStyle())
         .help("Open menu")
         .accessibilityLabel("Open menu")
+        .contextMenu { startButtonContextMenu }
+    }
+
+    @ViewBuilder
+    private var startButtonContextMenu: some View {
+        quickAccessButton(.applications)
+        quickAccessButton(.battery)
+        quickAccessButton(.console)
+        quickAccessButton(.aboutThisMac)
+        quickAccessButton(.systemInformation)
+        quickAccessButton(.networkSettings)
+        quickAccessButton(.diskUtility)
+        quickAccessButton(.loginItems)
+        quickAccessButton(.terminal)
+        Divider()
+        quickAccessButton(.activityMonitor)
+        Button("Force Quit Applications…") { actions.showForceQuitApplications() }
+        quickAccessButton(.systemSettings)
+        Button("WinTaskbar Settings…") { actions.openSettings() }
+        quickAccessButton(.finder)
+        quickAccessButton(.spotlight)
+        Button("Show Desktop") { actions.showDesktop() }
+        Divider()
+        Menu("Power") {
+            Button(PowerAction.lockScreen.rawValue) { actions.performPower(.lockScreen) }
+            Button(PowerAction.sleep.rawValue) { actions.performPower(.sleep) }
+            Button(PowerAction.logOut.rawValue) { actions.performPower(.logOut) }
+            Divider()
+            Button(PowerAction.restart.rawValue) { actions.performPower(.restart) }
+            Button(PowerAction.shutDown.rawValue) { actions.performPower(.shutDown) }
+        }
+    }
+
+    private func quickAccessButton(_ shortcut: SystemQuickAccess) -> some View {
+        Button(shortcut.title) { actions.open(shortcut) }
     }
 
     @ViewBuilder
