@@ -216,7 +216,8 @@ struct StartMenuView: View {
                 .padding(.vertical, 8)
             powerMenu
         }
-        .padding(.vertical, 10)
+        .padding(.top, 10)
+        .padding(.bottom, 5)
         .frame(width: 52)
         .frame(maxHeight: .infinity)
     }
@@ -229,13 +230,13 @@ struct StartMenuView: View {
             powerMenuButton(.shutDown, systemName: "power")
             powerMenuButton(.restart, systemName: "arrow.counterclockwise")
         } label: {
-            HoveringIconLabel(systemName: "power")
+            HoveringIconLabel(systemName: "power", width: 40, height: 30)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .help("Power")
         .accessibilityLabel("Power")
-        .padding(.vertical, -5)
+        .padding(.bottom, 8)
     }
 
     private func powerMenuButton(_ action: PowerAction, systemName: String) -> some View {
@@ -484,13 +485,15 @@ private struct HoveringIconButton: View {
 
 private struct HoveringIconLabel: View {
     let systemName: String
+    var width: CGFloat = 50
+    var height: CGFloat = 50
     @State private var isHovering = false
 
     var body: some View {
         Image(systemName: systemName)
             .imageScale(.medium)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .frame(width: 50, height: 50)
+            .frame(width: width, height: height)
             .background {
                 if isHovering {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
