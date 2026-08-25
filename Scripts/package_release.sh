@@ -31,6 +31,12 @@ APP_DIR="$OUTPUT_ROOT/$ARCHITECTURE/WinTaskbar.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 EXECUTABLE_PATH="$CONTENTS_DIR/MacOS/WinTaskbar"
 ARCHIVE_NAME="WinTaskbar-$VERSION-macos-$ARCHITECTURE.zip"
+SIGNING_IDENTITY=${SIGNING_IDENTITY:--}
+
+if [[ "${GITHUB_ACTIONS:-false}" == "true" && "$SIGNING_IDENTITY" == "-" ]]; then
+  echo "GitHub Actions releases require a stable SIGNING_IDENTITY." >&2
+  exit 1
+fi
 
 build_architecture() {
   local architecture=$1
@@ -70,7 +76,11 @@ else
   cp "$bin_dir/WinTaskbar" "$EXECUTABLE_PATH"
 fi
 
-codesign --force --deep --sign - "$APP_DIR"
+codesign_args=(--force --deep --sign "$SIGNING_IDENTITY")
+if [[ "$SIGNING_IDENTITY" != "-" ]]; then
+  codesign_args+=(--options runtime --timestamp)
+fi
+codesign "${codesign_args[@]}" "$APP_DIR"
 codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 
 actual_architectures=$(lipo -archs "$EXECUTABLE_PATH")

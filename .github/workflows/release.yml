@@ -49,6 +49,49 @@ jobs:
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
+      - name: Install Developer ID certificate
+        shell: bash
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          if [[ -z "$BUILD_CERTIFICATE_BASE64" || -z "$P12_PASSWORD" ]]; then
+            echo "MACOS_CERTIFICATE_BASE64 and MACOS_CERTIFICATE_PASSWORD secrets are required." >&2
+            exit 1
+          fi
+
+          certificate_path="$RUNNER_TEMP/developer-id-application.p12"
+          keychain_path="$RUNNER_TEMP/app-signing.keychain-db"
+          keychain_password=$(uuidgen)
+
+          printf '%s' "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" \
+            -P "$P12_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$keychain_path"
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -k "$keychain_password" \
+            "$keychain_path"
+          security list-keychain -d user -s "$keychain_path"
+
+          identities=$(security find-identity -v -p codesigning "$keychain_path")
+          identity_count=$(grep -c '"Developer ID Application:' <<< "$identities" || true)
+          if [[ "$identity_count" -ne 1 ]]; then
+            echo "Expected exactly one Developer ID Application identity, found $identity_count." >&2
+            exit 1
+          fi
+          signing_identity=$(awk '/"Developer ID Application:/ { print $2; exit }' <<< "$identities")
+
+          echo "SIGNING_IDENTITY=$signing_identity" >> "$GITHUB_ENV"
+          echo "SIGNING_KEYCHAIN_PATH=$keychain_path" >> "$GITHUB_ENV"
+          rm -f "$certificate_path"
+
       - name: Build and package
         shell: bash
         run: bash Scripts/package_release.sh "$VERSION" "${{ matrix.architecture }}" "$GITHUB_RUN_NUMBER"
@@ -59,6 +102,14 @@ jobs:
           lipo -archs "dist/releases/${{ matrix.architecture }}/WinTaskbar.app/Contents/MacOS/WinTaskbar"
           plutil -p "dist/releases/${{ matrix.architecture }}/WinTaskbar.app/Contents/Info.plist"
           codesign --verify --deep --strict --verbose=2 "dist/releases/${{ matrix.architecture }}/WinTaskbar.app"
+          signature=$(codesign -dvvv "dist/releases/${{ matrix.architecture }}/WinTaskbar.app" 2>&1)
+          requirement=$(codesign -d -r- "dist/releases/${{ matrix.architecture }}/WinTaskbar.app" 2>&1)
+          grep -q '^Authority=Developer ID Application:' <<< "$signature"
+          grep -q '^TeamIdentifier=' <<< "$signature"
+          if grep -q 'designated => cdhash' <<< "$requirement"; then
+            echo "Release is still using an ad-hoc designated requirement." >&2
+            exit 1
+          fi
           "dist/releases/${{ matrix.architecture }}/WinTaskbar.app/Contents/MacOS/WinTaskbar" --self-test
 
       - name: Upload package
@@ -69,6 +120,14 @@ jobs:
             dist/releases/WinTaskbar-*-macos-${{ matrix.architecture }}.zip
             dist/releases/WinTaskbar-*-macos-${{ matrix.architecture }}.zip.sha256
           if-no-files-found: error
+
+      - name: Remove signing keychain
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "${SIGNING_KEYCHAIN_PATH:-}" ]]; then
+            security delete-keychain "$SIGNING_KEYCHAIN_PATH" || true
+          fi
 
   publish:
     name: Publish GitHub Release
