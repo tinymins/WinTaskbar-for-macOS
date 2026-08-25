@@ -38,6 +38,170 @@ final class StartMenuPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+final class WindowPreviewPanel: NSPanel {
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+}
+
+struct WindowPreviewPanelGeometry {
+    static let gap: CGFloat = 6
+    static let screenInset: CGFloat = 8
+
+    static func frame(
+        anchorFrame: CGRect,
+        contentSize: CGSize,
+        position: TaskbarPosition,
+        screenFrame: CGRect
+    ) -> CGRect {
+        let origin: CGPoint
+        switch position {
+        case .bottom:
+            origin = CGPoint(
+                x: anchorFrame.midX - contentSize.width / 2,
+                y: anchorFrame.maxY + gap
+            )
+        case .top:
+            origin = CGPoint(
+                x: anchorFrame.midX - contentSize.width / 2,
+                y: anchorFrame.minY - contentSize.height - gap
+            )
+        case .left:
+            origin = CGPoint(
+                x: anchorFrame.maxX + gap,
+                y: anchorFrame.midY - contentSize.height / 2
+            )
+        case .right:
+            origin = CGPoint(
+                x: anchorFrame.minX - contentSize.width - gap,
+                y: anchorFrame.midY - contentSize.height / 2
+            )
+        }
+
+        let minX = screenFrame.minX + screenInset
+        let maxX = max(minX, screenFrame.maxX - screenInset - contentSize.width)
+        let minY = screenFrame.minY + screenInset
+        let maxY = max(minY, screenFrame.maxY - screenInset - contentSize.height)
+        return CGRect(
+            origin: CGPoint(
+                x: min(max(origin.x, minX), maxX),
+                y: min(max(origin.y, minY), maxY)
+            ),
+            size: contentSize
+        )
+    }
+}
+
+struct WindowPreviewPanelPresenter<Content: View>: NSViewRepresentable {
+    @Binding private var isPresented: Bool
+    private let position: TaskbarPosition
+    private let content: () -> Content
+
+    init(
+        isPresented: Binding<Bool>,
+        position: TaskbarPosition,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        _isPresented = isPresented
+        self.position = position
+        self.content = content
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        NSView()
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        let rootView = AnyView(content())
+        DispatchQueue.main.async {
+            if isPresented {
+                context.coordinator.show(rootView, relativeTo: nsView, position: position)
+            } else {
+                context.coordinator.hide()
+            }
+        }
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.hide()
+    }
+
+    @MainActor
+    final class Coordinator {
+        private var panel: WindowPreviewPanel?
+        private let backdrop = NSVisualEffectView()
+        private let hostingView = NSHostingView(rootView: AnyView(EmptyView()))
+
+        init() {
+            backdrop.material = .popover
+            backdrop.blendingMode = .behindWindow
+            backdrop.state = .active
+            backdrop.wantsLayer = true
+            backdrop.layer?.cornerRadius = 8
+            backdrop.layer?.masksToBounds = true
+            backdrop.layer?.borderWidth = 1
+            backdrop.layer?.borderColor = NSColor.white.withAlphaComponent(0.18).cgColor
+
+            hostingView.translatesAutoresizingMaskIntoConstraints = false
+            backdrop.addSubview(hostingView)
+            NSLayoutConstraint.activate([
+                hostingView.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor),
+                hostingView.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor),
+                hostingView.topAnchor.constraint(equalTo: backdrop.topAnchor),
+                hostingView.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor),
+            ])
+        }
+
+        func show(_ rootView: AnyView, relativeTo anchorView: NSView, position: TaskbarPosition) {
+            guard let anchorWindow = anchorView.window else { return }
+            let panel = panel ?? makePanel()
+            hostingView.rootView = rootView
+            hostingView.invalidateIntrinsicContentSize()
+            let contentSize = hostingView.fittingSize
+            guard contentSize.width > 0, contentSize.height > 0 else { return }
+
+            let windowRect = anchorView.convert(anchorView.bounds, to: nil)
+            let anchorFrame = anchorWindow.convertToScreen(windowRect)
+            let screenFrame = anchorWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? anchorFrame
+            let frame = WindowPreviewPanelGeometry.frame(
+                anchorFrame: anchorFrame,
+                contentSize: contentSize,
+                position: position,
+                screenFrame: screenFrame
+            )
+            panel.appearance = anchorWindow.appearance
+            panel.setFrame(frame, display: true)
+            panel.orderFrontRegardless()
+        }
+
+        func hide() {
+            panel?.orderOut(nil)
+        }
+
+        private func makePanel() -> WindowPreviewPanel {
+            let panel = WindowPreviewPanel(
+                contentRect: .zero,
+                styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false
+            )
+            panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
+            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = true
+            panel.hidesOnDeactivate = false
+            panel.isMovable = false
+            panel.contentView = backdrop
+            self.panel = panel
+            return panel
+        }
+    }
+}
+
 @MainActor
 final class TaskbarWindowController {
     private let preferences: PreferencesStore

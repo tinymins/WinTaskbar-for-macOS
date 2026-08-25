@@ -322,17 +322,6 @@ struct RunningIndicatorLayout: Equatable {
     }
 }
 
-struct WindowPreviewPlacement {
-    static func arrowEdge(for position: TaskbarPosition) -> Edge {
-        switch position {
-        case .top: .top
-        case .bottom: .bottom
-        case .left: .leading
-        case .right: .trailing
-        }
-    }
-}
-
 struct WindowPreviewLayout {
     enum Axis: Equatable {
         case horizontal
@@ -396,27 +385,26 @@ private struct TaskbarAppButton: View {
             windowPeekController.hideImmediately()
         }
         .onHover(perform: handlePreviewHover)
-        .popover(
-            isPresented: $showPreview,
-            arrowEdge: WindowPreviewPlacement.arrowEdge(for: preferences.position)
-        ) {
+        .background {
             if let pid = item.processIdentifier {
-                WindowPreviewPopover(
-                    windows: windowsService.windows(forPID: pid),
-                    position: preferences.position,
-                    service: windowsService,
-                    windowPeekController: windowPeekController,
-                    onSelect: {
-                        windowActivator.raise(window: $0)
-                        showPreview = false
-                    },
-                    onClose: {
-                        windowPeekController.hideImmediately()
-                        windowActivator.close(window: $0)
-                        showPreview = false
-                    }
-                )
-                .onHover(perform: handlePreviewPopoverHover)
+                WindowPreviewPanelPresenter(isPresented: $showPreview, position: preferences.position) {
+                    WindowPreviewPopover(
+                        windows: windowsService.windows(forPID: pid),
+                        position: preferences.position,
+                        service: windowsService,
+                        windowPeekController: windowPeekController,
+                        onSelect: {
+                            windowActivator.raise(window: $0)
+                            showPreview = false
+                        },
+                        onClose: {
+                            windowPeekController.hideImmediately()
+                            windowActivator.close(window: $0)
+                            showPreview = false
+                        }
+                    )
+                    .onHover(perform: handlePreviewPopoverHover)
+                }
             }
         }
         .contextMenu {
@@ -708,14 +696,12 @@ private struct WindowPreviewPopover: View {
                     previewButton(for: window)
                 }
             }
-            .padding(.vertical, 10)
         } else {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 0) {
                 ForEach(windows.prefix(6)) { window in
                     previewButton(for: window)
                 }
             }
-            .padding(.vertical, 10)
         }
     }
 
@@ -740,7 +726,7 @@ private struct WindowPreviewButton: View {
     @State private var isCloseHovering = false
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack {
             Button {
                 windowPeekController.hideImmediately()
                 action()
@@ -752,18 +738,18 @@ private struct WindowPreviewButton: View {
                             .lineLimit(1)
                             .help(window.title)
                         Spacer(minLength: 0)
-                        if isHovering {
-                            Color.clear.frame(width: 24, height: 24)
-                        }
+                        Color.clear.frame(width: 24, height: 24)
                     }
                     thumbnail
                 }
                 .frame(width: 150, alignment: .topLeading)
                 .padding(.horizontal, 10)
+                .padding(.vertical, 10)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-
+        }
+        .overlay(alignment: .topTrailing) {
             if isHovering {
                 Button(action: closeAction) {
                     Image(systemName: "xmark")
@@ -777,6 +763,7 @@ private struct WindowPreviewButton: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.trailing, 10)
+                .padding(.top, 10)
                 .onHover { isCloseHovering = $0 }
                 .help("Close")
             }

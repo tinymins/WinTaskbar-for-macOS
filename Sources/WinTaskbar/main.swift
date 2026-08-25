@@ -293,14 +293,42 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
-    guard WindowPreviewPlacement.arrowEdge(for: .top) == .top,
-          WindowPreviewPlacement.arrowEdge(for: .bottom) == .bottom,
-          WindowPreviewPlacement.arrowEdge(for: .left) == .leading,
-          WindowPreviewPlacement.arrowEdge(for: .right) == .trailing,
-          WindowPreviewLayout.axis(for: .top) == .horizontal,
+    let previewScreen = CGRect(x: 0, y: 0, width: 1200, height: 800)
+    let previewSize = CGSize(width: 340, height: 130)
+    guard WindowPreviewLayout.axis(for: .top) == .horizontal,
           WindowPreviewLayout.axis(for: .bottom) == .horizontal,
           WindowPreviewLayout.axis(for: .left) == .vertical,
-          WindowPreviewLayout.axis(for: .right) == .vertical else {
+          WindowPreviewLayout.axis(for: .right) == .vertical,
+          WindowPreviewPanelGeometry.frame(
+              anchorFrame: CGRect(x: 500, y: 0, width: 40, height: 48),
+              contentSize: previewSize,
+              position: .bottom,
+              screenFrame: previewScreen
+          ) == CGRect(x: 350, y: 54, width: 340, height: 130),
+          WindowPreviewPanelGeometry.frame(
+              anchorFrame: CGRect(x: 500, y: 752, width: 40, height: 48),
+              contentSize: previewSize,
+              position: .top,
+              screenFrame: previewScreen
+          ) == CGRect(x: 350, y: 616, width: 340, height: 130),
+          WindowPreviewPanelGeometry.frame(
+              anchorFrame: CGRect(x: 0, y: 300, width: 48, height: 40),
+              contentSize: previewSize,
+              position: .left,
+              screenFrame: previewScreen
+          ) == CGRect(x: 54, y: 255, width: 340, height: 130),
+          WindowPreviewPanelGeometry.frame(
+              anchorFrame: CGRect(x: 1152, y: 300, width: 48, height: 40),
+              contentSize: previewSize,
+              position: .right,
+              screenFrame: previewScreen
+          ) == CGRect(x: 806, y: 255, width: 340, height: 130),
+          WindowPreviewPanelGeometry.frame(
+              anchorFrame: CGRect(x: 0, y: 0, width: 40, height: 48),
+              contentSize: previewSize,
+              position: .bottom,
+              screenFrame: previewScreen
+          ).minX == 8 else {
         fputs("SELF-TEST FAILED: window preview placement mismatch\n", stderr)
         return 1
     }
