@@ -142,8 +142,8 @@ struct WindowPreviewPanelPresenter<Content: View>: NSViewRepresentable {
             backdrop.wantsLayer = true
             backdrop.layer?.cornerRadius = 8
             backdrop.layer?.masksToBounds = true
-            backdrop.layer?.borderWidth = 1
-            backdrop.layer?.borderColor = NSColor.white.withAlphaComponent(0.18).cgColor
+            backdrop.layer?.borderWidth = 0.5
+            backdrop.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
 
             hostingView.translatesAutoresizingMaskIntoConstraints = false
             backdrop.addSubview(hostingView)

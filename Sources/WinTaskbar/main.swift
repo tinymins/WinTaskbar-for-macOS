@@ -308,6 +308,21 @@ func runSelfTest() async -> Int32 {
           WindowPreviewLayout.axis(for: .bottom) == .horizontal,
           WindowPreviewLayout.axis(for: .left) == .vertical,
           WindowPreviewLayout.axis(for: .right) == .vertical,
+          WindowPreviewThumbnailGeometry.thumbnailSize(
+              for: CGSize(width: 1920, height: 1080)
+          ) == CGSize(width: 176, height: 99),
+          WindowPreviewThumbnailGeometry.thumbnailSize(
+              for: CGSize(width: 1200, height: 900)
+          ) == CGSize(width: 133, height: 100),
+          WindowPreviewThumbnailGeometry.thumbnailSize(
+              for: CGSize(width: 1080, height: 1920)
+          ) == CGSize(width: 56, height: 100),
+          WindowPreviewThumbnailGeometry.thumbnailSize(
+              for: CGSize(width: 3200, height: 900)
+          ) == CGSize(width: 176, height: 49),
+          WindowPreviewThumbnailGeometry.contentWidth(
+              for: CGSize(width: 1080, height: 1920)
+          ) == 120,
           WindowPreviewPanelGeometry.frame(
               anchorFrame: CGRect(x: 500, y: 0, width: 40, height: 48),
               contentSize: previewSize,

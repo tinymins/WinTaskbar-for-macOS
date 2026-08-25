@@ -333,6 +333,27 @@ struct WindowPreviewLayout {
     }
 }
 
+struct WindowPreviewThumbnailGeometry {
+    static let maximumSize = CGSize(width: 176, height: 100)
+    static let minimumContentWidth: CGFloat = 120
+
+    static func thumbnailSize(for sourceSize: CGSize) -> CGSize {
+        guard sourceSize.width > 0, sourceSize.height > 0 else { return maximumSize }
+        let scale = min(
+            maximumSize.width / sourceSize.width,
+            maximumSize.height / sourceSize.height
+        )
+        return CGSize(
+            width: (sourceSize.width * scale).rounded(.down),
+            height: (sourceSize.height * scale).rounded(.down)
+        )
+    }
+
+    static func contentWidth(for sourceSize: CGSize) -> CGFloat {
+        max(minimumContentWidth, thumbnailSize(for: sourceSize).width)
+    }
+}
+
 private struct TaskbarAppButton: View {
     let item: TaskbarItem
     @ObservedObject var preferences: PreferencesStore
@@ -716,6 +737,14 @@ private struct WindowPreviewPopover: View {
     }
 }
 
+private enum WindowPreviewMetrics {
+    static let horizontalPadding: CGFloat = 8
+    static let topPadding: CGFloat = 8
+    static let bottomPadding: CGFloat = 6
+    static let titleToThumbnailSpacing: CGFloat = 3
+    static let closeControlSize: CGFloat = 24
+}
+
 private struct WindowPreviewButton: View {
     let window: WindowInfo
     let service: WindowsService
@@ -725,26 +754,35 @@ private struct WindowPreviewButton: View {
     @State private var isHovering = false
     @State private var isCloseHovering = false
 
+    private var thumbnailSize: CGSize {
+        WindowPreviewThumbnailGeometry.thumbnailSize(for: window.frame.size)
+    }
+
+    private var contentWidth: CGFloat {
+        WindowPreviewThumbnailGeometry.contentWidth(for: window.frame.size)
+    }
+
     var body: some View {
         ZStack {
             Button {
                 windowPeekController.hideImmediately()
                 action()
             } label: {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: WindowPreviewMetrics.titleToThumbnailSpacing) {
                     HStack(spacing: 6) {
                         appIcon
                         Text(window.title)
                             .lineLimit(1)
                             .help(window.title)
                         Spacer(minLength: 0)
-                        Color.clear.frame(width: 24, height: 24)
+                        Color.clear.frame(width: WindowPreviewMetrics.closeControlSize)
                     }
                     thumbnail
                 }
-                .frame(width: 150, alignment: .topLeading)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 10)
+                .frame(width: contentWidth, alignment: .topLeading)
+                .padding(.horizontal, WindowPreviewMetrics.horizontalPadding)
+                .padding(.top, WindowPreviewMetrics.topPadding)
+                .padding(.bottom, WindowPreviewMetrics.bottomPadding)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -754,7 +792,10 @@ private struct WindowPreviewButton: View {
                 Button(action: closeAction) {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .medium))
-                        .frame(width: 24, height: 24)
+                        .frame(
+                            width: WindowPreviewMetrics.closeControlSize,
+                            height: WindowPreviewMetrics.closeControlSize
+                        )
                         .background {
                             RoundedRectangle(cornerRadius: 3, style: .continuous)
                                 .fill(isCloseHovering ? Color.red.opacity(0.85) : Color.clear)
@@ -762,13 +803,13 @@ private struct WindowPreviewButton: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .padding(.trailing, 10)
-                .padding(.top, 10)
+                .padding(.trailing, WindowPreviewMetrics.horizontalPadding)
+                .padding(.top, WindowPreviewMetrics.topPadding)
                 .onHover { isCloseHovering = $0 }
                 .help("Close")
             }
         }
-        .background(Color.white.opacity(isHovering ? 0.08 : 0))
+        .background(Color.white.opacity(isHovering ? 0.055 : 0))
         .contentShape(Rectangle())
         .onHover { hovering in
             isHovering = hovering
@@ -812,8 +853,8 @@ private struct WindowPreviewButton: View {
                 .accessibilityLabel("Preview unavailable")
             }
         }
-        .frame(width: 150, height: 90)
-        .clipShape(RoundedRectangle(cornerRadius: 5))
+        .frame(width: thumbnailSize.width, height: thumbnailSize.height)
+        .clipShape(RoundedRectangle(cornerRadius: 3))
     }
 }
 
