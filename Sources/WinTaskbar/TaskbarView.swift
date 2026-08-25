@@ -333,6 +333,19 @@ struct WindowPreviewLayout {
     }
 }
 
+enum WindowPreviewHoverAction: Equatable {
+    case present
+    case scheduleDismissal
+    case dismiss
+}
+
+struct WindowPreviewHoverPolicy {
+    static func action(hovering: Bool, previewsEnabled: Bool, hasProcess: Bool) -> WindowPreviewHoverAction {
+        guard previewsEnabled, hasProcess else { return .dismiss }
+        return hovering ? .present : .scheduleDismissal
+    }
+}
+
 struct WindowPreviewThumbnailGeometry {
     static let maximumSize = CGSize(width: 176, height: 100)
     static let minimumContentWidth: CGFloat = 120
@@ -366,7 +379,6 @@ private struct TaskbarAppButton: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
     @State private var showPreview = false
-    @State private var previewHoverTask: Task<Void, Never>?
     @State private var previewCloseTask: Task<Void, Never>?
     @State private var showShortcutEditor = false
     @State private var attentionPulse = false
@@ -402,7 +414,7 @@ private struct TaskbarAppButton: View {
         }
         .onDisappear {
             stopAttentionPulse()
-            cancelPreviewTasks()
+            cancelPreviewCloseTask()
             windowPeekController.hideImmediately()
         }
         .onHover(perform: handlePreviewHover)
@@ -458,24 +470,19 @@ private struct TaskbarAppButton: View {
     private func handlePreviewHover(_ hovering: Bool) {
         isHovering = hovering
 
-        guard preferences.windowPreviewsEnabled, item.processIdentifier != nil else {
-            cancelPreviewTasks()
+        switch WindowPreviewHoverPolicy.action(
+            hovering: hovering,
+            previewsEnabled: preferences.windowPreviewsEnabled,
+            hasProcess: item.processIdentifier != nil
+        ) {
+        case .dismiss:
+            cancelPreviewCloseTask()
             showPreview = false
-            return
-        }
-
-        previewHoverTask?.cancel()
-        previewHoverTask = nil
-
-        if hovering {
+        case .present:
             previewCloseTask?.cancel()
             previewCloseTask = nil
-            previewHoverTask = Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 600_000_000)
-                guard !Task.isCancelled else { return }
-                showPreview = true
-            }
-        } else {
+            showPreview = true
+        case .scheduleDismissal:
             schedulePreviewClose()
         }
     }
@@ -499,9 +506,7 @@ private struct TaskbarAppButton: View {
         }
     }
 
-    private func cancelPreviewTasks() {
-        previewHoverTask?.cancel()
-        previewHoverTask = nil
+    private func cancelPreviewCloseTask() {
         previewCloseTask?.cancel()
         previewCloseTask = nil
     }

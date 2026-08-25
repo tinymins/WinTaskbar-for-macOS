@@ -308,6 +308,26 @@ func runSelfTest() async -> Int32 {
           WindowPreviewLayout.axis(for: .bottom) == .horizontal,
           WindowPreviewLayout.axis(for: .left) == .vertical,
           WindowPreviewLayout.axis(for: .right) == .vertical,
+          WindowPreviewHoverPolicy.action(
+              hovering: true,
+              previewsEnabled: true,
+              hasProcess: true
+          ) == .present,
+          WindowPreviewHoverPolicy.action(
+              hovering: false,
+              previewsEnabled: true,
+              hasProcess: true
+          ) == .scheduleDismissal,
+          WindowPreviewHoverPolicy.action(
+              hovering: true,
+              previewsEnabled: false,
+              hasProcess: true
+          ) == .dismiss,
+          WindowPreviewHoverPolicy.action(
+              hovering: true,
+              previewsEnabled: true,
+              hasProcess: false
+          ) == .dismiss,
           WindowPreviewThumbnailGeometry.thumbnailSize(
               for: CGSize(width: 1920, height: 1080)
           ) == CGSize(width: 176, height: 99),
