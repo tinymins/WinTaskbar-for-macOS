@@ -312,6 +312,7 @@ private struct TaskbarAppButton: View {
     let windowActivator: WindowActivationService
     let windowsService: WindowsService
     let recentDocuments: RecentDocumentsService
+    @State private var isHovering = false
     @State private var showPreview = false
     @State private var previewHoverTask: Task<Void, Never>?
     @State private var previewCloseTask: Task<Void, Never>?
@@ -388,6 +389,8 @@ private struct TaskbarAppButton: View {
     }
 
     private func handlePreviewHover(_ hovering: Bool) {
+        isHovering = hovering
+
         guard preferences.windowPreviewsEnabled, item.processIdentifier != nil else {
             cancelPreviewTasks()
             showPreview = false
@@ -440,7 +443,10 @@ private struct TaskbarAppButton: View {
         ZStack {
             if preferences.activeIndicator == .background && item.isActive {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.primary.opacity(0.2))
+                    .fill(Color.accentColor.opacity(0.22))
+            } else if isHovering {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.white.opacity(0.08))
             }
             if item.badge != nil {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -627,17 +633,42 @@ private struct WindowPreviewPopover: View {
             if windows.isEmpty { Text("No open windows").foregroundStyle(.secondary).padding() }
             else {
                 ForEach(windows.prefix(6)) { window in
-                    Button { onSelect(window) } label: {
-                        HStack(spacing: 8) {
-                            if let image = service.thumbnail(for: window.windowID) {
-                                Image(nsImage: image).resizable().scaledToFit().frame(width: 150, height: 90).clipShape(RoundedRectangle(cornerRadius: 5))
-                            }
-                            Text(window.title).lineLimit(2)
-                        }
-                    }.buttonStyle(.plain)
+                    WindowPreviewButton(window: window, service: service) {
+                        onSelect(window)
+                    }
                 }
             }
         }.padding(10).frame(maxWidth: 360)
+    }
+}
+
+private struct WindowPreviewButton: View {
+    let window: WindowInfo
+    let service: WindowsService
+    let action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if let image = service.thumbnail(for: window.windowID) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 150, height: 90)
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                }
+                Text(window.title).lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.white.opacity(isHovering ? 0.08 : 0))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
     }
 }
 
