@@ -214,25 +214,36 @@ struct StartMenuView: View {
             menuShortcuts
                 .frame(maxHeight: .infinity)
                 .padding(.vertical, 8)
-            HoveringIconButton(systemName: "lock.fill", help: "Lock Screen") {
-                actions.performPower(.lockScreen)
-            }
-            HoveringIconButton(systemName: "moon.fill", help: "Sleep") {
-                actions.performPower(.sleep)
-            }
-            HoveringIconButton(systemName: "rectangle.portrait.and.arrow.right", help: "Log Out") {
-                actions.performPower(.logOut)
-            }
-            HoveringIconButton(systemName: "arrow.clockwise", help: "Restart") {
-                actions.performPower(.restart)
-            }
-            HoveringIconButton(systemName: "power", help: "Shut Down") {
-                actions.performPower(.shutDown)
-            }
+            powerMenu
         }
         .padding(.vertical, 10)
         .frame(width: 52)
         .frame(maxHeight: .infinity)
+    }
+
+    private var powerMenu: some View {
+        Menu {
+            powerMenuButton(.lockScreen, systemName: "lock")
+            powerMenuButton(.logOut, systemName: "rectangle.portrait.and.arrow.right")
+            powerMenuButton(.sleep, systemName: "moon")
+            powerMenuButton(.shutDown, systemName: "power")
+            powerMenuButton(.restart, systemName: "arrow.counterclockwise")
+        } label: {
+            HoveringIconLabel(systemName: "power")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .help("Power")
+        .accessibilityLabel("Power")
+        .padding(.vertical, -5)
+    }
+
+    private func powerMenuButton(_ action: PowerAction, systemName: String) -> some View {
+        Button {
+            actions.performPower(action)
+        } label: {
+            Label(action.rawValue, systemImage: systemName)
+        }
     }
 
     private var menuShortcuts: some View {
@@ -460,29 +471,37 @@ private struct HoveringIconButton: View {
     let systemName: String
     let help: LocalizedStringKey
     let action: () -> Void
-    @State private var isHovering = false
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .imageScale(.medium)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .frame(width: 50, height: 50)
-                .background {
-                    if isHovering {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.primary.opacity(0.08))
-                    }
-                }
-                .contentShape(Rectangle())
+            HoveringIconLabel(systemName: systemName)
         }
         .buttonStyle(.plain)
         .help(help)
         .padding(.vertical, -5)
-        .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.12)) {
-                isHovering = hovering
+    }
+}
+
+private struct HoveringIconLabel: View {
+    let systemName: String
+    @State private var isHovering = false
+
+    var body: some View {
+        Image(systemName: systemName)
+            .imageScale(.medium)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(width: 50, height: 50)
+            .background {
+                if isHovering {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.primary.opacity(0.08))
+                }
             }
-        }
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                withAnimation(.easeOut(duration: 0.12)) {
+                    isHovering = hovering
+                }
+            }
     }
 }
