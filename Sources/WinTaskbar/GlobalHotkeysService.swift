@@ -35,10 +35,32 @@ struct OptionKeyGestureState {
         if optionIsDown { canTrigger = false }
     }
 
+    mutating func handle(eventType: CGEventType, modifierFlags: NSEvent.ModifierFlags = []) -> Bool {
+        switch eventType {
+        case .flagsChanged:
+            return flagsChanged(to: modifierFlags)
+        case .keyDown:
+            keyDown()
+            return false
+        default:
+            return false
+        }
+    }
+
     mutating func reset() {
         optionIsDown = false
         canTrigger = false
     }
+}
+
+private let optionKeyEventTapHandler: CGEventTapCallBack = { _, eventType, event, userData in
+    guard let userData else { return Unmanaged.passUnretained(event) }
+    let service = Unmanaged<GlobalHotkeysService>.fromOpaque(userData).takeUnretainedValue()
+    let rawFlags = event.flags.rawValue
+    MainActor.assumeIsolated {
+        service.handleOptionKeyEvent(eventType, rawFlags: rawFlags)
+    }
+    return Unmanaged.passUnretained(event)
 }
 
 private let winTaskbarHotKeyHandler: EventHandlerUPP = { _, event, userData in
@@ -68,8 +90,8 @@ final class GlobalHotkeysService {
 
     private var handler: EventHandlerRef?
     private var hotKeys: [EventHotKeyRef] = []
-    private var globalEventMonitor: Any?
-    private var localEventMonitor: Any?
+    private var optionKeyEventTap: CFMachPort?
+    private var optionKeyEventTapSource: CFRunLoopSource?
     private(set) var isEnabled = false
     private var shortcuts: [HotkeyShortcut] = []
     private var optionKeyGesture = OptionKeyGestureState()
@@ -96,9 +118,9 @@ final class GlobalHotkeysService {
                 let id = index < 2 ? index + 1 : 100 + index - 2
                 register(id: id, shortcut: shortcut)
             }
-            installEventMonitors()
+            installOptionKeyEventTap()
         } else {
-            removeEventMonitors()
+            removeOptionKeyEventTap()
         }
         isEnabled = enabled
     }
@@ -133,35 +155,49 @@ final class GlobalHotkeysService {
         hotKeys.removeAll()
     }
 
-    private func installEventMonitors() {
-        guard globalEventMonitor == nil, localEventMonitor == nil else { return }
-        let mask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown]
-        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
-            MainActor.assumeIsolated { self?.handleMonitoredEvent(event) }
+    private func installOptionKeyEventTap() {
+        guard optionKeyEventTap == nil else { return }
+        let eventMask = (CGEventMask(1) << CGEventType.flagsChanged.rawValue)
+            | (CGEventMask(1) << CGEventType.keyDown.rawValue)
+        guard let eventTap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .listenOnly,
+            eventsOfInterest: eventMask,
+            callback: optionKeyEventTapHandler,
+            userInfo: Unmanaged.passUnretained(self).toOpaque()
+        ),
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0) else {
+            return
         }
-        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
-            MainActor.assumeIsolated { self?.handleMonitoredEvent(event) }
-            return event
-        }
+        optionKeyEventTap = eventTap
+        optionKeyEventTapSource = source
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: eventTap, enable: true)
     }
 
-    private func removeEventMonitors() {
-        if let globalEventMonitor { NSEvent.removeMonitor(globalEventMonitor) }
-        if let localEventMonitor { NSEvent.removeMonitor(localEventMonitor) }
-        globalEventMonitor = nil
-        localEventMonitor = nil
+    private func removeOptionKeyEventTap() {
+        if let source = optionKeyEventTapSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        }
+        if let eventTap = optionKeyEventTap {
+            CFMachPortInvalidate(eventTap)
+        }
+        optionKeyEventTapSource = nil
+        optionKeyEventTap = nil
     }
 
-    private func handleMonitoredEvent(_ event: NSEvent) {
-        switch event.type {
-        case .flagsChanged:
-            if optionKeyGesture.flagsChanged(to: event.modifierFlags) {
-                onToggleStartMenu?()
+    fileprivate func handleOptionKeyEvent(_ eventType: CGEventType, rawFlags: UInt64) {
+        if eventType == .tapDisabledByTimeout || eventType == .tapDisabledByUserInput {
+            optionKeyGesture.reset()
+            if let eventTap = optionKeyEventTap {
+                CGEvent.tapEnable(tap: eventTap, enable: true)
             }
-        case .keyDown:
-            optionKeyGesture.keyDown()
-        default:
-            break
+            return
+        }
+        let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(rawFlags))
+        if optionKeyGesture.handle(eventType: eventType, modifierFlags: modifierFlags) {
+            onToggleStartMenu?()
         }
     }
 }

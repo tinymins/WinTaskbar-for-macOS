@@ -330,8 +330,8 @@ func runSelfTest() async -> Int32 {
         return 1
     }
     optionGesture = OptionKeyGestureState()
-    _ = optionGesture.flagsChanged(to: [.option])
-    optionGesture.keyDown()
+    _ = optionGesture.handle(eventType: .flagsChanged, modifierFlags: [.option])
+    _ = optionGesture.handle(eventType: .keyDown)
     guard !optionGesture.flagsChanged(to: []) else {
         fputs("SELF-TEST FAILED: Option key combination triggered\n", stderr)
         return 1
