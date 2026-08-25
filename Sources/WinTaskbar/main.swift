@@ -96,6 +96,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startMenuController = startMenu
         settingsController = settings
         taskbar.show()
+#if DEBUG
+        if CommandLine.arguments.contains("--attention-demo") {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(1))
+                self?.dockBadges.runAttentionDemo()
+            }
+        }
+#endif
         windowFittingService.start()
         if !preferences.hasCompletedOnboarding {
             let onboarding = OnboardingWindowController(preferences: preferences)
@@ -205,6 +213,13 @@ func runSelfTest() async -> Int32 {
         isActive: false,
         highlightStyle: .mac
     ) == RunningIndicatorLayout(width: 2, height: 14, opacity: 0.7, edgePadding: -3),
+    RunningIndicatorLayout.underline(
+        position: .bottom,
+        cellSize: 40,
+        isActive: false,
+        highlightStyle: .windows,
+        requestsAttention: true
+    ) == RunningIndicatorLayout(width: 30, height: 2, opacity: 0.7, edgePadding: 3),
     RunningIndicatorLayout.dot(highlightStyle: .windows)
         == RunningIndicatorLayout(width: 4, height: 4, opacity: 0.7, edgePadding: 3),
     RunningIndicatorLayout.dot(highlightStyle: .mac)
@@ -242,14 +257,64 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
-    guard TaskbarAttentionPolicy.shouldFlash(previous: nil, current: "1"),
-          TaskbarAttentionPolicy.shouldFlash(previous: "1", current: "2"),
-          !TaskbarAttentionPolicy.shouldFlash(previous: "2", current: "1"),
-          !TaskbarAttentionPolicy.shouldFlash(previous: "2", current: "2"),
-          TaskbarAttentionPolicy.shouldFlash(previous: "new", current: "urgent"),
-          !TaskbarAttentionPolicy.shouldFlash(previous: "new", current: "new"),
-          !TaskbarAttentionPolicy.shouldFlash(previous: "1", current: nil) else {
+    guard TaskbarAttentionPolicy.shouldRequest(previous: nil, current: "1"),
+          TaskbarAttentionPolicy.shouldRequest(previous: "1", current: "2"),
+          !TaskbarAttentionPolicy.shouldRequest(previous: "2", current: "1"),
+          !TaskbarAttentionPolicy.shouldRequest(previous: "2", current: "2"),
+          TaskbarAttentionPolicy.shouldRequest(previous: "new", current: "urgent"),
+          !TaskbarAttentionPolicy.shouldRequest(previous: "new", current: "new"),
+          !TaskbarAttentionPolicy.shouldRequest(previous: "1", current: nil) else {
         fputs("SELF-TEST FAILED: taskbar attention policy mismatch\n", stderr)
+        return 1
+    }
+
+    var attentionTracker = TaskbarAttentionTracker()
+    attentionTracker.apply(["chat": "4"], activeBundleID: nil)
+    guard attentionTracker.states.isEmpty else {
+        fputs("SELF-TEST FAILED: initial badge snapshot requested attention\n", stderr)
+        return 1
+    }
+    attentionTracker.apply(["chat": "5"], activeBundleID: nil)
+    guard attentionTracker.states["chat"]?.pulseGeneration == 1 else {
+        fputs("SELF-TEST FAILED: badge increase did not request attention\n", stderr)
+        return 1
+    }
+    attentionTracker.apply(["chat": "5"], activeBundleID: nil)
+    attentionTracker.apply(["chat": "3"], activeBundleID: nil)
+    guard attentionTracker.states["chat"]?.pulseGeneration == 1 else {
+        fputs("SELF-TEST FAILED: unchanged or decreased badge retriggered attention\n", stderr)
+        return 1
+    }
+    attentionTracker.acknowledge("chat")
+    attentionTracker.apply(["chat": "6"], activeBundleID: "chat")
+    guard attentionTracker.states.isEmpty else {
+        fputs("SELF-TEST FAILED: active app retained attention\n", stderr)
+        return 1
+    }
+    attentionTracker.apply(["chat": "7"], activeBundleID: nil)
+    guard attentionTracker.states["chat"]?.pulseGeneration == 1 else {
+        fputs("SELF-TEST FAILED: post-acknowledgement increase did not request attention\n", stderr)
+        return 1
+    }
+    attentionTracker.apply([:], activeBundleID: nil)
+    guard attentionTracker.states["chat"]?.pulseGeneration == 1 else {
+        fputs("SELF-TEST FAILED: cleared badge removed unacknowledged attention\n", stderr)
+        return 1
+    }
+    attentionTracker.apply([:], activeBundleID: "chat")
+    guard attentionTracker.states["chat"]?.pulseGeneration == 1 else {
+        fputs("SELF-TEST FAILED: polling cleared unacknowledged attention\n", stderr)
+        return 1
+    }
+    attentionTracker.acknowledge("chat")
+    guard attentionTracker.states.isEmpty else {
+        fputs("SELF-TEST FAILED: explicit app activation retained attention\n", stderr)
+        return 1
+    }
+    attentionTracker.apply(["chat": "1"], activeBundleID: nil)
+    attentionTracker.retainRunning([])
+    guard attentionTracker.states.isEmpty else {
+        fputs("SELF-TEST FAILED: terminated app retained attention\n", stderr)
         return 1
     }
 
@@ -285,7 +350,9 @@ func runSelfTest() async -> Int32 {
           preferences.pinnedBundleIDs == ["three", "one", "two"],
           PreferencesStore(defaults: defaults).appFolders.first?.bundleIDs == ["one"],
           PreferencesStore(defaults: defaults).hotkeyShortcuts.first?.keyLabel == "A",
-          DockBadgeService.parseStatusLabel("124 notifications") == "124" else {
+          DockBadgeService.parseStatusLabel("124 notifications") == "124",
+          DockBadgeService.parseLSAppInfoOutput("\"StatusLabel\"={ \"label\"=\"124 notifications\" }") == "124",
+          DockBadgeService.parseLSAppInfoOutput("\"StatusLabel\"=[ NULL ]") == nil else {
         fputs("SELF-TEST FAILED: preference keys did not persist\n", stderr)
         return 1
     }

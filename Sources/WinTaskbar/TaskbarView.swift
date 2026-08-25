@@ -111,6 +111,7 @@ struct TaskbarView: View {
             item: item,
             preferences: preferences,
             apps: apps,
+            dockBadges: dockBadges,
             windowActivator: windowActivator,
             windowsService: windowsService,
             windowPeekController: windowPeekController,
@@ -264,9 +265,10 @@ struct RunningIndicatorLayout: Equatable {
         position: TaskbarPosition,
         cellSize: CGFloat,
         isActive: Bool,
-        highlightStyle: HighlightStyle
+        highlightStyle: HighlightStyle,
+        requestsAttention: Bool = false
     ) -> RunningIndicatorLayout {
-        let length = cellSize * (isActive ? 0.60 : 0.35)
+        let length = cellSize * (requestsAttention ? 0.75 : (isActive ? 0.60 : 0.35))
         return RunningIndicatorLayout(
             width: position.isHorizontal ? length : 2,
             height: position.isHorizontal ? 2 : length,
@@ -296,32 +298,22 @@ struct WindowPreviewPlacement {
     }
 }
 
-struct TaskbarAttentionPolicy {
-    static func shouldFlash(previous: String?, current: String?) -> Bool {
-        guard let current else { return false }
-        guard let previous else { return true }
-        if let previousCount = Int(previous), let currentCount = Int(current) {
-            return currentCount > previousCount
-        }
-        return current != previous
-    }
-}
-
 private struct TaskbarAppButton: View {
     let item: TaskbarItem
     @ObservedObject var preferences: PreferencesStore
     @ObservedObject var apps: AppDiscoveryService
+    @ObservedObject var dockBadges: DockBadgeService
     let windowActivator: WindowActivationService
     let windowsService: WindowsService
     let windowPeekController: WindowPeekController
     let recentDocuments: RecentDocumentsService
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
     @State private var showPreview = false
     @State private var previewHoverTask: Task<Void, Never>?
     @State private var previewCloseTask: Task<Void, Never>?
     @State private var showShortcutEditor = false
-    @State private var lastBadge: String?
-    @State private var attentionFlash = false
+    @State private var attentionPulse = false
     @State private var attentionTask: Task<Void, Never>?
 
     var body: some View {
@@ -340,16 +332,20 @@ private struct TaskbarAppButton: View {
             }
         }
         .contentShape(Rectangle())
-        .onTapGesture { windowActivator.activateOrMinimize(item) }
+        .onTapGesture {
+            dockBadges.acknowledge(item.bundleIdentifier)
+            windowActivator.activateOrMinimize(item)
+        }
         .accessibilityAddTraits(.isButton)
         .help(item.name)
-        .onAppear {
-            lastBadge = item.badge
-            if item.badge != nil { startAttentionFlash() }
+        .onChange(of: attentionState?.pulseGeneration ?? 0) { generation in
+            if generation > 0 { startAttentionPulse() }
         }
-        .onChange(of: item.badge) { badge in updateAttention(for: badge) }
+        .onChange(of: attentionState != nil) { highlighted in
+            if !highlighted { stopAttentionPulse() }
+        }
         .onDisappear {
-            stopAttentionFlash()
+            stopAttentionPulse()
             cancelPreviewTasks()
             windowPeekController.hideImmediately()
         }
@@ -457,48 +453,50 @@ private struct TaskbarAppButton: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(Color.white.opacity(0.08))
             }
-            if item.badge != nil {
+            if attentionState != nil {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.orange.opacity(attentionFlash ? 0.48 : 0.16))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(Color.orange.opacity(attentionFlash ? 0.9 : 0.35), lineWidth: 1)
-                    }
+                    .fill(attentionBackgroundColor.opacity(attentionPulse ? 0.48 : 0.36))
+                    .padding(preferences.position.isHorizontal ? .horizontal : .vertical, -2)
+                    .padding(preferences.position.isHorizontal ? .vertical : .horizontal, -1)
             }
         }
     }
 
-    private func updateAttention(for badge: String?) {
-        let previousBadge = lastBadge
-        lastBadge = badge
-        guard badge != nil else {
-            stopAttentionFlash()
-            return
-        }
-        if TaskbarAttentionPolicy.shouldFlash(previous: previousBadge, current: badge) {
-            startAttentionFlash()
-        }
+    private var attentionBackgroundColor: Color {
+        Color(red: 0.72, green: 0.31, blue: 0.40)
     }
 
-    private func startAttentionFlash() {
+    private var attentionAccentColor: Color {
+        Color(red: 0.90, green: 0.43, blue: 0.52)
+    }
+
+    private var attentionState: TaskbarAttentionState? {
+        dockBadges.attentionStates[item.bundleIdentifier]
+    }
+
+    private func startAttentionPulse() {
         attentionTask?.cancel()
+        guard !reduceMotion else {
+            attentionPulse = false
+            return
+        }
         attentionTask = Task { @MainActor in
-            for _ in 0..<3 {
+            for _ in 0..<2 {
                 guard !Task.isCancelled else { return }
-                withAnimation(.easeInOut(duration: 0.18)) { attentionFlash = true }
-                try? await Task.sleep(nanoseconds: 180_000_000)
+                withAnimation(.easeInOut(duration: 0.22)) { attentionPulse = true }
+                try? await Task.sleep(for: .milliseconds(220))
                 guard !Task.isCancelled else { return }
-                withAnimation(.easeInOut(duration: 0.18)) { attentionFlash = false }
-                try? await Task.sleep(nanoseconds: 180_000_000)
+                withAnimation(.easeOut(duration: 0.32)) { attentionPulse = false }
+                try? await Task.sleep(for: .milliseconds(320))
             }
             attentionTask = nil
         }
     }
 
-    private func stopAttentionFlash() {
+    private func stopAttentionPulse() {
         attentionTask?.cancel()
         attentionTask = nil
-        attentionFlash = false
+        attentionPulse = false
     }
 
     @ViewBuilder
@@ -547,22 +545,28 @@ private struct TaskbarAppButton: View {
                         iconPadding: preferences.iconPadding
                     ).cellSize,
                     isActive: item.isActive,
-                    highlightStyle: preferences.highlightStyle
+                    highlightStyle: preferences.highlightStyle,
+                    requestsAttention: attentionState != nil
                 )
                 RoundedRectangle(cornerRadius: 1, style: .continuous)
-                    .fill(item.isActive ? Color.accentColor : Color.secondary)
+                    .fill(runningIndicatorColor)
                     .frame(width: layout.width, height: layout.height)
-                    .opacity(layout.opacity)
+                    .opacity(attentionState == nil ? layout.opacity : 1)
                     .padding(indicatorEdge, layout.edgePadding)
             } else if !item.isActive {
                 let layout = RunningIndicatorLayout.dot(highlightStyle: preferences.highlightStyle)
                 Circle()
-                    .fill(Color.secondary)
+                    .fill(runningIndicatorColor)
                     .frame(width: layout.width, height: layout.height)
-                    .opacity(layout.opacity)
+                    .opacity(attentionState == nil ? layout.opacity : 1)
                     .padding(indicatorEdge, layout.edgePadding)
             }
         }
+    }
+
+    private var runningIndicatorColor: Color {
+        if attentionState != nil { return attentionAccentColor }
+        return item.isActive ? Color.accentColor : Color.secondary
     }
 
     private var indicatorAlignment: Alignment {
@@ -679,10 +683,6 @@ private struct WindowPreviewButton: View {
                 Text(window.title).lineLimit(2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.white.opacity(isHovering ? 0.08 : 0))
-            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
