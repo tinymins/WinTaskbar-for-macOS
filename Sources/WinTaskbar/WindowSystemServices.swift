@@ -20,15 +20,16 @@ final class WindowActivationService {
     }
 
     func raise(window: WindowInfo) {
-        let application = AXUIElementCreateApplication(window.ownerPID)
-        guard let match = windows(of: application).first(where: { element in
-            let elementTitle: String? = attribute(element, kAXTitleAttribute)
-            let elementFrame = frame(of: element)
-            return elementTitle == window.title || elementFrame.map { framesMatch($0, window.frame) } == true
-        }) else { return }
+        guard let match = matchingWindow(for: window) else { return }
         AXUIElementSetAttributeValue(match, kAXMinimizedAttribute as CFString, false as CFBoolean)
         AXUIElementPerformAction(match, kAXRaiseAction as CFString)
         NSRunningApplication(processIdentifier: window.ownerPID)?.activate(options: [.activateIgnoringOtherApps])
+    }
+
+    func close(window: WindowInfo) {
+        guard let match = matchingWindow(for: window),
+              let closeButton: AXUIElement = attribute(match, kAXCloseButtonAttribute) else { return }
+        AXUIElementPerformAction(closeButton, kAXPressAction as CFString)
     }
 
     func hasVisibleWindow(pid: pid_t) -> Bool {
@@ -65,6 +66,14 @@ final class WindowActivationService {
 
     private func windows(of application: AXUIElement) -> [AXUIElement] {
         attribute(application, kAXWindowsAttribute) ?? []
+    }
+
+    private func matchingWindow(for window: WindowInfo) -> AXUIElement? {
+        windows(of: AXUIElementCreateApplication(window.ownerPID)).first { element in
+            let elementTitle: String? = attribute(element, kAXTitleAttribute)
+            let elementFrame = frame(of: element)
+            return elementTitle == window.title || elementFrame.map { framesMatch($0, window.frame) } == true
+        }
     }
 
     private func frame(of element: AXUIElement) -> CGRect? {

@@ -333,6 +333,17 @@ struct WindowPreviewPlacement {
     }
 }
 
+struct WindowPreviewLayout {
+    enum Axis: Equatable {
+        case horizontal
+        case vertical
+    }
+
+    static func axis(for position: TaskbarPosition) -> Axis {
+        position.isHorizontal ? .horizontal : .vertical
+    }
+}
+
 private struct TaskbarAppButton: View {
     let item: TaskbarItem
     @ObservedObject var preferences: PreferencesStore
@@ -392,11 +403,19 @@ private struct TaskbarAppButton: View {
             if let pid = item.processIdentifier {
                 WindowPreviewPopover(
                     windows: windowsService.windows(forPID: pid),
+                    position: preferences.position,
                     service: windowsService,
-                    windowPeekController: windowPeekController
-                ) {
-                    windowActivator.raise(window: $0); showPreview = false
-                }
+                    windowPeekController: windowPeekController,
+                    onSelect: {
+                        windowActivator.raise(window: $0)
+                        showPreview = false
+                    },
+                    onClose: {
+                        windowPeekController.hideImmediately()
+                        windowActivator.close(window: $0)
+                        showPreview = false
+                    }
+                )
                 .onHover(perform: handlePreviewPopoverHover)
             }
         }
@@ -673,25 +692,41 @@ private struct ShortcutEditorView: View {
 
 private struct WindowPreviewPopover: View {
     let windows: [WindowInfo]
+    let position: TaskbarPosition
     let service: WindowsService
     let windowPeekController: WindowPeekController
     let onSelect: (WindowInfo) -> Void
+    let onClose: (WindowInfo) -> Void
 
+    @ViewBuilder
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if windows.isEmpty { Text("No open windows").foregroundStyle(.secondary).padding() }
-            else {
+        if windows.isEmpty {
+            Text("No open windows").foregroundStyle(.secondary).padding()
+        } else if WindowPreviewLayout.axis(for: position) == .horizontal {
+            HStack(alignment: .top, spacing: 0) {
                 ForEach(windows.prefix(6)) { window in
-                    WindowPreviewButton(
-                        window: window,
-                        service: service,
-                        windowPeekController: windowPeekController
-                    ) {
-                        onSelect(window)
-                    }
+                    previewButton(for: window)
                 }
             }
-        }.padding(.vertical, 10).frame(width: 360)
+            .padding(.vertical, 10)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(windows.prefix(6)) { window in
+                    previewButton(for: window)
+                }
+            }
+            .padding(.vertical, 10)
+        }
+    }
+
+    private func previewButton(for window: WindowInfo) -> some View {
+        WindowPreviewButton(
+            window: window,
+            service: service,
+            windowPeekController: windowPeekController,
+            action: { onSelect(window) },
+            closeAction: { onClose(window) }
+        )
     }
 }
 
@@ -700,31 +735,57 @@ private struct WindowPreviewButton: View {
     let service: WindowsService
     let windowPeekController: WindowPeekController
     let action: () -> Void
+    let closeAction: () -> Void
     @State private var isHovering = false
+    @State private var isCloseHovering = false
 
     var body: some View {
-        Button {
-            windowPeekController.hideImmediately()
-            action()
-        } label: {
-            HStack(spacing: 8) {
-                if let image = service.thumbnail(for: window.windowID) {
-                    Image(nsImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 150, height: 90)
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
+        ZStack(alignment: .topTrailing) {
+            Button {
+                windowPeekController.hideImmediately()
+                action()
+            } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        appIcon
+                        Text(window.title)
+                            .lineLimit(1)
+                            .help(window.title)
+                        Spacer(minLength: 0)
+                        if isHovering {
+                            Color.clear.frame(width: 24, height: 24)
+                        }
+                    }
+                    thumbnail
                 }
-                Text(window.title).lineLimit(2)
+                .frame(width: 150, alignment: .topLeading)
+                .padding(.horizontal, 10)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white.opacity(isHovering ? 0.08 : 0))
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+
+            if isHovering {
+                Button(action: closeAction) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .medium))
+                        .frame(width: 24, height: 24)
+                        .background {
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(isCloseHovering ? Color.red.opacity(0.85) : Color.clear)
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 10)
+                .onHover { isCloseHovering = $0 }
+                .help("Close")
+            }
         }
-        .buttonStyle(.plain)
+        .background(Color.white.opacity(isHovering ? 0.08 : 0))
+        .contentShape(Rectangle())
         .onHover { hovering in
             isHovering = hovering
+            if !hovering { isCloseHovering = false }
             if hovering {
                 windowPeekController.show(window: window)
             } else {
@@ -733,6 +794,28 @@ private struct WindowPreviewButton: View {
         }
         .onDisappear {
             if isHovering { windowPeekController.hideImmediately() }
+        }
+    }
+
+    private var appIcon: some View {
+        Group {
+            if let icon = NSRunningApplication(processIdentifier: window.ownerPID)?.icon {
+                Image(nsImage: icon).resizable().scaledToFit()
+            } else {
+                Image(systemName: "macwindow").resizable().scaledToFit()
+            }
+        }
+        .frame(width: 14, height: 14)
+    }
+
+    @ViewBuilder
+    private var thumbnail: some View {
+        if let image = service.thumbnail(for: window.windowID) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 150, height: 90)
+                .clipShape(RoundedRectangle(cornerRadius: 5))
         }
     }
 }

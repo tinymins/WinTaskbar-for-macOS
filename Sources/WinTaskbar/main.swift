@@ -296,7 +296,11 @@ func runSelfTest() async -> Int32 {
     guard WindowPreviewPlacement.arrowEdge(for: .top) == .top,
           WindowPreviewPlacement.arrowEdge(for: .bottom) == .bottom,
           WindowPreviewPlacement.arrowEdge(for: .left) == .leading,
-          WindowPreviewPlacement.arrowEdge(for: .right) == .trailing else {
+          WindowPreviewPlacement.arrowEdge(for: .right) == .trailing,
+          WindowPreviewLayout.axis(for: .top) == .horizontal,
+          WindowPreviewLayout.axis(for: .bottom) == .horizontal,
+          WindowPreviewLayout.axis(for: .left) == .vertical,
+          WindowPreviewLayout.axis(for: .right) == .vertical else {
         fputs("SELF-TEST FAILED: window preview placement mismatch\n", stderr)
         return 1
     }
