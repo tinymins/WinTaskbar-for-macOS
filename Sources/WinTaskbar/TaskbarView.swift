@@ -656,7 +656,7 @@ private struct WindowPreviewPopover: View {
                     }
                 }
             }
-        }.padding(10).frame(maxWidth: 360)
+        }.padding(.vertical, 10).frame(width: 360)
     }
 }
 
@@ -682,7 +682,9 @@ private struct WindowPreviewButton: View {
                 }
                 Text(window.title).lineLimit(2)
             }
+            .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.opacity(isHovering ? 0.08 : 0))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
