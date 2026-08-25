@@ -46,6 +46,7 @@ final class TaskbarWindowController {
     private let actions: AppActions
     private let windowActivator: WindowActivationService
     private let windowsService: WindowsService
+    private let windowPeekController: WindowPeekController
     private let recentDocuments: RecentDocumentsService
     private let dockBadges: DockBadgeService
     private var panels: [TaskbarPanel] = []
@@ -67,6 +68,7 @@ final class TaskbarWindowController {
         self.actions = actions
         self.windowActivator = windowActivator
         self.windowsService = windowsService
+        windowPeekController = WindowPeekController(windowsService: windowsService)
         self.recentDocuments = recentDocuments
         self.dockBadges = dockBadges
         cancellable = preferences.objectWillChange.sink { [weak self] _ in
@@ -81,6 +83,7 @@ final class TaskbarWindowController {
     }
 
     func rebuildPanels() {
+        windowPeekController.hideImmediately()
         panels.forEach { $0.orderOut(nil) }
         panels.removeAll()
 
@@ -127,6 +130,7 @@ final class TaskbarWindowController {
             dockBadges: dockBadges,
             windowActivator: windowActivator,
             windowsService: windowsService,
+            windowPeekController: windowPeekController,
             recentDocuments: recentDocuments,
             screen: screen
         ))

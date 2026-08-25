@@ -230,6 +230,18 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    guard WindowPeekGeometry.localFrame(
+        windowFrame: CGRect(x: 2000, y: 100, width: 800, height: 600),
+        displayBounds: CGRect(x: 1920, y: 0, width: 1920, height: 1080)
+    ) == CGRect(x: 80, y: 380, width: 800, height: 600),
+    WindowPeekGeometry.localFrame(
+        windowFrame: CGRect(x: 120, y: -800, width: 900, height: 500),
+        displayBounds: CGRect(x: 0, y: -900, width: 1440, height: 900)
+    ) == CGRect(x: 120, y: 300, width: 900, height: 500) else {
+        fputs("SELF-TEST FAILED: window peek display conversion mismatch\n", stderr)
+        return 1
+    }
+
     guard TaskbarAttentionPolicy.shouldFlash(previous: nil, current: "1"),
           TaskbarAttentionPolicy.shouldFlash(previous: "1", current: "2"),
           !TaskbarAttentionPolicy.shouldFlash(previous: "2", current: "1"),

@@ -10,6 +10,7 @@ struct TaskbarView: View {
     @ObservedObject var dockBadges: DockBadgeService
     let windowActivator: WindowActivationService
     let windowsService: WindowsService
+    let windowPeekController: WindowPeekController
     let recentDocuments: RecentDocumentsService
     let screen: NSScreen
 
@@ -112,6 +113,7 @@ struct TaskbarView: View {
             apps: apps,
             windowActivator: windowActivator,
             windowsService: windowsService,
+            windowPeekController: windowPeekController,
             recentDocuments: recentDocuments
         )
         .draggable(item.bundleIdentifier)
@@ -311,6 +313,7 @@ private struct TaskbarAppButton: View {
     @ObservedObject var apps: AppDiscoveryService
     let windowActivator: WindowActivationService
     let windowsService: WindowsService
+    let windowPeekController: WindowPeekController
     let recentDocuments: RecentDocumentsService
     @State private var isHovering = false
     @State private var showPreview = false
@@ -348,6 +351,7 @@ private struct TaskbarAppButton: View {
         .onDisappear {
             stopAttentionFlash()
             cancelPreviewTasks()
+            windowPeekController.hideImmediately()
         }
         .onHover(perform: handlePreviewHover)
         .popover(
@@ -355,7 +359,11 @@ private struct TaskbarAppButton: View {
             arrowEdge: WindowPreviewPlacement.arrowEdge(for: preferences.position)
         ) {
             if let pid = item.processIdentifier {
-                WindowPreviewPopover(windows: windowsService.windows(forPID: pid), service: windowsService) {
+                WindowPreviewPopover(
+                    windows: windowsService.windows(forPID: pid),
+                    service: windowsService,
+                    windowPeekController: windowPeekController
+                ) {
                     windowActivator.raise(window: $0); showPreview = false
                 }
                 .onHover(perform: handlePreviewPopoverHover)
@@ -428,6 +436,7 @@ private struct TaskbarAppButton: View {
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard !Task.isCancelled else { return }
             showPreview = false
+            windowPeekController.hide()
         }
     }
 
@@ -626,6 +635,7 @@ private struct ShortcutEditorView: View {
 private struct WindowPreviewPopover: View {
     let windows: [WindowInfo]
     let service: WindowsService
+    let windowPeekController: WindowPeekController
     let onSelect: (WindowInfo) -> Void
 
     var body: some View {
@@ -633,7 +643,11 @@ private struct WindowPreviewPopover: View {
             if windows.isEmpty { Text("No open windows").foregroundStyle(.secondary).padding() }
             else {
                 ForEach(windows.prefix(6)) { window in
-                    WindowPreviewButton(window: window, service: service) {
+                    WindowPreviewButton(
+                        window: window,
+                        service: service,
+                        windowPeekController: windowPeekController
+                    ) {
                         onSelect(window)
                     }
                 }
@@ -645,11 +659,15 @@ private struct WindowPreviewPopover: View {
 private struct WindowPreviewButton: View {
     let window: WindowInfo
     let service: WindowsService
+    let windowPeekController: WindowPeekController
     let action: () -> Void
     @State private var isHovering = false
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            windowPeekController.hideImmediately()
+            action()
+        } label: {
             HStack(spacing: 8) {
                 if let image = service.thumbnail(for: window.windowID) {
                     Image(nsImage: image)
@@ -668,7 +686,17 @@ private struct WindowPreviewButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { isHovering = $0 }
+        .onHover { hovering in
+            isHovering = hovering
+            if hovering {
+                windowPeekController.show(window: window)
+            } else {
+                windowPeekController.scheduleHide()
+            }
+        }
+        .onDisappear {
+            if isHovering { windowPeekController.hideImmediately() }
+        }
     }
 }
 
