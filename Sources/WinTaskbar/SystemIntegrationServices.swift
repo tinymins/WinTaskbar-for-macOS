@@ -172,99 +172,357 @@ final class PermissionsService: ObservableObject {
     }
 }
 
-@MainActor
-final class WindowFittingService {
-    private let preferences: PreferencesStore
-    private var timer: Timer?
+struct WindowFittingScreenBox: Equatable, Sendable {
+    let frame: CGRect
+    let visibleFrame: CGRect
+}
 
-    init(preferences: PreferencesStore) { self.preferences = preferences }
+enum WindowFittingGeometry {
+    static let safetyInset: CGFloat = 3
+    static let minimumWindowSize = CGSize(width: 100, height: 60)
 
-    func start() {
-        guard timer == nil else { return }
-        timer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.clampFocusedWindow() }
-        }
-    }
-
-    func fitAllWindowsToFreeSpace() {
-        guard AXIsProcessTrusted() else { return }
-        for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular {
-            let application = AXUIElementCreateApplication(app.processIdentifier)
-            var rawWindows: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &rawWindows) == .success,
-                  let windows = rawWindows as? [AXUIElement] else { continue }
-            windows.forEach(fit)
-        }
-    }
-
-    private func fit(_ window: AXUIElement) {
-        guard let current = frame(of: window),
-              let screen = NSScreen.screens.first(where: { $0.frame.intersects(current) }) ?? NSScreen.main else { return }
-        let target = freeRect(on: screen)
-        setFrame(window, cocoaFrame: target)
-    }
-
-    private func clampFocusedWindow() {
-        guard AXIsProcessTrusted(), let app = NSWorkspace.shared.frontmostApplication else { return }
-        let application = AXUIElementCreateApplication(app.processIdentifier)
-        var rawWindow: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(application, kAXFocusedWindowAttribute as CFString, &rawWindow) == .success,
-              let window = rawWindow as! AXUIElement?,
-              let currentAX = frame(of: window) else { return }
-        let current = cocoaFrame(fromAXFrame: currentAX)
-        guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(current) }) ?? NSScreen.main else { return }
-        let free = freeRect(on: screen)
-        if approximatelyFullScreen(current, screen.frame) { return }
-        guard !free.contains(current) else { return }
-        let width = min(current.width, free.width)
-        let height = min(current.height, free.height)
-        let x = min(max(current.minX, free.minX), free.maxX - width)
-        let y = min(max(current.minY, free.minY), free.maxY - height)
-        setFrame(window, cocoaFrame: CGRect(x: x, y: y, width: width, height: height))
-    }
-
-    private func freeRect(on screen: NSScreen) -> CGRect {
+    static func freeRect(
+        on screen: WindowFittingScreenBox,
+        position: TaskbarPosition,
+        barHeight: CGFloat
+    ) -> CGRect {
         var target = screen.visibleFrame
-        let bar = CGFloat(preferences.barHeight)
-        switch preferences.position {
-        case .bottom: target.origin.y += bar; target.size.height -= bar
-        case .top: target.size.height -= bar
-        case .left: target.origin.x += bar; target.size.width -= bar
-        case .right: target.size.width -= bar
+        let reserved = max(0, barHeight + safetyInset)
+        switch position {
+        case .bottom:
+            target.origin.y += reserved
+            target.size.height -= reserved
+        case .top:
+            target.size.height -= reserved
+        case .left:
+            target.origin.x += reserved
+            target.size.width -= reserved
+        case .right:
+            target.size.width -= reserved
         }
+        target.size.width = max(0, target.width)
+        target.size.height = max(0, target.height)
         return target
     }
 
-    private func setFrame(_ window: AXUIElement, cocoaFrame: CGRect) {
-        let primaryHeight = NSScreen.screens.first?.frame.height ?? cocoaFrame.maxY
-        var position = CGPoint(x: cocoaFrame.minX, y: primaryHeight - cocoaFrame.maxY)
-        var size = cocoaFrame.size
-        if let positionValue = AXValueCreate(.cgPoint, &position), let sizeValue = AXValueCreate(.cgSize, &size) {
-            AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, positionValue)
-            AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, sizeValue)
+    static func clampedRect(
+        _ rect: CGRect,
+        on screen: WindowFittingScreenBox,
+        position: TaskbarPosition,
+        barHeight: CGFloat
+    ) -> CGRect? {
+        let free = freeRect(on: screen, position: position, barHeight: barHeight)
+        var result = rect
+        switch position {
+        case .bottom where rect.minY < free.minY:
+            result.origin.y = free.minY
+            result.size.height = rect.maxY - free.minY
+        case .top where rect.maxY > free.maxY:
+            result.size.height = free.maxY - rect.minY
+        case .left where rect.minX < free.minX:
+            result.origin.x = free.minX
+            result.size.width = rect.maxX - free.minX
+        case .right where rect.maxX > free.maxX:
+            result.size.width = free.maxX - rect.minX
+        default:
+            return nil
+        }
+        guard result.width > minimumWindowSize.width,
+              result.height > minimumWindowSize.height,
+              result != rect else { return nil }
+        return result
+    }
+
+    static func cocoaFrame(axPosition: CGPoint, size: CGSize, primaryHeight: CGFloat) -> CGRect {
+        CGRect(
+            x: axPosition.x,
+            y: primaryHeight - axPosition.y - size.height,
+            width: size.width,
+            height: size.height
+        )
+    }
+
+    static func axPosition(cocoaFrame: CGRect, primaryHeight: CGFloat) -> CGPoint {
+        CGPoint(x: cocoaFrame.minX, y: primaryHeight - cocoaFrame.maxY)
+    }
+
+    static func box(containing rect: CGRect, in screens: [WindowFittingScreenBox]) -> WindowFittingScreenBox? {
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        return screens.first(where: { $0.frame.contains(center) }) ?? screens.first
+    }
+
+    static func isFullScreen(_ rect: CGRect, in screens: [WindowFittingScreenBox]) -> Bool {
+        guard let screen = box(containing: rect, in: screens) else { return false }
+        return abs(rect.width - screen.frame.width) < 2
+            && abs(rect.height - screen.frame.height) < 2
+    }
+}
+
+private struct WindowFittingContext: Sendable {
+    let primaryHeight: CGFloat
+    let position: TaskbarPosition
+    let barHeight: CGFloat
+    let screens: [WindowFittingScreenBox]
+}
+
+private let windowFittingAXCallback: AXObserverCallback = { _, _, notification, refcon in
+    guard let refcon else { return }
+    let service = Unmanaged<WindowFittingService>.fromOpaque(refcon).takeUnretainedValue()
+    let name = notification as String
+    DispatchQueue.main.async {
+        MainActor.assumeIsolated { service.handleAXNotification(name) }
+    }
+}
+
+@MainActor
+final class WindowFittingService {
+    private let preferences: PreferencesStore
+    private let axQueue = DispatchQueue(label: "io.github.tinymins.WinTaskbar.windowfitting.ax", qos: .userInitiated)
+    private var workspaceObserver: NSObjectProtocol?
+    private var observer: AXObserver?
+    private var observedApplication: AXUIElement?
+    private var observedWindow: AXUIElement?
+    private var pendingClamp: DispatchWorkItem?
+
+    init(preferences: PreferencesStore) { self.preferences = preferences }
+
+    isolated deinit {
+        pendingClamp?.cancel()
+        detach()
+        if let workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver)
         }
     }
 
-    private func cocoaFrame(fromAXFrame frame: CGRect) -> CGRect {
-        let primaryHeight = NSScreen.screens.first?.frame.height ?? frame.maxY
-        return CGRect(x: frame.minX, y: primaryHeight - frame.maxY, width: frame.width, height: frame.height)
+    func start() {
+        guard workspaceObserver == nil else { return }
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self,
+                      let app = NSWorkspace.shared.frontmostApplication else { return }
+                self.attach(to: app)
+                self.scheduleClamp()
+            }
+        }
+        if let app = NSWorkspace.shared.frontmostApplication { attach(to: app) }
     }
 
-    private func approximatelyFullScreen(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
-        abs(lhs.minX - rhs.minX) < 4 && abs(lhs.minY - rhs.minY) < 4
-            && abs(lhs.width - rhs.width) < 4 && abs(lhs.height - rhs.height) < 4
+    func fitAllWindowsToFreeSpace() {
+        guard ensureAccessibility(), let context = context() else { return }
+        if let app = NSWorkspace.shared.frontmostApplication { attach(to: app) }
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        let pids = NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular && !$0.isTerminated && $0.processIdentifier != ownPID }
+            .map(\.processIdentifier)
+        axQueue.async {
+            for pid in pids {
+                Self.fitAllWindows(pid: pid, context: context)
+            }
+        }
     }
 
-    private func frame(of element: AXUIElement) -> CGRect? {
-        var positionRaw: CFTypeRef?
-        var sizeRaw: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionRaw) == .success,
-              AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeRaw) == .success,
-              let positionValue = positionRaw as! AXValue?,
-              let sizeValue = sizeRaw as! AXValue? else { return nil }
-        var position = CGPoint.zero
-        var size = CGSize.zero
-        guard AXValueGetValue(positionValue, .cgPoint, &position), AXValueGetValue(sizeValue, .cgSize, &size) else { return nil }
-        return CGRect(origin: position, size: size)
+    fileprivate func handleAXNotification(_ name: String) {
+        if name == kAXFocusedWindowChangedNotification {
+            observeFocusedWindowResize()
+        }
+        scheduleClamp()
+    }
+
+    private func ensureAccessibility() -> Bool {
+        guard !AXIsProcessTrusted() else { return true }
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        return AXIsProcessTrustedWithOptions(options)
+    }
+
+    private func attach(to app: NSRunningApplication) {
+        detach()
+        guard AXIsProcessTrusted(), app.activationPolicy == .regular, !app.isTerminated else { return }
+        var createdObserver: AXObserver?
+        guard AXObserverCreate(app.processIdentifier, windowFittingAXCallback, &createdObserver) == .success,
+              let createdObserver else { return }
+        let application = AXUIElementCreateApplication(app.processIdentifier)
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        guard AXObserverAddNotification(
+            createdObserver,
+            application,
+            kAXFocusedWindowChangedNotification as CFString,
+            refcon
+        ) == .success else { return }
+        observer = createdObserver
+        observedApplication = application
+        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(createdObserver), .defaultMode)
+        observeFocusedWindowResize()
+    }
+
+    private func detach() {
+        pendingClamp?.cancel()
+        pendingClamp = nil
+        if let observer, let observedWindow {
+            _ = AXObserverRemoveNotification(observer, observedWindow, kAXMovedNotification as CFString)
+            _ = AXObserverRemoveNotification(observer, observedWindow, kAXResizedNotification as CFString)
+        }
+        if let observer, let observedApplication {
+            _ = AXObserverRemoveNotification(observer, observedApplication, kAXFocusedWindowChangedNotification as CFString)
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode)
+        }
+        observedWindow = nil
+        observedApplication = nil
+        observer = nil
+    }
+
+    private func observeFocusedWindowResize() {
+        guard let observer, let application = observedApplication else { return }
+        if let observedWindow {
+            _ = AXObserverRemoveNotification(observer, observedWindow, kAXMovedNotification as CFString)
+            _ = AXObserverRemoveNotification(observer, observedWindow, kAXResizedNotification as CFString)
+        }
+        guard let window = Self.element(application, attribute: kAXFocusedWindowAttribute as CFString) else {
+            observedWindow = nil
+            return
+        }
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        _ = AXObserverAddNotification(observer, window, kAXMovedNotification as CFString, refcon)
+        _ = AXObserverAddNotification(observer, window, kAXResizedNotification as CFString, refcon)
+        observedWindow = window
+    }
+
+    private func scheduleClamp() {
+        pendingClamp?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.clampFrontmostApplication() }
+        pendingClamp = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200), execute: work)
+    }
+
+    private func clampFrontmostApplication() {
+        pendingClamp = nil
+        guard AXIsProcessTrusted(),
+              let app = NSWorkspace.shared.frontmostApplication,
+              app.activationPolicy == .regular,
+              let context = context() else { return }
+        let pid = app.processIdentifier
+        axQueue.async {
+            Self.clampWindows(pid: pid, context: context)
+        }
+    }
+
+    private func context() -> WindowFittingContext? {
+        let screens = NSScreen.screens.map {
+            WindowFittingScreenBox(frame: $0.frame, visibleFrame: $0.visibleFrame)
+        }
+        guard !screens.isEmpty else { return nil }
+        let primaryHeight = screens.first(where: { $0.frame.origin == .zero })?.frame.height
+            ?? NSScreen.main?.frame.height
+            ?? screens[0].frame.height
+        return WindowFittingContext(
+            primaryHeight: primaryHeight,
+            position: preferences.position,
+            barHeight: CGFloat(preferences.barHeight),
+            screens: screens
+        )
+    }
+
+    nonisolated private static func fitAllWindows(pid: pid_t, context: WindowFittingContext) {
+        let application = AXUIElementCreateApplication(pid)
+        for window in windows(of: application) where isFittable(window, context: context) {
+            guard let current = cocoaFrame(of: window, primaryHeight: context.primaryHeight),
+                  let screen = WindowFittingGeometry.box(containing: current, in: context.screens) else { continue }
+            let target = WindowFittingGeometry.freeRect(
+                on: screen,
+                position: context.position,
+                barHeight: context.barHeight
+            )
+            setFrame(window, cocoaFrame: target, primaryHeight: context.primaryHeight)
+        }
+    }
+
+    nonisolated private static func clampWindows(pid: pid_t, context: WindowFittingContext) {
+        let application = AXUIElementCreateApplication(pid)
+        for window in windows(of: application) where isFittable(window, context: context) {
+            guard let current = cocoaFrame(of: window, primaryHeight: context.primaryHeight),
+                  let screen = WindowFittingGeometry.box(containing: current, in: context.screens),
+                  let target = WindowFittingGeometry.clampedRect(
+                      current,
+                      on: screen,
+                      position: context.position,
+                      barHeight: context.barHeight
+                  ) else { continue }
+            setFrame(window, cocoaFrame: target, primaryHeight: context.primaryHeight)
+        }
+    }
+
+    nonisolated private static func isFittable(_ window: AXUIElement, context: WindowFittingContext) -> Bool {
+        guard string(window, attribute: kAXSubroleAttribute as CFString) == kAXStandardWindowSubrole,
+              !bool(window, attribute: kAXMinimizedAttribute as CFString),
+              let frame = cocoaFrame(of: window, primaryHeight: context.primaryHeight) else { return false }
+        return !WindowFittingGeometry.isFullScreen(frame, in: context.screens)
+    }
+
+    nonisolated private static func setFrame(
+        _ window: AXUIElement,
+        cocoaFrame: CGRect,
+        primaryHeight: CGFloat
+    ) {
+        var position = WindowFittingGeometry.axPosition(cocoaFrame: cocoaFrame, primaryHeight: primaryHeight)
+        var size = cocoaFrame.size
+        guard let positionValue = AXValueCreate(.cgPoint, &position),
+              let sizeValue = AXValueCreate(.cgSize, &size) else { return }
+        _ = AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, positionValue)
+        _ = AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, sizeValue)
+        _ = AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, positionValue)
+    }
+
+    nonisolated private static func cocoaFrame(of window: AXUIElement, primaryHeight: CGFloat) -> CGRect? {
+        guard let position = point(window, attribute: kAXPositionAttribute as CFString),
+              let size = size(window, attribute: kAXSizeAttribute as CFString) else { return nil }
+        return WindowFittingGeometry.cocoaFrame(
+            axPosition: position,
+            size: size,
+            primaryHeight: primaryHeight
+        )
+    }
+
+    nonisolated private static func windows(of application: AXUIElement) -> [AXUIElement] {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &raw) == .success,
+              let windows = raw as? [AXUIElement] else { return [] }
+        return windows
+    }
+
+    nonisolated private static func element(_ element: AXUIElement, attribute: CFString) -> AXUIElement? {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &raw) == .success else { return nil }
+        return raw as! AXUIElement?
+    }
+
+    nonisolated private static func string(_ element: AXUIElement, attribute: CFString) -> String? {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &raw) == .success else { return nil }
+        return raw as? String
+    }
+
+    nonisolated private static func bool(_ element: AXUIElement, attribute: CFString) -> Bool {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &raw) == .success else { return false }
+        return raw as? Bool ?? false
+    }
+
+    nonisolated private static func point(_ element: AXUIElement, attribute: CFString) -> CGPoint? {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &raw) == .success,
+              let value = raw as! AXValue? else { return nil }
+        var result = CGPoint.zero
+        return AXValueGetValue(value, .cgPoint, &result) ? result : nil
+    }
+
+    nonisolated private static func size(_ element: AXUIElement, attribute: CFString) -> CGSize? {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &raw) == .success,
+              let value = raw as! AXValue? else { return nil }
+        var result = CGSize.zero
+        return AXValueGetValue(value, .cgSize, &result) ? result : nil
     }
 }

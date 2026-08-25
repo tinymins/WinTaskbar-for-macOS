@@ -237,6 +237,62 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    let fittingScreen = WindowFittingScreenBox(
+        frame: CGRect(x: 0, y: 0, width: 1200, height: 800),
+        visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 775)
+    )
+    guard WindowFittingGeometry.freeRect(
+        on: fittingScreen,
+        position: .bottom,
+        barHeight: 48
+    ) == CGRect(x: 0, y: 51, width: 1200, height: 724),
+    WindowFittingGeometry.freeRect(
+        on: fittingScreen,
+        position: .top,
+        barHeight: 48
+    ) == CGRect(x: 0, y: 0, width: 1200, height: 724),
+    WindowFittingGeometry.freeRect(
+        on: fittingScreen,
+        position: .left,
+        barHeight: 48
+    ) == CGRect(x: 51, y: 0, width: 1149, height: 775),
+    WindowFittingGeometry.freeRect(
+        on: fittingScreen,
+        position: .right,
+        barHeight: 48
+    ) == CGRect(x: 0, y: 0, width: 1149, height: 775),
+    WindowFittingGeometry.clampedRect(
+        CGRect(x: 100, y: 20, width: 600, height: 500),
+        on: fittingScreen,
+        position: .bottom,
+        barHeight: 48
+    ) == CGRect(x: 100, y: 51, width: 600, height: 469),
+    WindowFittingGeometry.clampedRect(
+        CGRect(x: 900, y: 100, width: 300, height: 400),
+        on: fittingScreen,
+        position: .right,
+        barHeight: 48
+    ) == CGRect(x: 900, y: 100, width: 249, height: 400),
+    WindowFittingGeometry.clampedRect(
+        CGRect(x: 100, y: 100, width: 600, height: 500),
+        on: fittingScreen,
+        position: .bottom,
+        barHeight: 48
+    ) == nil,
+    WindowFittingGeometry.cocoaFrame(
+        axPosition: CGPoint(x: 80, y: 120),
+        size: CGSize(width: 600, height: 400),
+        primaryHeight: 800
+    ) == CGRect(x: 80, y: 280, width: 600, height: 400),
+    WindowFittingGeometry.axPosition(
+        cocoaFrame: CGRect(x: 80, y: 280, width: 600, height: 400),
+        primaryHeight: 800
+    ) == CGPoint(x: 80, y: 120),
+    WindowFittingGeometry.isFullScreen(fittingScreen.frame, in: [fittingScreen]) else {
+        fputs("SELF-TEST FAILED: window fitting geometry mismatch\n", stderr)
+        return 1
+    }
+
     guard WindowPreviewPlacement.arrowEdge(for: .top) == .top,
           WindowPreviewPlacement.arrowEdge(for: .bottom) == .bottom,
           WindowPreviewPlacement.arrowEdge(for: .left) == .leading,
@@ -365,7 +421,7 @@ func runSelfTest() async -> Int32 {
         fputs("SELF-TEST FAILED: app URL drag provider did not round-trip\n", stderr)
         return 1
     }
-    print("SELF-TEST PASSED: defaults, taskbar geometry and attention, preference persistence, and app URL drag provider")
+    print("SELF-TEST PASSED: defaults, taskbar and window fitting geometry, attention, preference persistence, and app URL drag provider")
     return 0
 }
 
