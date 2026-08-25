@@ -50,7 +50,7 @@ Each [GitHub Release](https://github.com/tinymins/WinTaskbar-for-macOS/releases)
 | `macos-x86_64` | Intel Macs |
 | `macos-universal` | Both Apple Silicon and Intel Macs (recommended) |
 
-Release archives are signed with Developer ID but are not yet Apple-notarized. On first launch, macOS may require opening the app from the Finder context menu.
+Release archives use a stable self-signed certificate so macOS permission identity survives upgrades. They are not Apple-notarized, so first launch requires opening the app from the Finder context menu.
 
 ## Run from source
 
@@ -82,14 +82,14 @@ See [FEATURES.md](FEATURES.md) for the item-by-item feature matrix.
 
 Pushing a semantic version tag such as `v0.0.1` builds, validates, and publishes the three architecture packages with SHA-256 checksum files. Tags with a prerelease suffix, such as `v0.0.2-rc.1`, are published as GitHub pre-releases. The same build matrix can be run without publishing from the Actions tab.
 
-GitHub Actions requires these repository secrets for stable Developer ID signing:
+GitHub Actions requires these repository secrets for stable self-signing:
 
 | Secret | Value |
 |---|---|
-| `MACOS_CERTIFICATE_BASE64` | Base64-encoded `.p12` containing one Developer ID Application certificate and its private key |
+| `MACOS_CERTIFICATE_BASE64` | Base64-encoded `.p12` containing the pinned code-signing certificate and its private key |
 | `MACOS_CERTIFICATE_PASSWORD` | Password used when exporting the `.p12` |
 
-Export the same certificate for every release. Replacing it with another Developer ID certificate from the same Apple Developer team preserves the default designated requirement; changing the team or bundle identifier does not.
+The public certificate is pinned at `.github/WinTaskbar-CI-Code-Signing.pem`; Actions rejects a different certificate instead of silently changing the app's permission identity. Keep the encrypted `.p12` backed up because replacing the certificate or changing the bundle identifier requires users to grant macOS permissions again.
 
 ## Known limitations
 

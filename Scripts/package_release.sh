@@ -78,7 +78,10 @@ fi
 
 codesign_args=(--force --deep --sign "$SIGNING_IDENTITY")
 if [[ "$SIGNING_IDENTITY" != "-" ]]; then
-  codesign_args+=(--options runtime --timestamp)
+  codesign_args+=(--options runtime)
+fi
+if [[ -n "${SIGNING_KEYCHAIN_PATH:-}" ]]; then
+  codesign_args+=(--keychain "$SIGNING_KEYCHAIN_PATH")
 fi
 codesign "${codesign_args[@]}" "$APP_DIR"
 codesign --verify --deep --strict --verbose=2 "$APP_DIR"

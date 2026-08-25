@@ -49,7 +49,7 @@ jobs:
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
-      - name: Install Developer ID certificate
+      - name: Install stable signing certificate
         shell: bash
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
@@ -60,11 +60,31 @@ jobs:
             exit 1
           fi
 
-          certificate_path="$RUNNER_TEMP/developer-id-application.p12"
+          certificate_path="$RUNNER_TEMP/code-signing.p12"
+          imported_certificate_path="$RUNNER_TEMP/code-signing.pem"
+          pinned_certificate_path="$GITHUB_WORKSPACE/.github/WinTaskbar-CI-Code-Signing.pem"
           keychain_path="$RUNNER_TEMP/app-signing.keychain-db"
           keychain_password=$(uuidgen)
 
           printf '%s' "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$certificate_path"
+          openssl pkcs12 \
+            -in "$certificate_path" \
+            -clcerts \
+            -nokeys \
+            -passin env:P12_PASSWORD \
+            -out "$imported_certificate_path"
+          imported_fingerprint=$(openssl x509 -in "$imported_certificate_path" -noout -fingerprint -sha256)
+          pinned_fingerprint=$(openssl x509 -in "$pinned_certificate_path" -noout -fingerprint -sha256)
+          if [[ "$imported_fingerprint" != "$pinned_fingerprint" ]]; then
+            echo "The signing secret does not match the pinned WinTaskbar certificate." >&2
+            exit 1
+          fi
+          signing_certificate_sha1=$(
+            openssl x509 -in "$pinned_certificate_path" -noout -fingerprint -sha1 |
+              cut -d= -f2 |
+              tr -d ':'
+          )
+
           security create-keychain -p "$keychain_password" "$keychain_path"
           security set-keychain-settings -lut 21600 "$keychain_path"
           security unlock-keychain -p "$keychain_password" "$keychain_path"
@@ -74,6 +94,12 @@ jobs:
             -t cert \
             -f pkcs12 \
             -k "$keychain_path"
+          sudo security add-trusted-cert \
+            -d \
+            -r trustRoot \
+            -p codeSign \
+            -k /Library/Keychains/System.keychain \
+            "$pinned_certificate_path"
           security set-key-partition-list \
             -S apple-tool:,apple: \
             -k "$keychain_password" \
@@ -81,16 +107,17 @@ jobs:
           security list-keychain -d user -s "$keychain_path"
 
           identities=$(security find-identity -v -p codesigning "$keychain_path")
-          identity_count=$(grep -c '"Developer ID Application:' <<< "$identities" || true)
+          identity_count=$(grep -cE '^[[:space:]]*[0-9]+\)' <<< "$identities" || true)
           if [[ "$identity_count" -ne 1 ]]; then
-            echo "Expected exactly one Developer ID Application identity, found $identity_count." >&2
+            echo "Expected exactly one code-signing identity, found $identity_count." >&2
             exit 1
           fi
-          signing_identity=$(awk '/"Developer ID Application:/ { print $2; exit }' <<< "$identities")
+          signing_identity=$(awk '/^[[:space:]]*[0-9]+\)/ { print $2; exit }' <<< "$identities")
 
           echo "SIGNING_IDENTITY=$signing_identity" >> "$GITHUB_ENV"
+          echo "SIGNING_CERTIFICATE_SHA1=$signing_certificate_sha1" >> "$GITHUB_ENV"
           echo "SIGNING_KEYCHAIN_PATH=$keychain_path" >> "$GITHUB_ENV"
-          rm -f "$certificate_path"
+          rm -f "$certificate_path" "$imported_certificate_path"
 
       - name: Build and package
         shell: bash
@@ -104,8 +131,11 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "dist/releases/${{ matrix.architecture }}/WinTaskbar.app"
           signature=$(codesign -dvvv "dist/releases/${{ matrix.architecture }}/WinTaskbar.app" 2>&1)
           requirement=$(codesign -d -r- "dist/releases/${{ matrix.architecture }}/WinTaskbar.app" 2>&1)
-          grep -q '^Authority=Developer ID Application:' <<< "$signature"
-          grep -q '^TeamIdentifier=' <<< "$signature"
+          grep -q '^Authority=WinTaskbar CI Code Signing$' <<< "$signature"
+          if grep -q '^Signature=adhoc$' <<< "$signature"; then
+            echo "Release is still ad-hoc signed." >&2
+            exit 1
+          fi
           if grep -q 'designated => cdhash' <<< "$requirement"; then
             echo "Release is still using an ad-hoc designated requirement." >&2
             exit 1
@@ -125,6 +155,11 @@ jobs:
         if: always()
         shell: bash
         run: |
+          if [[ -n "${SIGNING_CERTIFICATE_SHA1:-}" ]]; then
+            sudo security delete-certificate \
+              -Z "$SIGNING_CERTIFICATE_SHA1" \
+              /Library/Keychains/System.keychain || true
+          fi
           if [[ -n "${SIGNING_KEYCHAIN_PATH:-}" ]]; then
             security delete-keychain "$SIGNING_KEYCHAIN_PATH" || true
           fi
