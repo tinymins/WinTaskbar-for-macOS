@@ -313,6 +313,8 @@ private struct TaskbarAppButton: View {
     let windowsService: WindowsService
     let recentDocuments: RecentDocumentsService
     @State private var showPreview = false
+    @State private var previewHoverTask: Task<Void, Never>?
+    @State private var previewCloseTask: Task<Void, Never>?
     @State private var showShortcutEditor = false
     @State private var lastBadge: String?
     @State private var attentionFlash = false
@@ -342,8 +344,11 @@ private struct TaskbarAppButton: View {
             if item.badge != nil { startAttentionFlash() }
         }
         .onChange(of: item.badge) { badge in updateAttention(for: badge) }
-        .onDisappear { stopAttentionFlash() }
-        .onHover { hovering in showPreview = hovering && preferences.windowPreviewsEnabled && item.processIdentifier != nil }
+        .onDisappear {
+            stopAttentionFlash()
+            cancelPreviewTasks()
+        }
+        .onHover(perform: handlePreviewHover)
         .popover(
             isPresented: $showPreview,
             arrowEdge: WindowPreviewPlacement.arrowEdge(for: preferences.position)
@@ -352,6 +357,7 @@ private struct TaskbarAppButton: View {
                 WindowPreviewPopover(windows: windowsService.windows(forPID: pid), service: windowsService) {
                     windowActivator.raise(window: $0); showPreview = false
                 }
+                .onHover(perform: handlePreviewPopoverHover)
             }
         }
         .contextMenu {
@@ -379,6 +385,54 @@ private struct TaskbarAppButton: View {
                 isPresented: $showShortcutEditor
             )
         }
+    }
+
+    private func handlePreviewHover(_ hovering: Bool) {
+        guard preferences.windowPreviewsEnabled, item.processIdentifier != nil else {
+            cancelPreviewTasks()
+            showPreview = false
+            return
+        }
+
+        previewHoverTask?.cancel()
+        previewHoverTask = nil
+
+        if hovering {
+            previewCloseTask?.cancel()
+            previewCloseTask = nil
+            previewHoverTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                guard !Task.isCancelled else { return }
+                showPreview = true
+            }
+        } else {
+            schedulePreviewClose()
+        }
+    }
+
+    private func handlePreviewPopoverHover(_ hovering: Bool) {
+        if hovering {
+            previewCloseTask?.cancel()
+            previewCloseTask = nil
+        } else {
+            schedulePreviewClose()
+        }
+    }
+
+    private func schedulePreviewClose() {
+        previewCloseTask?.cancel()
+        previewCloseTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            showPreview = false
+        }
+    }
+
+    private func cancelPreviewTasks() {
+        previewHoverTask?.cancel()
+        previewHoverTask = nil
+        previewCloseTask?.cancel()
+        previewCloseTask = nil
     }
 
     @ViewBuilder
