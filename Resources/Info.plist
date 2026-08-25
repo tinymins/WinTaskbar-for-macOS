@@ -10,6 +10,8 @@
     <string>WinTaskbar</string>
     <key>CFBundleIdentifier</key>
     <string>io.github.tinymins.WinTaskbar</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>

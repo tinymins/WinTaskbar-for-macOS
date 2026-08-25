@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>WinTaskbar application icon</title>
+  <g fill="#0078D4">
+    <rect x="176" y="176" width="322" height="322"/>
+    <rect x="526" y="176" width="322" height="322"/>
+    <rect x="176" y="526" width="322" height="322"/>
+    <rect x="526" y="526" width="322" height="322"/>
+  </g>
+</svg>

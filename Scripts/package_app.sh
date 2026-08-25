@@ -12,6 +12,7 @@ rm -rf "$APP_DIR"
 mkdir -p "$CONTENTS_DIR/MacOS" "$CONTENTS_DIR/Resources"
 cp "$ROOT_DIR/.build/release/WinTaskbar" "$CONTENTS_DIR/MacOS/WinTaskbar"
 cp "$ROOT_DIR/Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
+cp "$ROOT_DIR/Resources/AppIcon.icns" "$CONTENTS_DIR/Resources/AppIcon.icns"
 for localization in "$ROOT_DIR"/Resources/*.lproj; do
   cp -R "$localization" "$CONTENTS_DIR/Resources/"
 done
