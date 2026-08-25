@@ -313,6 +313,47 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    var optionGesture = OptionKeyGestureState()
+    guard !optionGesture.flagsChanged(to: [.option]),
+          optionGesture.flagsChanged(to: []) else {
+        fputs("SELF-TEST FAILED: Option-only release did not trigger\n", stderr)
+        return 1
+    }
+    optionGesture = OptionKeyGestureState()
+    guard !optionGesture.flagsChanged(to: [.capsLock, .option]),
+          optionGesture.flagsChanged(to: [.capsLock]) else {
+        fputs("SELF-TEST FAILED: Caps Lock blocked Option-only release\n", stderr)
+        return 1
+    }
+    optionGesture = OptionKeyGestureState()
+    _ = optionGesture.flagsChanged(to: [.option])
+    optionGesture.keyDown()
+    guard !optionGesture.flagsChanged(to: []) else {
+        fputs("SELF-TEST FAILED: Option key combination triggered\n", stderr)
+        return 1
+    }
+    optionGesture = OptionKeyGestureState()
+    guard !optionGesture.flagsChanged(to: [.command]),
+          !optionGesture.flagsChanged(to: [.command, .option]),
+          !optionGesture.flagsChanged(to: [.command]) else {
+        fputs("SELF-TEST FAILED: pre-held modifier combination triggered\n", stderr)
+        return 1
+    }
+    optionGesture = OptionKeyGestureState()
+    guard !optionGesture.flagsChanged(to: [.option]),
+          !optionGesture.flagsChanged(to: [.option, .shift]),
+          !optionGesture.flagsChanged(to: [.shift]) else {
+        fputs("SELF-TEST FAILED: modifier added after Option triggered\n", stderr)
+        return 1
+    }
+    optionGesture = OptionKeyGestureState()
+    guard !optionGesture.flagsChanged(to: [.option]),
+          !optionGesture.flagsChanged(to: [.option]),
+          !optionGesture.flagsChanged(to: []) else {
+        fputs("SELF-TEST FAILED: dual Option gesture triggered\n", stderr)
+        return 1
+    }
+
     guard TaskbarAttentionPolicy.shouldRequest(previous: nil, current: "1"),
           TaskbarAttentionPolicy.shouldRequest(previous: "1", current: "2"),
           !TaskbarAttentionPolicy.shouldRequest(previous: "2", current: "1"),
@@ -421,7 +462,7 @@ func runSelfTest() async -> Int32 {
         fputs("SELF-TEST FAILED: app URL drag provider did not round-trip\n", stderr)
         return 1
     }
-    print("SELF-TEST PASSED: defaults, taskbar and window fitting geometry, attention, preference persistence, and app URL drag provider")
+    print("SELF-TEST PASSED: defaults, taskbar and window fitting geometry, Option gesture, attention, preference persistence, and app URL drag provider")
     return 0
 }
 
