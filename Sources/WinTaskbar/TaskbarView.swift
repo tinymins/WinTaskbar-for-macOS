@@ -702,6 +702,11 @@ private struct WindowPreviewButton: View {
 
 private struct TaskbarButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.padding(3).background(configuration.isPressed ? Color.primary.opacity(0.15) : .clear).clipShape(RoundedRectangle(cornerRadius: 6))
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.82 : 1)
+            .padding(3)
+            .background(configuration.isPressed ? Color.primary.opacity(0.15) : .clear)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
