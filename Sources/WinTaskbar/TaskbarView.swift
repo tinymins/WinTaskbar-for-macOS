@@ -797,13 +797,23 @@ private struct WindowPreviewButton: View {
 
     @ViewBuilder
     private var thumbnail: some View {
-        if let image = service.thumbnail(for: window.windowID) {
-            Image(nsImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 150, height: 90)
-                .clipShape(RoundedRectangle(cornerRadius: 5))
+        Group {
+            if let image = service.thumbnail(for: window) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                ZStack {
+                    Color.primary.opacity(0.06)
+                    Image(systemName: "macwindow")
+                        .font(.system(size: 24, weight: .light))
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityLabel("Preview unavailable")
+            }
         }
+        .frame(width: 150, height: 90)
+        .clipShape(RoundedRectangle(cornerRadius: 5))
     }
 }
 

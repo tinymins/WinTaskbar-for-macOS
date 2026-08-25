@@ -9,8 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let apps = AppDiscoveryService()
     private let status = SystemStatusService()
     private let actions = AppActions()
-    private let windowActivator = WindowActivationService()
     private let windowsService = WindowsService()
+    private lazy var windowActivator = WindowActivationService(windowsService: windowsService)
     private let recentDocuments = RecentDocumentsService()
     private let dockBadges = DockBadgeService()
     private let powerService = PowerService()
@@ -360,6 +360,17 @@ func runSelfTest() async -> Int32 {
               minimizedWindowFrames: []
           ) else {
         fputs("SELF-TEST FAILED: minimized window preview policy mismatch\n", stderr)
+        return 1
+    }
+
+    let thumbnailCache = WindowThumbnailCache()
+    let capturedThumbnail = NSImage(size: NSSize(width: 320, height: 180))
+    let refreshedThumbnail = NSImage(size: NSSize(width: 640, height: 360))
+    guard thumbnailCache.image(for: 101, capture: { capturedThumbnail }) === capturedThumbnail,
+          thumbnailCache.image(for: 101, capture: { nil }) === capturedThumbnail,
+          thumbnailCache.image(for: 101, capture: { refreshedThumbnail }) === refreshedThumbnail,
+          thumbnailCache.image(for: 202, capture: { nil }) == nil else {
+        fputs("SELF-TEST FAILED: window thumbnail cache mismatch\n", stderr)
         return 1
     }
 

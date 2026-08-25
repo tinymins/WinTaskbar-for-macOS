@@ -130,7 +130,7 @@ final class WindowPeekController {
         orderOutTask?.cancel()
         orderOutTask = nil
 
-        guard let image = windowsService.thumbnail(for: window.windowID) else {
+        guard let image = windowsService.thumbnail(for: window) else {
             hideImmediately()
             return
         }

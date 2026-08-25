@@ -5,6 +5,12 @@ import Foundation
 
 @MainActor
 final class WindowActivationService {
+    private let windowsService: WindowsService
+
+    init(windowsService: WindowsService) {
+        self.windowsService = windowsService
+    }
+
     func activateOrMinimize(_ item: TaskbarItem) {
         guard let pid = item.processIdentifier,
               let application = NSRunningApplication(processIdentifier: pid) else {
@@ -13,6 +19,7 @@ final class WindowActivationService {
         }
 
         if application.isActive, hasVisibleWindow(pid: pid) {
+            windowsService.cacheThumbnails(forPID: pid)
             minimize(pid: pid)
         } else {
             application.activate(options: [.activateIgnoringOtherApps])
@@ -99,7 +106,27 @@ final class WindowActivationService {
 }
 
 @MainActor
+final class WindowThumbnailCache {
+    private let images = NSCache<NSNumber, NSImage>()
+
+    init() {
+        images.countLimit = 32
+    }
+
+    func image(for windowID: CGWindowID, capture: () -> NSImage?) -> NSImage? {
+        let key = NSNumber(value: windowID)
+        if let image = capture() {
+            images.setObject(image, forKey: key)
+            return image
+        }
+        return images.object(forKey: key)
+    }
+}
+
+@MainActor
 final class WindowsService {
+    private let thumbnailCache = WindowThumbnailCache()
+
     func windows(forPID pid: pid_t) -> [WindowInfo] {
         let minimizedWindowFrames = minimizedWindowFrames(forPID: pid)
         guard let raw = CGWindowListCopyWindowInfo(WindowPreviewWindowPolicy.listOptions, kCGNullWindowID)
@@ -124,18 +151,33 @@ final class WindowsService {
                 frame: frame,
                 minimizedWindowFrames: minimizedWindowFrames
             ) else { return nil }
-            return WindowInfo(windowID: windowID, title: title, ownerPID: ownerPID, frame: frame)
+            return WindowInfo(
+                windowID: windowID,
+                title: title,
+                ownerPID: ownerPID,
+                frame: frame,
+                isMinimized: !isOnScreen
+            )
         }
     }
 
-    func thumbnail(for windowID: CGWindowID) -> NSImage? {
-        guard let image = CGWindowListCreateImage(
-            .null,
-            .optionIncludingWindow,
-            windowID,
-            [.boundsIgnoreFraming, .bestResolution]
-        ) else { return nil }
-        return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
+    func cacheThumbnails(forPID pid: pid_t) {
+        for window in windows(forPID: pid) {
+            _ = thumbnail(for: window)
+        }
+    }
+
+    func thumbnail(for window: WindowInfo) -> NSImage? {
+        thumbnailCache.image(for: window.windowID) {
+            guard !window.isMinimized else { return nil }
+            guard let image = CGWindowListCreateImage(
+                .null,
+                .optionIncludingWindow,
+                window.windowID,
+                [.boundsIgnoreFraming, .bestResolution]
+            ) else { return nil }
+            return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
+        }
     }
 
     private func minimizedWindowFrames(forPID pid: pid_t) -> [CGRect] {

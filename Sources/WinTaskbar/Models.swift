@@ -181,6 +181,7 @@ struct WindowInfo: Identifiable, Hashable {
     let title: String
     let ownerPID: pid_t
     let frame: CGRect
+    let isMinimized: Bool
 
     var id: CGWindowID { windowID }
 }
