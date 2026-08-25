@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#08111f">
+  <meta name="description" content="WinTaskbar brings a native Windows-style taskbar, Start menu, window previews, and Aero Peek to macOS.">
+  <meta property="og:title" content="WinTaskbar for macOS">
+  <meta property="og:description" content="Windows muscle memory. Native macOS speed.">
+  <meta property="og:image" content="https://tinymins.github.io/WinTaskbar-for-macOS/screenshots/aero-peek.png">
+  <meta property="og:url" content="https://tinymins.github.io/WinTaskbar-for-macOS/">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <title>WinTaskbar for macOS</title>
+  <link rel="stylesheet" href="assets/site.css">
+  <script src="assets/site.js" defer></script>
+</head>
+<body>
+  <div class="ambient ambient-one" aria-hidden="true"></div>
+  <div class="ambient ambient-two" aria-hidden="true"></div>
+
+  <header class="site-header glass">
+    <a class="brand" href="#top" aria-label="WinTaskbar home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span>WinTaskbar</span>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a href="#experience">Experience</a>
+      <a href="#features">Features</a>
+      <a href="#download">Download</a>
+    </nav>
+    <a class="github-link" href="https://github.com/tinymins/WinTaskbar-for-macOS">View on GitHub <span>↗</span></a>
+  </header>
+
+  <main id="top">
+    <section class="hero-desktop reveal" aria-label="Interactive WinTaskbar desktop demo">
+      <div class="desktop-wallpaper" id="desktop-demo">
+        <div class="desktop-orb desktop-orb-one" aria-hidden="true"></div>
+        <div class="desktop-orb desktop-orb-two" aria-hidden="true"></div>
+
+        <div class="demo-window demo-window-browser" data-demo-window="browser">
+          <div class="demo-titlebar"><span class="traffic-lights"><i></i><i></i><i></i></span><span>WinTaskbar · Browser</span><span class="demo-window-action">⌘ K</span></div>
+          <div class="browser-toolbar"><span>‹</span><span>›</span><span>↻</span><div>tinymins.github.io/WinTaskbar-for-macOS</div></div>
+          <div class="browser-content"><div class="browser-logo"><span class="brand-mark"><i></i><i></i><i></i><i></i></span></div><h3>Make your Mac<br>work your way.</h3><p>A familiar workflow, rebuilt natively.</p></div>
+        </div>
+
+        <div class="demo-window demo-window-files" data-demo-window="files">
+          <div class="demo-titlebar"><span class="traffic-lights"><i></i><i></i><i></i></span><span>Applications</span><span class="demo-window-action">•••</span></div>
+          <div class="files-layout"><aside><b>Favorites</b><span>⌂ Home</span><span>▣ Applications</span><span>↓ Downloads</span><span>◫ Documents</span></aside><div class="files-grid"><i class="file-app blue">A</i><i class="file-app cyan">⌘</i><i class="file-app violet">✦</i><i class="file-app red">◉</i><i class="file-app yellow">▤</i><i class="file-app green">⌁</i></div></div>
+        </div>
+
+        <div class="desktop-message" data-demo-window="home">
+          <div class="eyebrow"><span></span> Interactive web preview</div>
+          <h1>Windows muscle memory.<br><em>Native macOS speed.</em></h1>
+          <p>Try the taskbar below. Open Start, hover an app for window previews, then hover a preview to experience Aero Peek.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://github.com/tinymins/WinTaskbar-for-macOS/releases/latest">Download for macOS <span>↓</span></a>
+            <a class="button button-secondary" href="#experience">See everything it can do</a>
+          </div>
+          <div class="try-hint"><span class="mouse-icon">⌁</span><span><b>Try it now</b> · Start with the taskbar</span></div>
+        </div>
+
+        <div class="start-panel" id="demo-start-panel" aria-hidden="true">
+          <div class="start-sidebar">
+            <button aria-label="Settings">⚙</button><button aria-label="Display">▣</button><span></span><button aria-label="Lock">●</button><button aria-label="Sleep">◒</button><button aria-label="Power">⏻</button>
+          </div>
+          <div class="start-main">
+            <div class="start-heading"><span>All apps</span><button>All <b>›</b></button></div>
+            <div class="start-grid">
+              <button><i class="file-app blue">A</i><span>App Store</span></button>
+              <button><i class="file-app cyan">⌘</i><span>Finder</span></button>
+              <button><i class="file-app violet">✦</i><span>Photos</span></button>
+              <button><i class="file-app red">◉</i><span>Music</span></button>
+              <button><i class="file-app yellow">▤</i><span>Notes</span></button>
+              <button><i class="file-app green">⌁</i><span>Messages</span></button>
+            </div>
+            <label class="start-search"><span>⌕</span><input type="search" placeholder="Search apps" aria-label="Search simulated apps"></label>
+          </div>
+        </div>
+
+        <div class="preview-popover" id="preview-browser" data-preview="browser" aria-hidden="true">
+          <div class="preview-shot browser-preview"><span class="brand-mark"><i></i><i></i><i></i><i></i></span><b>WinTaskbar</b></div>
+          <div class="preview-label"><span>WinTaskbar website</span><small>Browser</small></div>
+        </div>
+        <div class="preview-popover" id="preview-files" data-preview="files" aria-hidden="true">
+          <div class="preview-shot files-preview"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="preview-label"><span>Applications</span><small>Finder</small></div>
+        </div>
+
+        <div class="aero-label" id="aero-label"><span></span>Aero Peek · move away to restore</div>
+
+        <div class="web-taskbar glass" id="web-taskbar">
+          <button class="taskbar-start" id="demo-start" aria-expanded="false" aria-controls="demo-start-panel"><span class="brand-mark"><i></i><i></i><i></i><i></i></span><small>Start</small></button>
+          <span class="taskbar-separator"></span>
+          <button class="taskbar-app" data-app="files" aria-label="Finder"><i class="file-app cyan">⌘</i><span></span><small>Finder</small></button>
+          <button class="taskbar-app" data-app="browser" aria-label="Browser"><i class="file-app blue">◉</i><span></span><small>Browser</small></button>
+          <button class="taskbar-app" data-app="notes" aria-label="Notes"><i class="file-app yellow">▤</i><small>Notes</small></button>
+          <button class="taskbar-app" data-app="music" aria-label="Music"><i class="file-app red">♪</i><small>Music</small></button>
+          <div class="taskbar-spacer"></div>
+          <button class="tray-button" aria-label="Wi-Fi">⌁</button><button class="tray-button" aria-label="Volume">◖</button><button class="taskbar-clock" aria-label="Clock"><b id="demo-time">09:41</b><span id="demo-date">Aug 25</span></button>
+        </div>
+      </div>
+      <div class="demo-caption"><span>Web simulation · no installation needed</span><span>Start menu</span><span>Window previews</span><span>Aero Peek</span></div>
+    </section>
+
+    <section class="marquee" aria-label="Highlights">
+      <div class="marquee-track">
+        <span>START MENU</span><i></i><span>AERO PEEK</span><i></i><span>WINDOW PREVIEWS</span><i></i><span>MULTI-DISPLAY</span><i></i><span>SYSTEM TRAY</span><i></i>
+        <span>START MENU</span><i></i><span>AERO PEEK</span><i></i><span>WINDOW PREVIEWS</span><i></i><span>MULTI-DISPLAY</span><i></i><span>SYSTEM TRAY</span><i></i>
+      </div>
+    </section>
+
+    <section id="experience" class="experience section-shell">
+      <div class="section-heading reveal">
+        <div class="eyebrow"><span></span> The full experience</div>
+        <h2>Your workflow,<br><em>right where you expect it.</em></h2>
+      </div>
+
+      <article class="showcase showcase-wide reveal">
+        <div class="showcase-copy">
+          <span class="number">01</span>
+          <h3>A taskbar that belongs on your Mac</h3>
+          <p>Pin favorites, see running apps, read notification badges, reorder by drag, and place the bar on any screen edge.</p>
+        </div>
+        <div class="showcase-media taskbar-showcase glass">
+          <img src="screenshots/taskbar.jpg" alt="WinTaskbar running along the bottom of the macOS desktop" loading="lazy">
+        </div>
+      </article>
+
+      <div class="showcase-grid">
+        <article class="showcase reveal">
+          <div class="showcase-copy">
+            <span class="number">02</span>
+            <h3>A Start menu that feels instantly familiar</h3>
+            <p>Search apps, build folders, drag in shortcuts, and reach the controls you use every day.</p>
+          </div>
+          <div class="showcase-media start-showcase glass">
+            <img src="screenshots/start-menu.jpg" alt="WinTaskbar translucent Start menu with apps and power controls" loading="lazy">
+          </div>
+        </article>
+
+        <article class="showcase reveal peek-card">
+          <div class="showcase-copy">
+            <span class="number">03</span>
+            <h3>Hover. Peek. Switch.</h3>
+            <p>Preview every window, then use Aero Peek to isolate exactly the one you want without disturbing your desktop.</p>
+          </div>
+          <div class="showcase-media glass">
+            <img src="screenshots/aero-peek.png" alt="Aero Peek isolating a selected macOS window" loading="lazy">
+            <div class="peek-sweep" aria-hidden="true"></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="features" class="features section-shell">
+      <div class="section-heading centered reveal">
+        <div class="eyebrow"><span></span> Built for daily use</div>
+        <h2>Powerful underneath.<br><em>Effortless on the surface.</em></h2>
+      </div>
+      <div class="feature-grid">
+        <article class="feature-card glass reveal"><span class="feature-icon">◫</span><h3>Any edge, any display</h3><p>Bottom, top, left, or right—with primary-only and all-display modes.</p></article>
+        <article class="feature-card glass reveal"><span class="feature-icon">⌘</span><h3>Native and responsive</h3><p>Built with AppKit and SwiftUI for a lightweight, Mac-first experience.</p></article>
+        <article class="feature-card glass reveal"><span class="feature-icon">◉</span><h3>Window intelligence</h3><p>Thumbnails, hover previews, activation, minimization, and fitting around the bar.</p></article>
+        <article class="feature-card glass reveal"><span class="feature-icon">⌁</span><h3>System controls</h3><p>Calendar, battery, volume, Wi-Fi, input source, power actions, and Show Desktop.</p></article>
+        <article class="feature-card glass reveal"><span class="feature-icon">↗</span><h3>Drag-and-drop setup</h3><p>Reorder apps, create folders, and drop apps or files directly into shortcuts.</p></article>
+        <article class="feature-card glass reveal"><span class="feature-icon">文</span><h3>Made for everyone</h3><p>Twelve bundled languages, reduced-motion support, and native accessibility.</p></article>
+      </div>
+    </section>
+
+    <section id="download" class="download section-shell reveal">
+      <div class="download-panel glass">
+        <div class="download-glow" aria-hidden="true"></div>
+        <div>
+          <div class="eyebrow"><span></span> Ready when you are</div>
+          <h2>Make your Mac<br><em>work your way.</em></h2>
+          <p>Choose the universal build for any modern Mac, or download an architecture-specific package.</p>
+        </div>
+        <div class="download-actions">
+          <a class="button button-primary" href="https://github.com/tinymins/WinTaskbar-for-macOS/releases/latest">Get the latest release <span>↓</span></a>
+          <div class="architecture-list"><span>Universal</span><span>Apple Silicon</span><span>Intel</span></div>
+          <small>Open source · MIT License · macOS 13 or later</small>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="section-shell">
+    <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>WinTaskbar</span></a>
+    <p>A Windows-style taskbar, thoughtfully rebuilt for macOS.</p>
+    <a href="https://github.com/tinymins/WinTaskbar-for-macOS">GitHub ↗</a>
+  </footer>
+</body>
+</html>

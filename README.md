@@ -1,10 +1,29 @@
+<div align="center">
+
 # WinTaskbar for macOS
 
-[![Release](https://github.com/tinymins/WinTaskbar-for-macOS/actions/workflows/release.yml/badge.svg)](https://github.com/tinymins/WinTaskbar-for-macOS/actions/workflows/release.yml)
+**Windows muscle memory. Native macOS speed.**
 
-A Windows-style taskbar for macOS.
+A native Windows-style taskbar, Start menu, window previews, and Aero Peek for macOS.
 
-WinTaskbar is a native AppKit and SwiftUI application that brings a familiar Windows-style taskbar workflow to macOS, including pinned and running apps, window previews, a searchable Start menu, system tray controls, and multi-display layouts.
+[![Release](https://img.shields.io/github/v/release/tinymins/WinTaskbar-for-macOS?include_prereleases&style=flat-square)](https://github.com/tinymins/WinTaskbar-for-macOS/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/tinymins/WinTaskbar-for-macOS/release.yml?style=flat-square&label=build)](https://github.com/tinymins/WinTaskbar-for-macOS/actions/workflows/release.yml)
+[![macOS 13+](https://img.shields.io/badge/macOS-13%2B-111827?style=flat-square&logo=apple)](https://github.com/tinymins/WinTaskbar-for-macOS/releases)
+[![MIT](https://img.shields.io/badge/license-MIT-2563eb?style=flat-square)](LICENSE)
+
+[Try the interactive web demo](https://tinymins.github.io/WinTaskbar-for-macOS/) · [Download a release](https://github.com/tinymins/WinTaskbar-for-macOS/releases)
+
+![Interactive Aero Peek experience](docs/screenshots/aero-peek.png)
+
+</div>
+
+The website is a realistic, installation-free simulation of the design. Open Start, hover a taskbar app to reveal its window preview, then move into the preview to try Aero Peek. The macOS app itself is built natively with AppKit and SwiftUI.
+
+## See it in action
+
+| Native taskbar | Native Start menu |
+|---|---|
+| ![WinTaskbar along the bottom of macOS](docs/screenshots/taskbar.jpg) | ![Translucent WinTaskbar Start menu](docs/screenshots/start-menu.jpg) |
 
 ## Features
 
@@ -23,13 +42,13 @@ WinTaskbar is a native AppKit and SwiftUI application that brings a familiar Win
 
 ## Download
 
-Each [GitHub Release](https://github.com/tinymins/WinTaskbar-for-macOS/releases) provides three builds:
+Each [GitHub Release](https://github.com/tinymins/WinTaskbar-for-macOS/releases) provides three builds. Most people should choose the universal package.
 
 | Package | Mac type |
 |---|---|
 | `macos-arm64` | Apple Silicon Macs (M1 and newer) |
 | `macos-x86_64` | Intel Macs |
-| `macos-universal` | Both Apple Silicon and Intel Macs |
+| `macos-universal` | Both Apple Silicon and Intel Macs (recommended) |
 
 Release archives are ad-hoc signed but not Apple-notarized. On first launch, macOS may require opening the app from the Finder context menu.
 
