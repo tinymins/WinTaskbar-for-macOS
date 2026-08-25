@@ -13,6 +13,8 @@ enum PowerAction: String, CaseIterable, Identifiable {
     case logOut = "Log Out"
 
     var id: String { rawValue }
+
+    var requiresConfirmation: Bool { self != .lockScreen }
 }
 
 @MainActor

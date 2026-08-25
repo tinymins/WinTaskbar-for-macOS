@@ -136,7 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func confirmAndPerform(_ action: PowerAction) {
-        if action == .lockScreen || action == .sleep {
+        if !action.requiresConfirmation {
             powerService.perform(action)
             return
         }
@@ -185,6 +185,15 @@ func runSelfTest() async -> Int32 {
           preferences.menuButtonPlacement == .standard,
           preferences.hotkeyShortcuts.count == 11 else {
         fputs("SELF-TEST FAILED: default values mismatch\n", stderr)
+        return 1
+    }
+
+    guard !PowerAction.lockScreen.requiresConfirmation,
+          PowerAction.sleep.requiresConfirmation,
+          PowerAction.logOut.requiresConfirmation,
+          PowerAction.restart.requiresConfirmation,
+          PowerAction.shutDown.requiresConfirmation else {
+        fputs("SELF-TEST FAILED: power confirmation policy mismatch\n", stderr)
         return 1
     }
 
