@@ -305,6 +305,27 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    let minimizedWindowFrame = CGRect(x: 40, y: 80, width: 900, height: 600)
+    guard !WindowPreviewWindowPolicy.listOptions.contains(.optionOnScreenOnly),
+          WindowPreviewWindowPolicy.shouldInclude(
+              isOnScreen: true,
+              frame: CGRect(x: 10, y: 20, width: 800, height: 500),
+              minimizedWindowFrames: []
+          ),
+          WindowPreviewWindowPolicy.shouldInclude(
+              isOnScreen: false,
+              frame: minimizedWindowFrame,
+              minimizedWindowFrames: [minimizedWindowFrame]
+          ),
+          !WindowPreviewWindowPolicy.shouldInclude(
+              isOnScreen: false,
+              frame: minimizedWindowFrame,
+              minimizedWindowFrames: []
+          ) else {
+        fputs("SELF-TEST FAILED: minimized window preview policy mismatch\n", stderr)
+        return 1
+    }
+
     guard WindowPeekGeometry.localFrame(
         windowFrame: CGRect(x: 2000, y: 100, width: 800, height: 600),
         displayBounds: CGRect(x: 1920, y: 0, width: 1920, height: 1080)

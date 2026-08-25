@@ -101,7 +101,8 @@ final class WindowActivationService {
 @MainActor
 final class WindowsService {
     func windows(forPID pid: pid_t) -> [WindowInfo] {
-        guard let raw = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+        let minimizedWindowFrames = minimizedWindowFrames(forPID: pid)
+        guard let raw = CGWindowListCopyWindowInfo(WindowPreviewWindowPolicy.listOptions, kCGNullWindowID)
                 as? [[String: Any]] else { return [] }
         return raw.compactMap { info in
             guard let ownerPID = info[kCGWindowOwnerPID as String] as? pid_t,
@@ -117,6 +118,12 @@ final class WindowsService {
                 height: bounds["Height"] ?? 0
             )
             guard frame.width > 80, frame.height > 50 else { return nil }
+            let isOnScreen = info[kCGWindowIsOnscreen as String] as? Bool ?? false
+            guard WindowPreviewWindowPolicy.shouldInclude(
+                isOnScreen: isOnScreen,
+                frame: frame,
+                minimizedWindowFrames: minimizedWindowFrames
+            ) else { return nil }
             return WindowInfo(windowID: windowID, title: title, ownerPID: ownerPID, frame: frame)
         }
     }
@@ -129,6 +136,45 @@ final class WindowsService {
             [.boundsIgnoreFraming, .bestResolution]
         ) else { return nil }
         return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
+    }
+
+    private func minimizedWindowFrames(forPID pid: pid_t) -> [CGRect] {
+        let application = AXUIElementCreateApplication(pid)
+        let windows: [AXUIElement] = attribute(application, kAXWindowsAttribute) ?? []
+        return windows.compactMap { window in
+            let minimized: Bool = attribute(window, kAXMinimizedAttribute) ?? false
+            guard minimized,
+                  let positionValue: AXValue = attribute(window, kAXPositionAttribute),
+                  let sizeValue: AXValue = attribute(window, kAXSizeAttribute) else { return nil }
+            var origin = CGPoint.zero
+            var size = CGSize.zero
+            guard AXValueGetValue(positionValue, .cgPoint, &origin),
+                  AXValueGetValue(sizeValue, .cgSize, &size) else { return nil }
+            return CGRect(origin: origin, size: size)
+        }
+    }
+
+    private func attribute<T>(_ element: AXUIElement, _ name: String) -> T? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
+        return value as? T
+    }
+}
+
+struct WindowPreviewWindowPolicy {
+    static let listOptions: CGWindowListOption = [.excludeDesktopElements]
+
+    static func shouldInclude(
+        isOnScreen: Bool,
+        frame: CGRect,
+        minimizedWindowFrames: [CGRect]
+    ) -> Bool {
+        isOnScreen || minimizedWindowFrames.contains { minimizedFrame in
+            abs(minimizedFrame.minX - frame.minX) < 4
+                && abs(minimizedFrame.minY - frame.minY) < 4
+                && abs(minimizedFrame.width - frame.width) < 4
+                && abs(minimizedFrame.height - frame.height) < 4
+        }
     }
 }
 
