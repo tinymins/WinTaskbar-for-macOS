@@ -67,12 +67,17 @@ jobs:
           keychain_password=$(uuidgen)
 
           printf '%s' "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$certificate_path"
-          openssl pkcs12 \
-            -in "$certificate_path" \
-            -clcerts \
-            -nokeys \
-            -passin env:P12_PASSWORD \
+          pkcs12_args=(
+            -in "$certificate_path"
+            -clcerts
+            -nokeys
+            -passin env:P12_PASSWORD
             -out "$imported_certificate_path"
+          )
+          if [[ "$(openssl version)" == "OpenSSL 3"* ]]; then
+            pkcs12_args+=(-legacy)
+          fi
+          openssl pkcs12 "${pkcs12_args[@]}"
           imported_fingerprint=$(openssl x509 -in "$imported_certificate_path" -noout -fingerprint -sha256)
           pinned_fingerprint=$(openssl x509 -in "$pinned_certificate_path" -noout -fingerprint -sha256)
           if [[ "$imported_fingerprint" != "$pinned_fingerprint" ]]; then
