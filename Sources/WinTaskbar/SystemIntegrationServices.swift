@@ -320,7 +320,7 @@ final class WindowFittingService {
             .map(\.processIdentifier)
         axQueue.async {
             for pid in pids {
-                Self.fitAllWindows(pid: pid, context: context)
+                Self.clampWindows(pid: pid, context: context)
             }
         }
     }
@@ -423,20 +423,6 @@ final class WindowFittingService {
             barHeight: CGFloat(preferences.barHeight),
             screens: screens
         )
-    }
-
-    nonisolated private static func fitAllWindows(pid: pid_t, context: WindowFittingContext) {
-        let application = AXUIElementCreateApplication(pid)
-        for window in windows(of: application) where isFittable(window, context: context) {
-            guard let current = cocoaFrame(of: window, primaryHeight: context.primaryHeight),
-                  let screen = WindowFittingGeometry.box(containing: current, in: context.screens) else { continue }
-            let target = WindowFittingGeometry.freeRect(
-                on: screen,
-                position: context.position,
-                barHeight: context.barHeight
-            )
-            setFrame(window, cocoaFrame: target, primaryHeight: context.primaryHeight)
-        }
     }
 
     nonisolated private static func clampWindows(pid: pid_t, context: WindowFittingContext) {
