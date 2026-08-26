@@ -28,6 +28,108 @@ struct SystemCalendarDescriptor: Equatable, Identifiable, Sendable {
     let isDefault: Bool
 }
 
+enum SystemCalendarRecurrenceOption: String, CaseIterable, Identifiable, Sendable {
+    case never
+    case daily
+    case weekly
+    case monthly
+    case yearly
+    case custom
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .never: NSLocalizedString("Never", comment: "Calendar recurrence")
+        case .daily: NSLocalizedString("Every day", comment: "Calendar recurrence")
+        case .weekly: NSLocalizedString("Every week", comment: "Calendar recurrence")
+        case .monthly: NSLocalizedString("Every month", comment: "Calendar recurrence")
+        case .yearly: NSLocalizedString("Every year", comment: "Calendar recurrence")
+        case .custom: NSLocalizedString("Custom", comment: "Calendar recurrence")
+        }
+    }
+
+    var eventKitRule: EKRecurrenceRule? {
+        let frequency: EKRecurrenceFrequency
+        switch self {
+        case .never, .custom: return nil
+        case .daily: frequency = .daily
+        case .weekly: frequency = .weekly
+        case .monthly: frequency = .monthly
+        case .yearly: frequency = .yearly
+        }
+        return EKRecurrenceRule(recurrenceWith: frequency, interval: 1, end: nil)
+    }
+
+    static func option(for rules: [EKRecurrenceRule]?) -> Self {
+        guard let rules, rules.count == 1, let rule = rules.first else {
+            return rules?.isEmpty == false ? .custom : .never
+        }
+        guard rule.interval == 1, rule.recurrenceEnd == nil else { return .custom }
+        switch rule.frequency {
+        case .daily: return .daily
+        case .weekly: return .weekly
+        case .monthly: return .monthly
+        case .yearly: return .yearly
+        @unknown default: return .custom
+        }
+    }
+}
+
+enum SystemCalendarAlertOption: String, CaseIterable, Identifiable, Sendable {
+    case none
+    case atStart
+    case fiveMinutesBefore
+    case fifteenMinutesBefore
+    case thirtyMinutesBefore
+    case oneHourBefore
+    case oneDayBefore
+    case custom
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .none: NSLocalizedString("None", comment: "Calendar reminder")
+        case .atStart: NSLocalizedString("At start time", comment: "Calendar reminder")
+        case .fiveMinutesBefore: NSLocalizedString("5 minutes before", comment: "Calendar reminder")
+        case .fifteenMinutesBefore: NSLocalizedString("15 minutes before", comment: "Calendar reminder")
+        case .thirtyMinutesBefore: NSLocalizedString("30 minutes before", comment: "Calendar reminder")
+        case .oneHourBefore: NSLocalizedString("1 hour before", comment: "Calendar reminder")
+        case .oneDayBefore: NSLocalizedString("1 day before", comment: "Calendar reminder")
+        case .custom: NSLocalizedString("Custom", comment: "Calendar reminder")
+        }
+    }
+
+    var relativeOffset: TimeInterval? {
+        switch self {
+        case .none, .custom: nil
+        case .atStart: 0
+        case .fiveMinutesBefore: -5 * 60
+        case .fifteenMinutesBefore: -15 * 60
+        case .thirtyMinutesBefore: -30 * 60
+        case .oneHourBefore: -60 * 60
+        case .oneDayBefore: -24 * 60 * 60
+        }
+    }
+
+    static func option(for alarms: [EKAlarm]?) -> Self {
+        guard let alarms, alarms.count == 1, let alarm = alarms.first,
+              alarm.absoluteDate == nil, alarm.structuredLocation == nil else {
+            return alarms?.isEmpty == false ? .custom : .none
+        }
+        switch alarm.relativeOffset {
+        case 0: return .atStart
+        case -5 * 60: return .fiveMinutesBefore
+        case -15 * 60: return .fifteenMinutesBefore
+        case -30 * 60: return .thirtyMinutesBefore
+        case -60 * 60: return .oneHourBefore
+        case -24 * 60 * 60: return .oneDayBefore
+        default: return .custom
+        }
+    }
+}
+
 struct SystemCalendarEventIdentity: Hashable, Sendable {
     let eventIdentifier: String
     let calendarItemIdentifier: String
@@ -42,6 +144,10 @@ struct SystemCalendarEvent: Equatable, Identifiable, Sendable {
     let isAllDay: Bool
     let location: String?
     let notes: String?
+    let url: URL?
+    let timeZoneIdentifier: String
+    let recurrenceOption: SystemCalendarRecurrenceOption
+    let alertOption: SystemCalendarAlertOption
     let calendarID: String
     let calendarTitle: String
     let calendarColor: SystemCalendarColor
@@ -61,8 +167,15 @@ struct SystemCalendarEventDraft: Equatable, Sendable {
     var isAllDay: Bool
     var location: String
     var notes: String
+    var urlString: String
+    var timeZoneIdentifier: String
+    var recurrenceOption: SystemCalendarRecurrenceOption
+    var alertOption: SystemCalendarAlertOption
     var calendarID: String
-    var isRecurring: Bool
+    let originalRecurrenceOption: SystemCalendarRecurrenceOption
+    let originalAlertOption: SystemCalendarAlertOption
+
+    var isRecurring: Bool { recurrenceOption != .never }
 
     init(event: SystemCalendarEvent) {
         identity = event.identity
@@ -72,8 +185,13 @@ struct SystemCalendarEventDraft: Equatable, Sendable {
         isAllDay = event.isAllDay
         location = event.location ?? ""
         notes = event.notes ?? ""
+        urlString = event.url?.absoluteString ?? ""
+        timeZoneIdentifier = event.timeZoneIdentifier
+        recurrenceOption = event.recurrenceOption
+        alertOption = event.alertOption
         calendarID = event.calendarID
-        isRecurring = event.isRecurring
+        originalRecurrenceOption = event.recurrenceOption
+        originalAlertOption = event.alertOption
     }
 
     init(
@@ -81,7 +199,8 @@ struct SystemCalendarEventDraft: Equatable, Sendable {
         startDate: Date,
         endDate: Date,
         isAllDay: Bool = false,
-        calendarID: String
+        calendarID: String,
+        timeZoneIdentifier: String = TimeZone.autoupdatingCurrent.identifier
     ) {
         identity = nil
         self.title = title
@@ -90,8 +209,13 @@ struct SystemCalendarEventDraft: Equatable, Sendable {
         self.isAllDay = isAllDay
         location = ""
         notes = ""
+        urlString = ""
+        self.timeZoneIdentifier = timeZoneIdentifier
+        recurrenceOption = .never
+        alertOption = .fifteenMinutesBefore
         self.calendarID = calendarID
-        isRecurring = false
+        originalRecurrenceOption = .never
+        originalAlertOption = .fifteenMinutesBefore
     }
 }
 
@@ -115,6 +239,7 @@ enum SystemCalendarServiceError: LocalizedError {
     case invalidDates
     case missingTitle
     case noWritableCalendar
+    case invalidURL
 
     var errorDescription: String? {
         switch self {
@@ -128,6 +253,8 @@ enum SystemCalendarServiceError: LocalizedError {
             NSLocalizedString("Enter an event title.", comment: "Calendar error")
         case .noWritableCalendar:
             NSLocalizedString("No writable calendar is available.", comment: "Calendar error")
+        case .invalidURL:
+            NSLocalizedString("Enter a valid web address.", comment: "Calendar error")
         }
     }
 }
@@ -348,6 +475,18 @@ final class SystemCalendarService: ObservableObject {
         event.isAllDay = draft.isAllDay
         event.location = draft.location.trimmingCharacters(in: .whitespacesAndNewlines)
         event.notes = draft.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedURL = draft.urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedURL.isEmpty || Self.normalizedEventURL(trimmedURL) != nil else {
+            throw SystemCalendarServiceError.invalidURL
+        }
+        event.url = trimmedURL.isEmpty ? nil : Self.normalizedEventURL(trimmedURL)
+        event.timeZone = TimeZone(identifier: draft.timeZoneIdentifier) ?? .autoupdatingCurrent
+        if draft.identity == nil || draft.recurrenceOption != draft.originalRecurrenceOption {
+            event.recurrenceRules = draft.recurrenceOption.eventKitRule.map { [$0] }
+        }
+        if draft.identity == nil || draft.alertOption != draft.originalAlertOption {
+            event.alarms = draft.alertOption.relativeOffset.map { [EKAlarm(relativeOffset: $0)] }
+        }
         event.calendar = calendar
         try eventStore.save(event, span: scope.eventKitSpan, commit: true)
         await reloadCurrentRange()
@@ -371,6 +510,18 @@ final class SystemCalendarService: ObservableObject {
 
     func clearError() {
         errorMessage = nil
+    }
+
+    static func normalizedEventURL(_ value: String) -> URL? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let candidate = URLComponents(string: trimmed)?.scheme == nil ? "https://\(trimmed)" : trimmed
+        guard let components = URLComponents(string: candidate),
+              let scheme = components.scheme, !scheme.isEmpty else { return nil }
+        if ["http", "https"].contains(scheme.lowercased()), components.host?.isEmpty != false {
+            return nil
+        }
+        return components.url
     }
 
     private func reloadCurrentRange() async {
@@ -427,6 +578,10 @@ final class SystemCalendarService: ObservableObject {
             isAllDay: event.isAllDay,
             location: event.location,
             notes: event.notes,
+            url: event.url,
+            timeZoneIdentifier: event.timeZone?.identifier ?? TimeZone.autoupdatingCurrent.identifier,
+            recurrenceOption: SystemCalendarRecurrenceOption.option(for: event.recurrenceRules),
+            alertOption: SystemCalendarAlertOption.option(for: event.alarms),
             calendarID: event.calendar.calendarIdentifier,
             calendarTitle: event.calendar.title,
             calendarColor: color(event.calendar.cgColor),

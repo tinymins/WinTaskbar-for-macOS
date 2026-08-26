@@ -324,5 +324,53 @@
 	<string>标题</string>
 	<key>Untitled event</key>
 	<string>无标题日程</string>
+	<key>1 day before</key>
+	<string>提前 1 天</string>
+	<key>1 hour before</key>
+	<string>提前 1 小时</string>
+	<key>15 minutes before</key>
+	<string>提前 15 分钟</string>
+	<key>30 minutes before</key>
+	<string>提前 30 分钟</string>
+	<key>5 minutes before</key>
+	<string>提前 5 分钟</string>
+	<key>Add location</key>
+	<string>添加地点</string>
+	<key>Add notes</key>
+	<string>添加备注</string>
+	<key>Add URL</key>
+	<string>添加 URL</string>
+	<key>At start time</key>
+	<string>日程开始时</string>
+	<key>Back</key>
+	<string>返回</string>
+	<key>Custom</key>
+	<string>自定义</string>
+	<key>Done</key>
+	<string>完成</string>
+	<key>Enter a valid web address.</key>
+	<string>请输入有效的网址。</string>
+	<key>Every day</key>
+	<string>每天</string>
+	<key>Every month</key>
+	<string>每月</string>
+	<key>Every week</key>
+	<string>每周</string>
+	<key>Every year</key>
+	<string>每年</string>
+	<key>Never</key>
+	<string>永不</string>
+	<key>None</key>
+	<string>无</string>
+	<key>Reminder</key>
+	<string>提醒</string>
+	<key>Repeat</key>
+	<string>重复</string>
+	<key>Search</key>
+	<string>搜索</string>
+	<key>Time zone</key>
+	<string>时区</string>
+	<key>URL</key>
+	<string>URL</string>
 </dict>
 </plist>

@@ -336,5 +336,53 @@
 	<string>Title</string>
 	<key>Untitled event</key>
 	<string>Untitled event</string>
+	<key>1 day before</key>
+	<string>1 day before</string>
+	<key>1 hour before</key>
+	<string>1 hour before</string>
+	<key>15 minutes before</key>
+	<string>15 minutes before</string>
+	<key>30 minutes before</key>
+	<string>30 minutes before</string>
+	<key>5 minutes before</key>
+	<string>5 minutes before</string>
+	<key>Add location</key>
+	<string>Add location</string>
+	<key>Add notes</key>
+	<string>Add notes</string>
+	<key>Add URL</key>
+	<string>Add URL</string>
+	<key>At start time</key>
+	<string>At start time</string>
+	<key>Back</key>
+	<string>Back</string>
+	<key>Custom</key>
+	<string>Custom</string>
+	<key>Done</key>
+	<string>Done</string>
+	<key>Enter a valid web address.</key>
+	<string>Enter a valid web address.</string>
+	<key>Every day</key>
+	<string>Every day</string>
+	<key>Every month</key>
+	<string>Every month</string>
+	<key>Every week</key>
+	<string>Every week</string>
+	<key>Every year</key>
+	<string>Every year</string>
+	<key>Never</key>
+	<string>Never</string>
+	<key>None</key>
+	<string>None</string>
+	<key>Reminder</key>
+	<string>Reminder</string>
+	<key>Repeat</key>
+	<string>Repeat</string>
+	<key>Search</key>
+	<string>Search</string>
+	<key>Time zone</key>
+	<string>Time zone</string>
+	<key>URL</key>
+	<string>URL</string>
 </dict>
 </plist>

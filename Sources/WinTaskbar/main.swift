@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import Combine
+import EventKit
 import Foundation
 
 @MainActor
@@ -874,6 +875,10 @@ func runSelfTest() async -> Int32 {
         isAllDay: false,
         location: nil,
         notes: nil,
+        url: nil,
+        timeZoneIdentifier: chinaCalendar.timeZone.identifier,
+        recurrenceOption: .never,
+        alertOption: .none,
         calendarID: "calendar",
         calendarTitle: "Test",
         calendarColor: .accent,
@@ -894,6 +899,29 @@ func runSelfTest() async -> Int32 {
     guard groupedEvents[firstEventDay]?.first?.title == "Overnight",
           groupedEvents[secondEventDay]?.first?.title == "Overnight" else {
         fputs("SELF-TEST FAILED: system calendar event day grouping mismatch\n", stderr)
+        return 1
+    }
+
+    let weeklyRule = EKRecurrenceRule(recurrenceWith: .weekly, interval: 1, end: nil)
+    let fifteenMinuteAlarm = EKAlarm(relativeOffset: -15 * 60)
+    let eventDraft = SystemCalendarEventDraft(
+        startDate: eventStart,
+        endDate: eventEnd,
+        calendarID: "calendar",
+        timeZoneIdentifier: chinaCalendar.timeZone.identifier
+    )
+    guard SystemCalendarRecurrenceOption.option(for: [weeklyRule]) == .weekly,
+          SystemCalendarRecurrenceOption.monthly.eventKitRule?.frequency == .monthly,
+          SystemCalendarAlertOption.option(for: [fifteenMinuteAlarm]) == .fifteenMinutesBefore,
+          SystemCalendarAlertOption.oneDayBefore.relativeOffset == -86_400,
+          eventDraft.recurrenceOption == .never,
+          eventDraft.alertOption == .fifteenMinutesBefore,
+          !eventDraft.isRecurring,
+          SystemCalendarService.normalizedEventURL("example.com/event")?.absoluteString
+              == "https://example.com/event",
+          SystemCalendarService.normalizedEventURL("mailto:calendar@example.com")?.scheme == "mailto",
+          SystemCalendarService.normalizedEventURL("not a url") == nil else {
+        fputs("SELF-TEST FAILED: system calendar event metadata mismatch\n", stderr)
         return 1
     }
 
