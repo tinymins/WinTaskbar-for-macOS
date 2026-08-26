@@ -477,6 +477,18 @@ func runSelfTest() async -> Int32 {
               displayedOwnerID: firstPreviewOwner,
               targetOwnerID: secondPreviewOwner
           ),
+          WindowPreviewPanelTransitionPolicy.shouldApplyFrame(
+              currentTargetFrame: nil,
+              targetFrame: CGRect(x: 10, y: 20, width: 160, height: 48)
+          ),
+          !WindowPreviewPanelTransitionPolicy.shouldApplyFrame(
+              currentTargetFrame: CGRect(x: 10, y: 20, width: 160, height: 48),
+              targetFrame: CGRect(x: 10, y: 20, width: 160, height: 48)
+          ),
+          WindowPreviewPanelTransitionPolicy.shouldApplyFrame(
+              currentTargetFrame: CGRect(x: 10, y: 20, width: 192, height: 140),
+              targetFrame: CGRect(x: 10, y: 20, width: 160, height: 48)
+          ),
           WindowPreviewPanelMotion.duration == 0.28,
           WindowPreviewPanelMotion.firstControlPoint == CGPoint(x: 0.8, y: 0),
           WindowPreviewPanelMotion.secondControlPoint == CGPoint(x: 0.2, y: 1),

@@ -166,6 +166,10 @@ struct WindowPreviewPanelTransitionPolicy {
     ) -> Bool {
         isVisible && displayedOwnerID != targetOwnerID
     }
+
+    static func shouldApplyFrame(currentTargetFrame: CGRect?, targetFrame: CGRect) -> Bool {
+        currentTargetFrame != targetFrame
+    }
 }
 
 struct WindowPreviewPanelMotion {
@@ -188,6 +192,7 @@ final class WindowPreviewPanelController: ObservableObject {
     @Published private var selection = WindowPreviewSelection()
     private var hoverIntent = WindowPreviewHoverIntent()
     private var displayedOwnerID: WindowPreviewOwnerID?
+    private var targetFrame: CGRect?
     private var activationTask: Task<Void, Never>?
     private var dismissalTask: Task<Void, Never>?
     private var panel: WindowPreviewPanel?
@@ -324,7 +329,7 @@ final class WindowPreviewPanelController: ObservableObject {
         let windowRect = anchorView.convert(anchorView.bounds, to: nil)
         let anchorFrame = anchorWindow.convertToScreen(windowRect)
         let screenFrame = anchorWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? anchorFrame
-        let targetFrame = WindowPreviewPanelGeometry.frame(
+        let nextTargetFrame = WindowPreviewPanelGeometry.frame(
             anchorFrame: anchorFrame,
             contentSize: contentSize,
             position: position,
@@ -335,20 +340,25 @@ final class WindowPreviewPanelController: ObservableObject {
             displayedOwnerID: displayedOwnerID,
             targetOwnerID: ownerID
         )
+        let shouldApplyFrame = WindowPreviewPanelTransitionPolicy.shouldApplyFrame(
+            currentTargetFrame: targetFrame,
+            targetFrame: nextTargetFrame
+        )
 
         panel.appearance = anchorWindow.appearance
         displayedOwnerID = ownerID
+        targetFrame = nextTargetFrame
         if shouldAnimate {
             hostingView.alphaValue = 0.72
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = WindowPreviewPanelMotion.duration
                 context.timingFunction = WindowPreviewPanelMotion.timingFunction()
-                panel.animator().setFrame(targetFrame, display: true)
+                panel.animator().setFrame(nextTargetFrame, display: true)
                 hostingView.animator().alphaValue = 1
             }
-        } else {
+        } else if shouldApplyFrame {
             hostingView.alphaValue = 1
-            panel.setFrame(targetFrame, display: true)
+            panel.setFrame(nextTargetFrame, display: true)
         }
         panel.orderFrontRegardless()
     }
@@ -360,6 +370,7 @@ final class WindowPreviewPanelController: ObservableObject {
 
     private func hidePanel() {
         displayedOwnerID = nil
+        targetFrame = nil
         panel?.orderOut(nil)
         hostingView.alphaValue = 1
     }
