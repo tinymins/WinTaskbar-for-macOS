@@ -16,6 +16,23 @@ struct TaskbarDragMotion {
     static let decoration = Animation.timingCurve(0, 0, 0, 1, duration: duration)
 }
 
+struct TaskbarDragReorderPolicy {
+    static func iconCenter(
+        pointerLocation: CGPoint,
+        grabOffset: CGSize,
+        horizontal: Bool,
+        fixedCrossAxisPosition: CGFloat
+    ) -> CGPoint {
+        var center = CGPoint(
+            x: pointerLocation.x + grabOffset.width,
+            y: pointerLocation.y + grabOffset.height
+        )
+        if horizontal { center.y = fixedCrossAxisPosition }
+        else { center.x = fixedCrossAxisPosition }
+        return center
+    }
+}
+
 private enum TaskbarDragCoordinateSpace {
     static let name = "WinTaskbar.AppItems"
 }
@@ -52,6 +69,7 @@ struct TaskbarView: View {
     @State private var draggedBundleID: String?
     @State private var dragPreviewCenter: CGPoint?
     @State private var dragGrabOffset = CGSize.zero
+    @State private var dragFixedCrossAxisPosition: CGFloat?
 
     var body: some View {
         GeometryReader { geometry in
@@ -239,11 +257,15 @@ struct TaskbarView: View {
             .onChanged { value in
                 if draggedBundleID == nil { beginReordering(item, value: value) }
                 guard draggedBundleID == item.bundleIdentifier else { return }
-                dragPreviewCenter = CGPoint(
-                    x: value.location.x + dragGrabOffset.width,
-                    y: value.location.y + dragGrabOffset.height
+                let draggedIconCenter = TaskbarDragReorderPolicy.iconCenter(
+                    pointerLocation: value.location,
+                    grabOffset: dragGrabOffset,
+                    horizontal: preferences.position.isHorizontal,
+                    fixedCrossAxisPosition: dragFixedCrossAxisPosition
+                        ?? (preferences.position.isHorizontal ? value.startLocation.y : value.startLocation.x)
                 )
-                updateReorderTarget(for: item, location: value.location)
+                dragPreviewCenter = draggedIconCenter
+                updateReorderTarget(for: item, draggedIconCenter: draggedIconCenter)
             }
             .onEnded { _ in finishReordering(item) }
     }
@@ -255,9 +277,13 @@ struct TaskbarView: View {
                 width: frame.midX - value.startLocation.x,
                 height: frame.midY - value.startLocation.y
             )
+            dragFixedCrossAxisPosition = preferences.position.isHorizontal ? frame.midY : frame.midX
             dragPreviewCenter = CGPoint(x: frame.midX, y: frame.midY)
         } else {
             dragGrabOffset = .zero
+            dragFixedCrossAxisPosition = preferences.position.isHorizontal
+                ? value.startLocation.y
+                : value.startLocation.x
             dragPreviewCenter = value.startLocation
         }
         taskbarJumpListController.dismiss()
@@ -265,22 +291,24 @@ struct TaskbarView: View {
         windowPeekController.hideImmediately()
     }
 
-    private func updateReorderTarget(for item: TaskbarItem, location: CGPoint) {
-        guard dragGeometry.itemFrames[item.bundleIdentifier]?.contains(location) != true else { return }
+    private func updateReorderTarget(for item: TaskbarItem, draggedIconCenter: CGPoint) {
+        guard dragGeometry.itemFrames[item.bundleIdentifier]?.contains(draggedIconCenter) != true else { return }
         let taskbarBounds = dragGeometry.itemFrames.values.reduce(CGRect.null) { $0.union($1) }
             .insetBy(dx: -TaskbarItemGeometry.itemSpacing, dy: -TaskbarItemGeometry.itemSpacing)
-        guard taskbarBounds.contains(location),
+        guard taskbarBounds.contains(draggedIconCenter),
               let target = dragGeometry.itemFrames
                 .filter({ $0.key != item.bundleIdentifier })
                 .min(by: { lhs, rhs in
                     if preferences.position.isHorizontal {
-                        return abs(lhs.value.midX - location.x) < abs(rhs.value.midX - location.x)
+                        return abs(lhs.value.midX - draggedIconCenter.x)
+                            < abs(rhs.value.midX - draggedIconCenter.x)
                     }
-                    return abs(lhs.value.midY - location.y) < abs(rhs.value.midY - location.y)
+                    return abs(lhs.value.midY - draggedIconCenter.y)
+                        < abs(rhs.value.midY - draggedIconCenter.y)
                 }) else { return }
         let after = preferences.position.isHorizontal
-            ? location.x > target.value.midX
-            : location.y > target.value.midY
+            ? draggedIconCenter.x > target.value.midX
+            : draggedIconCenter.y > target.value.midY
         let animation: Animation? = reduceMotion ? nil : TaskbarDragMotion.reorder
         withAnimation(animation) {
             guard apps.reorderTaskbarItem(
@@ -305,6 +333,7 @@ struct TaskbarView: View {
         draggedBundleID = nil
         dragPreviewCenter = nil
         dragGrabOffset = .zero
+        dragFixedCrossAxisPosition = nil
     }
 
     private func dragPreview(for item: TaskbarItem) -> some View {

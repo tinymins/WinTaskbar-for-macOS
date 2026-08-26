@@ -468,6 +468,18 @@ func runSelfTest() async -> Int32 {
           TaskbarDragMotion.duration == 0.167,
           TaskbarDragMotion.reorderFirstControlPoint == CGPoint(x: 0.55, y: 0.55),
           TaskbarDragMotion.reorderSecondControlPoint == CGPoint(x: 0, y: 1),
+          TaskbarDragReorderPolicy.iconCenter(
+              pointerLocation: CGPoint(x: 100, y: 20),
+              grabOffset: CGSize(width: 12, height: -4),
+              horizontal: true,
+              fixedCrossAxisPosition: 24
+          ) == CGPoint(x: 112, y: 24),
+          TaskbarDragReorderPolicy.iconCenter(
+              pointerLocation: CGPoint(x: 100, y: 20),
+              grabOffset: CGSize(width: 12, height: -4),
+              horizontal: false,
+              fixedCrossAxisPosition: 36
+          ) == CGPoint(x: 36, y: 16),
           RecentDocumentsService.documentURL(from: "file:///tmp/project/")
               == URL(string: "file:///tmp/project/"),
           RecentDocumentsService.documentURL(from: "https://example.com/project/")?.isFileURL == true,
