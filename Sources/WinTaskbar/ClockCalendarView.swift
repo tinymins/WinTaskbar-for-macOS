@@ -14,6 +14,7 @@ struct ClockCalendarDay: Equatable, Identifiable {
     let date: Date
     let day: Int
     let isInDisplayedMonth: Bool
+    let lunarDate: ClockCalendarLunarDate
 
     var id: Date { date }
 }
@@ -79,7 +80,8 @@ enum ClockCalendarGrid {
             return ClockCalendarDay(
                 date: date,
                 day: calendar.component(.day, from: date),
-                isInDisplayedMonth: calendar.isDate(date, equalTo: displayedMonth, toGranularity: .month)
+                isInDisplayedMonth: calendar.isDate(date, equalTo: displayedMonth, toGranularity: .month),
+                lunarDate: ClockCalendarLunarCalendar.lunarDate(for: date, timeZone: calendar.timeZone)
             )
         }
     }
@@ -97,7 +99,8 @@ final class ClockCalendarState: ObservableObject {
     @Published var selectedDate: Date
     @Published private(set) var visibleStartDate: Date
     @Published private(set) var renderedStartDate: Date
-    @Published private(set) var gridOffset: CGFloat = 0
+    @Published private(set) var renderedDays: [ClockCalendarDay]
+    @Published private(set) var gridOffset: CGFloat
     @Published var isExpanded = true
     @Published private(set) var focusRemainingSeconds = 0
     @Published private(set) var isFocusing = false
@@ -105,9 +108,9 @@ final class ClockCalendarState: ObservableObject {
 
     private var focusEndDate: Date?
     private var focusTimer: Timer?
-    private var isWeekScrollAnimating = false
-    private var pendingWeekScrolls: [Int] = []
-    private var navigationRevision: UInt = 0
+    private var scrollSettlingTask: Task<Void, Never>?
+    private var wheelScrollTask: Task<Void, Never>?
+    private var wheelTargetDistance: CGFloat = 0
 
     init(now: Date = Date()) {
         let calendar = Self.calendar
@@ -116,7 +119,15 @@ final class ClockCalendarState: ObservableObject {
         selectedDate = now
         let startDate = ClockCalendarGrid.startDate(displayedMonth: month, calendar: calendar) ?? month
         visibleStartDate = startDate
-        renderedStartDate = startDate
+        let renderedStartDate = calendar.date(byAdding: .day, value: -7, to: startDate) ?? startDate
+        self.renderedStartDate = renderedStartDate
+        renderedDays = ClockCalendarGrid.days(
+            startingAt: renderedStartDate,
+            displayedMonth: month,
+            calendar: calendar,
+            count: 56
+        )
+        gridOffset = -42
     }
 
     static var calendar: Calendar {
@@ -125,15 +136,6 @@ final class ClockCalendarState: ObservableObject {
         calendar.timeZone = .autoupdatingCurrent
         calendar.firstWeekday = Calendar.autoupdatingCurrent.firstWeekday
         return calendar
-    }
-
-    var renderedDays: [ClockCalendarDay] {
-        ClockCalendarGrid.days(
-            startingAt: renderedStartDate,
-            displayedMonth: displayedMonth,
-            calendar: Self.calendar,
-            count: 49
-        )
     }
 
     var weekdaySymbols: [String] {
@@ -148,20 +150,70 @@ final class ClockCalendarState: ObservableObject {
     func scrollWeeks(by offset: Int) {
         guard offset != 0,
               let startDate = shiftedStartDate(by: offset) else { return }
-        cancelWeekScrollAnimation()
+        cancelWheelScrolling()
+        cancelCalendarScrollSettling()
         updateVisibleStartDate(startDate)
-        renderedStartDate = startDate
-        gridOffset = 0
+        resetRenderedWindow()
     }
 
-    func animateWeekScroll(by offset: Int) {
-        guard offset != 0 else { return }
-        let direction = offset > 0 ? 1 : -1
-        if isWeekScrollAnimating {
-            pendingWeekScrolls.append(direction)
-            return
+    func scrollCalendar(by deltaY: CGFloat) {
+        guard deltaY != 0 else { return }
+        cancelWheelScrolling()
+        cancelCalendarScrollSettling()
+        applyScrollDelta(deltaY)
+    }
+
+    func scrollCalendarByWheel(direction: Int) {
+        guard direction != 0 else { return }
+        cancelCalendarScrollSettling()
+        wheelTargetDistance += CGFloat(direction > 0 ? 42 : -42)
+        guard wheelScrollTask == nil else { return }
+        wheelScrollTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while abs(self.wheelTargetDistance) >= 0.5 {
+                let remaining = self.wheelTargetDistance
+                let magnitude = min(abs(remaining), min(24, max(4, abs(remaining) * 0.38)))
+                let step = remaining > 0 ? magnitude : -magnitude
+                self.applyScrollDelta(step)
+                self.wheelTargetDistance -= step
+                do {
+                    try await Task.sleep(nanoseconds: 8_000_000)
+                } catch {
+                    return
+                }
+            }
+            self.wheelTargetDistance = 0
+            self.wheelScrollTask = nil
+            self.scheduleCalendarScrollSettling()
         }
-        startWeekScrollAnimation(direction: direction)
+    }
+
+    private func applyScrollDelta(_ deltaY: CGFloat) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            gridOffset += deltaY
+            while gridOffset <= -84 {
+                recycleRenderedWeek(direction: 1)
+                gridOffset += 42
+            }
+            while gridOffset >= 0 {
+                recycleRenderedWeek(direction: -1)
+                gridOffset -= 42
+            }
+        }
+    }
+
+    func scheduleCalendarScrollSettling() {
+        scrollSettlingTask?.cancel()
+        scrollSettlingTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 80_000_000)
+            } catch {
+                return
+            }
+            await self?.settleCalendarScroll()
+        }
     }
 
     func select(_ date: Date) {
@@ -173,48 +225,34 @@ final class ClockCalendarState: ObservableObject {
     }
 
     private func showMonth(_ month: Date) {
-        cancelWeekScrollAnimation()
+        cancelWheelScrolling()
+        cancelCalendarScrollSettling()
         displayedMonth = month
         let startDate = ClockCalendarGrid.startDate(displayedMonth: month, calendar: Self.calendar) ?? month
         visibleStartDate = startDate
-        renderedStartDate = startDate
-        gridOffset = 0
+        resetRenderedWindow()
     }
 
-    private func startWeekScrollAnimation(direction: Int) {
-        guard let targetStartDate = shiftedStartDate(by: direction) else { return }
-        isWeekScrollAnimating = true
-        navigationRevision &+= 1
-        let revision = navigationRevision
-
-        if direction > 0 {
-            renderedStartDate = visibleStartDate
-            gridOffset = 0
-        } else {
-            renderedStartDate = targetStartDate
-            gridOffset = -42
+    private func settleCalendarScroll() async {
+        let displacement = gridOffset + 42
+        let direction = displacement <= -21 ? 1 : (displacement >= 21 ? -1 : 0)
+        let targetOffset = direction > 0 ? CGFloat(-84) : (direction < 0 ? CGFloat(0) : CGFloat(-42))
+        withAnimation(.easeOut(duration: 0.10)) {
+            gridOffset = targetOffset
         }
+        guard direction != 0 else { return }
 
-        Task { @MainActor [weak self] in
-            await Task.yield()
-            guard let self, self.navigationRevision == revision else { return }
-            withAnimation(.easeOut(duration: 0.18)) {
-                self.gridOffset = direction > 0 ? -42 : 0
-            }
-            try? await Task.sleep(nanoseconds: 180_000_000)
-            guard self.navigationRevision == revision else { return }
-
-            var transaction = Transaction(animation: nil)
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                self.updateVisibleStartDate(targetStartDate)
-                self.renderedStartDate = targetStartDate
-                self.gridOffset = 0
-            }
-            self.isWeekScrollAnimating = false
-            if !self.pendingWeekScrolls.isEmpty {
-                self.startWeekScrollAnimation(direction: self.pendingWeekScrolls.removeFirst())
-            }
+        do {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        } catch {
+            return
+        }
+        guard !Task.isCancelled else { return }
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            recycleRenderedWeek(direction: direction)
+            gridOffset = -42
         }
     }
 
@@ -229,10 +267,38 @@ final class ClockCalendarState: ObservableObject {
         displayedMonth = month
     }
 
-    private func cancelWeekScrollAnimation() {
-        navigationRevision &+= 1
-        pendingWeekScrolls.removeAll()
-        isWeekScrollAnimating = false
+    private func recycleRenderedWeek(direction: Int) {
+        guard let startDate = shiftedStartDate(by: direction),
+              let renderedStartDate = Self.calendar.date(byAdding: .day, value: -7, to: startDate) else { return }
+        updateVisibleStartDate(startDate)
+        self.renderedStartDate = renderedStartDate
+        updateRenderedDays()
+    }
+
+    private func resetRenderedWindow() {
+        renderedStartDate = Self.calendar.date(byAdding: .day, value: -7, to: visibleStartDate) ?? visibleStartDate
+        updateRenderedDays()
+        gridOffset = -42
+    }
+
+    private func updateRenderedDays() {
+        renderedDays = ClockCalendarGrid.days(
+            startingAt: renderedStartDate,
+            displayedMonth: displayedMonth,
+            calendar: Self.calendar,
+            count: 56
+        )
+    }
+
+    private func cancelCalendarScrollSettling() {
+        scrollSettlingTask?.cancel()
+        scrollSettlingTask = nil
+    }
+
+    private func cancelWheelScrolling() {
+        wheelScrollTask?.cancel()
+        wheelScrollTask = nil
+        wheelTargetDistance = 0
     }
 
     func adjustFocusMinutes(by offset: Int) {
@@ -360,7 +426,12 @@ struct ClockCalendarPanelView: View {
             .frame(height: 28)
 
             ZStack {
-                ClockCalendarDaysGrid(days: state.renderedDays, state: state, columns: columns)
+                ClockCalendarDaysGrid(
+                    days: state.renderedDays,
+                    selectedDate: state.selectedDate,
+                    columns: columns,
+                    onSelect: state.select
+                )
                     .offset(y: state.gridOffset)
             }
             .frame(height: 252)
@@ -452,13 +523,14 @@ struct ClockCalendarPanelView: View {
 
 private struct ClockCalendarDaysGrid: View {
     let days: [ClockCalendarDay]
-    @ObservedObject var state: ClockCalendarState
+    let selectedDate: Date
     let columns: [GridItem]
+    let onSelect: (Date) -> Void
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: 0) {
             ForEach(days) { day in
-                ClockCalendarDayButton(day: day, state: state)
+                ClockCalendarDayButton(day: day, selectedDate: selectedDate, onSelect: onSelect)
                     .frame(height: 42)
             }
         }
@@ -468,16 +540,17 @@ private struct ClockCalendarDaysGrid: View {
 
 private struct ClockCalendarDayButton: View {
     let day: ClockCalendarDay
-    @ObservedObject var state: ClockCalendarState
+    let selectedDate: Date
+    let onSelect: (Date) -> Void
     @Environment(\.colorScheme) private var colorScheme
     @State private var hovering = false
 
     var body: some View {
-        Button { state.select(day.date) } label: {
+        Button { onSelect(day.date) } label: {
             VStack(spacing: -1) {
                 Text("\(day.day)")
                     .font(.system(size: 14))
-                Text(lunarDate.compactLabel)
+                Text(day.lunarDate.compactLabel)
                     .font(.system(size: 9))
                     .opacity(0.78)
             }
@@ -489,11 +562,7 @@ private struct ClockCalendarDayButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .accessibilityLabel("\(day.date.formatted(date: .complete, time: .omitted)), \(lunarDate.fullLabel)")
-    }
-
-    private var lunarDate: ClockCalendarLunarDate {
-        ClockCalendarLunarCalendar.lunarDate(for: day.date)
+        .accessibilityLabel("\(day.date.formatted(date: .complete, time: .omitted)), \(day.lunarDate.fullLabel)")
     }
 
     private var isToday: Bool {
@@ -501,7 +570,7 @@ private struct ClockCalendarDayButton: View {
     }
 
     private var isSelected: Bool {
-        ClockCalendarState.calendar.isDate(day.date, inSameDayAs: state.selectedDate)
+        ClockCalendarState.calendar.isDate(day.date, inSameDayAs: selectedDate)
     }
 
     private var foregroundColor: Color {

@@ -716,61 +716,55 @@ func runSelfTest() async -> Int32 {
     guard ClockCalendarState.calendar.isDate(
         rollingCalendarState.visibleStartDate,
         inSameDayAs: expectedFiveYearStartDate
-    ), rollingCalendarState.renderedDays.count == 49 else {
+    ), rollingCalendarState.renderedDays.count == 56 else {
         fputs("SELF-TEST FAILED: clock calendar week scrolling range mismatch\n", stderr)
         return 1
     }
 
-    let animatedCalendarState = ClockCalendarState(now: february2024)
-    let animatedStartDate = animatedCalendarState.visibleStartDate
-    animatedCalendarState.animateWeekScroll(by: 1)
-    animatedCalendarState.animateWeekScroll(by: 1)
-    animatedCalendarState.animateWeekScroll(by: 1)
-    try? await Task.sleep(nanoseconds: 600_000_000)
-    let expectedAnimatedStartDate = ClockCalendarState.calendar.date(
+    let virtualCalendarState = ClockCalendarState(now: february2024)
+    let virtualStartDate = virtualCalendarState.visibleStartDate
+    virtualCalendarState.scrollCalendar(by: -15)
+    guard virtualCalendarState.visibleStartDate == virtualStartDate,
+          virtualCalendarState.gridOffset == -57 else {
+        fputs("SELF-TEST FAILED: clock calendar pixel scrolling mismatch\n", stderr)
+        return 1
+    }
+    virtualCalendarState.scrollCalendar(by: -30)
+    let expectedVirtualStartDate = ClockCalendarState.calendar.date(
         byAdding: .day,
-        value: 21,
-        to: animatedStartDate
+        value: 7,
+        to: virtualStartDate
     )!
     guard ClockCalendarState.calendar.isDate(
-        animatedCalendarState.visibleStartDate,
-        inSameDayAs: expectedAnimatedStartDate
-    ), animatedCalendarState.renderedDays.count == 49,
-       Set(animatedCalendarState.renderedDays.map(\.id)).count == 49,
-       animatedCalendarState.gridOffset == 0 else {
-        fputs("SELF-TEST FAILED: clock calendar animated week scrolling mismatch\n", stderr)
+        virtualCalendarState.visibleStartDate,
+        inSameDayAs: expectedVirtualStartDate
+    ), virtualCalendarState.gridOffset == -45,
+       virtualCalendarState.renderedDays.count == 56,
+       Set(virtualCalendarState.renderedDays.map(\.id)).count == 56 else {
+        fputs("SELF-TEST FAILED: clock calendar virtual recycling mismatch\n", stderr)
+        return 1
+    }
+    virtualCalendarState.scheduleCalendarScrollSettling()
+    try? await Task.sleep(nanoseconds: 220_000_000)
+    guard virtualCalendarState.gridOffset == -42 else {
+        fputs("SELF-TEST FAILED: clock calendar scroll settling mismatch\n", stderr)
         return 1
     }
 
-    var calendarScrollIntent = ClockCalendarScrollIntent()
-    guard calendarScrollIntent.consume(deltaY: -1, isPrecise: false, timestamp: 0) == 1,
-          calendarScrollIntent.consume(
-              deltaY: 8,
-              isPrecise: true,
-              timestamp: 1,
-              startsGesture: true
-          ) == nil,
-          calendarScrollIntent.consume(deltaY: 10, isPrecise: true, timestamp: 1.01) == -1,
-          calendarScrollIntent.consume(deltaY: 30, isPrecise: true, timestamp: 1.02) == nil,
-          calendarScrollIntent.consume(
-              deltaY: 0,
-              isPrecise: true,
-              timestamp: 1.03,
-              endsGesture: true
-          ) == nil,
-          calendarScrollIntent.consume(
-              deltaY: -18,
-              isPrecise: true,
-              timestamp: 2,
-              startsGesture: true
-          ) == 1,
-          calendarScrollIntent.consume(
-              deltaY: -30,
-              isPrecise: true,
-              timestamp: 2.01,
-              isMomentum: true
-          ) == nil else {
-        fputs("SELF-TEST FAILED: clock calendar scroll gesture mismatch\n", stderr)
+    let wheelCalendarState = ClockCalendarState(now: february2024)
+    let wheelStartDate = wheelCalendarState.visibleStartDate
+    for _ in 0..<5 { wheelCalendarState.scrollCalendarByWheel(direction: -1) }
+    try? await Task.sleep(nanoseconds: 350_000_000)
+    let expectedWheelStartDate = ClockCalendarState.calendar.date(
+        byAdding: .day,
+        value: 35,
+        to: wheelStartDate
+    )!
+    guard ClockCalendarState.calendar.isDate(
+        wheelCalendarState.visibleStartDate,
+        inSameDayAs: expectedWheelStartDate
+    ), wheelCalendarState.gridOffset == -42 else {
+        fputs("SELF-TEST FAILED: clock calendar wheel target mismatch\n", stderr)
         return 1
     }
 
