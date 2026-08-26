@@ -166,6 +166,24 @@ private struct QuickSettingsPanelView: View {
             Divider()
 
             HStack {
+                if let level = service.batteryLevel {
+                    Button(action: onOpenBatterySettings) {
+                        HStack(spacing: 8) {
+                            WindowsBatteryIcon(
+                                level: level,
+                                isCharging: service.isCharging,
+                                state: batteryState
+                            )
+                            Text("\(level)%")
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .monospacedDigit()
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(service.isCharging ? "Battery charging" : "Battery")
+                    .accessibilityLabel(service.isCharging ? "Battery charging, \(level)%" : "Battery, \(level)%")
+                }
                 Spacer()
                 Button(action: onOpenSystemSettings) {
                     Image(systemName: "gearshape")
@@ -254,6 +272,13 @@ private struct QuickSettingsPanelView: View {
         return "speaker.wave.3.fill"
     }
 
+    private var batteryState: BatteryPresentationState {
+        .resolve(
+            level: service.batteryLevel ?? 0,
+            isCharging: service.isCharging,
+            isLowPowerModeEnabled: service.isLowPowerModeEnabled
+        )
+    }
 }
 
 private struct QuickSettingTile: View {
