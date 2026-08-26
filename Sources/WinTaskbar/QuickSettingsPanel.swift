@@ -29,6 +29,7 @@ enum QuickSettingsPanelMetrics {
     static let settingsGridHeight: CGFloat = 213
     static let tileSize = CGSize(width: 96, height: 47)
     static let splitSegmentWidth: CGFloat = (tileSize.width - 1) / 2
+    static let splitDividerOpacity: Double = 0.08
     static let tileLabelHeight: CGFloat = 15
     static let volumeHeight: CGFloat = 72
     static let footerHeight: CGFloat = 48
@@ -672,38 +673,59 @@ private struct QuickSettingTile: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 0) {
-                Button(action: primaryAction) {
-                    primaryContent
+            ZStack(alignment: .leading) {
+                if isPrimaryHovering {
+                    Rectangle()
+                        .fill(segmentHoverColor)
                         .frame(
                             width: detailAction == nil
                                 ? QuickSettingsPanelMetrics.tileSize.width
                                 : QuickSettingsPanelMetrics.splitSegmentWidth,
                             height: QuickSettingsPanelMetrics.tileSize.height
                         )
-                        .contentShape(Rectangle())
+                        .allowsHitTesting(false)
                 }
-                .buttonStyle(.plain)
-                .background(segmentBackground(isHovering: isPrimaryHovering))
-                .onHover { isPrimaryHovering = $0 }
-                .accessibilityLabel(primaryAccessibilityLabel)
-                if let detailAction {
-                    Divider()
-                        .overlay(isActive ? Color.white.opacity(0.22) : Color.primary.opacity(0.12))
-                        .frame(width: 1, height: QuickSettingsPanelMetrics.tileSize.height)
-                    Button(action: detailAction) {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .semibold))
+                if isDetailHovering {
+                    Rectangle()
+                        .fill(segmentHoverColor)
+                        .frame(
+                            width: QuickSettingsPanelMetrics.splitSegmentWidth,
+                            height: QuickSettingsPanelMetrics.tileSize.height
+                        )
+                        .offset(x: QuickSettingsPanelMetrics.splitSegmentWidth + 1)
+                        .allowsHitTesting(false)
+                }
+                HStack(spacing: 0) {
+                    Button(action: primaryAction) {
+                        primaryContent
                             .frame(
-                                width: QuickSettingsPanelMetrics.splitSegmentWidth,
+                                width: detailAction == nil
+                                    ? QuickSettingsPanelMetrics.tileSize.width
+                                    : QuickSettingsPanelMetrics.splitSegmentWidth,
                                 height: QuickSettingsPanelMetrics.tileSize.height
                             )
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .background(segmentBackground(isHovering: isDetailHovering))
-                    .onHover { isDetailHovering = $0 }
-                    .accessibilityLabel("\(label) details")
+                    .onHover { isPrimaryHovering = $0 }
+                    .accessibilityLabel(primaryAccessibilityLabel)
+                    if let detailAction {
+                        Rectangle()
+                            .fill(Color.white.opacity(QuickSettingsPanelMetrics.splitDividerOpacity))
+                            .frame(width: 1, height: QuickSettingsPanelMetrics.tileSize.height)
+                        Button(action: detailAction) {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .semibold))
+                                .frame(
+                                    width: QuickSettingsPanelMetrics.splitSegmentWidth,
+                                    height: QuickSettingsPanelMetrics.tileSize.height
+                                )
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { isDetailHovering = $0 }
+                        .accessibilityLabel("\(label) details")
+                    }
                 }
             }
             .foregroundStyle(isActive ? Color.black.opacity(0.88) : Color.primary)
@@ -729,8 +751,7 @@ private struct QuickSettingTile: View {
         return Color.primary.opacity(0.06)
     }
 
-    private func segmentBackground(isHovering: Bool) -> Color {
-        guard isHovering else { return .clear }
+    private var segmentHoverColor: Color {
         if isActive { return Color(red: 0.65, green: 0.91, blue: 0.99) }
         return Color.primary.opacity(0.10)
     }

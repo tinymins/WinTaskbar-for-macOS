@@ -248,6 +248,7 @@ func runSelfTest() async -> Int32 {
           QuickSettingsPanelMetrics.settingsGridHeight == 213,
           QuickSettingsPanelMetrics.tileSize == CGSize(width: 96, height: 47),
           QuickSettingsPanelMetrics.splitSegmentWidth == 47.5,
+          QuickSettingsPanelMetrics.splitDividerOpacity == 0.08,
           QuickSettingsPanelMetrics.volumeHeight == 72,
           QuickSettingsPanelMetrics.footerHeight == 48,
           QuickSettingsPanelMetrics.detailHeaderHeight == 52,
