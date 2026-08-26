@@ -2,6 +2,12 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.9] - 2026-08-26
+
+### Fixed
+
+- Smooth cross-app preview panel movement and resizing with a Fluent-style acceleration and deceleration curve.
+
 ## [0.0.8] - 2026-08-26
 
 ### Fixed
@@ -48,6 +54,7 @@ All notable changes to WinTaskbar for macOS are documented here.
 - Show window previews immediately when hovering over a taskbar app while retaining a short dismissal delay.
 - Match Windows preview thumbnail proportions and refine preview panel styling.
 
+[0.0.9]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.5...v0.0.6
