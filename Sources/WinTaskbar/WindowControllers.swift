@@ -115,6 +115,48 @@ struct WindowPreviewSelection: Equatable {
     }
 }
 
+enum WindowPreviewHoverIntentDecision: Equatable {
+    case activateImmediately
+    case keepCurrent
+    case scheduleSwitch
+}
+
+struct WindowPreviewHoverIntent {
+    static let switchDelayNanoseconds: UInt64 = 180_000_000
+
+    private(set) var pendingOwnerID: WindowPreviewOwnerID?
+
+    mutating func hover(
+        activeOwnerID: WindowPreviewOwnerID?,
+        candidateOwnerID: WindowPreviewOwnerID
+    ) -> WindowPreviewHoverIntentDecision {
+        if activeOwnerID == nil {
+            pendingOwnerID = nil
+            return .activateImmediately
+        }
+        if activeOwnerID == candidateOwnerID {
+            pendingOwnerID = nil
+            return .keepCurrent
+        }
+        pendingOwnerID = candidateOwnerID
+        return .scheduleSwitch
+    }
+
+    mutating func resolve(_ ownerID: WindowPreviewOwnerID) -> Bool {
+        guard pendingOwnerID == ownerID else { return false }
+        pendingOwnerID = nil
+        return true
+    }
+
+    mutating func cancel(_ ownerID: WindowPreviewOwnerID) {
+        if pendingOwnerID == ownerID { pendingOwnerID = nil }
+    }
+
+    mutating func reset() {
+        pendingOwnerID = nil
+    }
+}
+
 struct WindowPreviewPanelTransitionPolicy {
     static func shouldAnimate(
         isVisible: Bool,
@@ -128,7 +170,9 @@ struct WindowPreviewPanelTransitionPolicy {
 @MainActor
 final class WindowPreviewPanelController: ObservableObject {
     @Published private var selection = WindowPreviewSelection()
+    private var hoverIntent = WindowPreviewHoverIntent()
     private var displayedOwnerID: WindowPreviewOwnerID?
+    private var activationTask: Task<Void, Never>?
     private var dismissalTask: Task<Void, Never>?
     private var panel: WindowPreviewPanel?
     private let backdrop = NSVisualEffectView()
@@ -158,14 +202,32 @@ final class WindowPreviewPanelController: ObservableObject {
 
     func activate(ownerID: WindowPreviewOwnerID) {
         cancelDismissal()
-        guard selection.activeOwnerID != ownerID else { return }
+        activationTask?.cancel()
+        activationTask = nil
+
+        switch hoverIntent.hover(activeOwnerID: selection.activeOwnerID, candidateOwnerID: ownerID) {
+        case .activateImmediately:
+            activateImmediately(ownerID: ownerID)
+        case .keepCurrent:
+            break
+        case .scheduleSwitch:
+            activationTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: WindowPreviewHoverIntent.switchDelayNanoseconds)
+                guard !Task.isCancelled, self?.hoverIntent.resolve(ownerID) == true else { return }
+                self?.activationTask = nil
+                self?.activateImmediately(ownerID: ownerID)
+            }
+        }
+    }
+
+    private func activateImmediately(ownerID: WindowPreviewOwnerID) {
         var updatedSelection = selection
         updatedSelection.activate(ownerID)
         selection = updatedSelection
     }
 
     func cancelDismissal(ownerID: WindowPreviewOwnerID) {
-        guard selection.activeOwnerID == ownerID else { return }
+        guard selection.activeOwnerID == ownerID || hoverIntent.pendingOwnerID == ownerID else { return }
         cancelDismissal()
     }
 
@@ -173,17 +235,26 @@ final class WindowPreviewPanelController: ObservableObject {
         ownerID: WindowPreviewOwnerID,
         onDismiss: @escaping @MainActor () -> Void
     ) {
-        guard selection.activeOwnerID == ownerID else { return }
+        guard let activeOwnerID = selection.activeOwnerID,
+              activeOwnerID == ownerID || hoverIntent.pendingOwnerID == ownerID else { return }
+        activationTask?.cancel()
+        activationTask = nil
+        hoverIntent.cancel(ownerID)
         cancelDismissal()
         dismissalTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 300_000_000)
-            guard !Task.isCancelled, self?.selection.activeOwnerID == ownerID else { return }
-            self?.dismiss(ownerID: ownerID)
+            guard !Task.isCancelled,
+                  self?.selection.activeOwnerID == activeOwnerID,
+                  self?.hoverIntent.pendingOwnerID == nil else { return }
+            self?.dismiss(ownerID: activeOwnerID)
             onDismiss()
         }
     }
 
     func dismiss(ownerID: WindowPreviewOwnerID) {
+        activationTask?.cancel()
+        activationTask = nil
+        hoverIntent.reset()
         guard selection.activeOwnerID == ownerID else { return }
         cancelDismissal()
         var updatedSelection = selection
@@ -193,6 +264,9 @@ final class WindowPreviewPanelController: ObservableObject {
     }
 
     func dismissAll() {
+        activationTask?.cancel()
+        activationTask = nil
+        hoverIntent.reset()
         cancelDismissal()
         if selection.activeOwnerID != nil {
             var updatedSelection = selection

@@ -466,6 +466,42 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    let thirdPreviewOwner = WindowPreviewOwnerID(displayID: 1, bundleIdentifier: "com.example.third")
+    var previewHoverIntent = WindowPreviewHoverIntent()
+    guard WindowPreviewHoverIntent.switchDelayNanoseconds == 180_000_000,
+          previewHoverIntent.hover(
+              activeOwnerID: nil,
+              candidateOwnerID: firstPreviewOwner
+          ) == .activateImmediately,
+          previewHoverIntent.hover(
+              activeOwnerID: firstPreviewOwner,
+              candidateOwnerID: firstPreviewOwner
+          ) == .keepCurrent,
+          previewHoverIntent.hover(
+              activeOwnerID: firstPreviewOwner,
+              candidateOwnerID: secondPreviewOwner
+          ) == .scheduleSwitch,
+          previewHoverIntent.pendingOwnerID == secondPreviewOwner,
+          previewHoverIntent.hover(
+              activeOwnerID: firstPreviewOwner,
+              candidateOwnerID: thirdPreviewOwner
+          ) == .scheduleSwitch,
+          !previewHoverIntent.resolve(secondPreviewOwner),
+          previewHoverIntent.resolve(thirdPreviewOwner),
+          previewHoverIntent.pendingOwnerID == nil else {
+        fputs("SELF-TEST FAILED: window preview hover intent mismatch\n", stderr)
+        return 1
+    }
+    _ = previewHoverIntent.hover(
+        activeOwnerID: firstPreviewOwner,
+        candidateOwnerID: secondPreviewOwner
+    )
+    previewHoverIntent.cancel(secondPreviewOwner)
+    guard !previewHoverIntent.resolve(secondPreviewOwner) else {
+        fputs("SELF-TEST FAILED: cancelled window preview switch resolved\n", stderr)
+        return 1
+    }
+
     let minimizedWindowFrame = CGRect(x: 40, y: 80, width: 900, height: 600)
     guard !WindowPreviewWindowPolicy.listOptions.contains(.optionOnScreenOnly),
           WindowPreviewWindowPolicy.shouldInclude(
