@@ -2,6 +2,19 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.14] - 2026-08-26
+
+### Added
+
+- Animate the Start menu along the taskbar edge with Windows-style directional entrance, exit, easing, and subtle opacity transitions.
+- Replace the native macOS Start button context menu with a Windows-style flyout and retained Power submenu.
+
+### Fixed
+
+- Anchor the Start menu and Start button context menu to the same taskbar corner with Windows-style screen and taskbar spacing.
+- Wait for the Windows-default 400ms stable hover before showing the first app thumbnail preview, while preserving the shorter cross-app switch delay.
+- Cancel pending thumbnail previews when the pointer leaves early and close all preview surfaces before opening the Start menu.
+
 ## [0.0.13] - 2026-08-26
 
 ### Fixed
@@ -90,6 +103,7 @@ All notable changes to WinTaskbar for macOS are documented here.
 - Show window previews immediately when hovering over a taskbar app while retaining a short dismissal delay.
 - Match Windows preview thumbnail proportions and refine preview panel styling.
 
+[0.0.14]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.13...v0.0.14
 [0.0.13]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.10...v0.0.11
