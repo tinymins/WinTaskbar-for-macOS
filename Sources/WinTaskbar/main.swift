@@ -389,6 +389,23 @@ func runSelfTest() async -> Int32 {
     )
     defaults.set(["test.app": ["file:///tmp/project/"]], forKey: "winbar.recentProjects")
     let recentDocuments = RecentDocumentsService(defaults: defaults)
+    var taskbarItemOrder = TaskbarItemOrder()
+    let initialTaskbarOrder = taskbarItemOrder.reconcile(
+        pinnedBundleIDs: ["finder"],
+        runningBundleIDs: ["finder", "safari", "terminal"]
+    )
+    let pinnedInPlaceTaskbarOrder = taskbarItemOrder.reconcile(
+        pinnedBundleIDs: ["finder", "terminal"],
+        runningBundleIDs: ["finder", "safari", "terminal"]
+    )
+    let unpinnedExitTaskbarOrder = taskbarItemOrder.reconcile(
+        pinnedBundleIDs: ["finder", "terminal"],
+        runningBundleIDs: ["finder", "terminal"]
+    )
+    let pinnedExitTaskbarOrder = taskbarItemOrder.reconcile(
+        pinnedBundleIDs: ["finder", "terminal"],
+        runningBundleIDs: ["finder"]
+    )
     var previewSelection = WindowPreviewSelection()
     previewSelection.activate(firstPreviewOwner)
     previewSelection.activate(secondPreviewOwner)
@@ -440,6 +457,10 @@ func runSelfTest() async -> Int32 {
           TaskbarJumpListModel(shortcuts: [], recentDocuments: [], isPinned: false, windowCount: 1).closeTitle == "Close window",
           recentHistory["test.app"] == ["file:///tmp/new/", "file:///tmp/old/"],
           recentDocuments.recentDocuments(forBundleID: "test.app").map(\.label) == ["project"],
+          initialTaskbarOrder == ["finder", "safari", "terminal"],
+          pinnedInPlaceTaskbarOrder == ["finder", "safari", "terminal"],
+          unpinnedExitTaskbarOrder == ["finder", "terminal"],
+          pinnedExitTaskbarOrder == ["finder", "terminal"],
           RecentDocumentsService.documentURL(from: "file:///tmp/project/")
               == URL(string: "file:///tmp/project/"),
           RecentDocumentsService.documentURL(from: "https://example.com/project/")?.isFileURL == true,

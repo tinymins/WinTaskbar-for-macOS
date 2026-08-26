@@ -2,6 +2,30 @@ import AppKit
 import Combine
 import Foundation
 
+struct TaskbarItemOrder {
+    private(set) var bundleIDs: [String] = []
+
+    mutating func reconcile(pinnedBundleIDs: [String], runningBundleIDs: [String]) -> [String] {
+        let eligible = Set(pinnedBundleIDs + runningBundleIDs)
+        bundleIDs.removeAll { !eligible.contains($0) }
+
+        var included = Set(bundleIDs)
+        for bundleID in pinnedBundleIDs + runningBundleIDs where included.insert(bundleID).inserted {
+            bundleIDs.append(bundleID)
+        }
+        return bundleIDs
+    }
+
+    mutating func move(_ bundleID: String, before destination: String) {
+        guard bundleID != destination,
+              let sourceIndex = bundleIDs.firstIndex(of: bundleID),
+              let destinationIndex = bundleIDs.firstIndex(of: destination) else { return }
+        let value = bundleIDs.remove(at: sourceIndex)
+        let adjusted = sourceIndex < destinationIndex ? destinationIndex - 1 : destinationIndex
+        bundleIDs.insert(value, at: adjusted)
+    }
+}
+
 @MainActor
 final class AppDiscoveryService: ObservableObject {
     @Published private(set) var runningApps: [DiscoveredApp] = []
@@ -9,6 +33,8 @@ final class AppDiscoveryService: ObservableObject {
 
     private let workspace: NSWorkspace
     private var observers: [NSObjectProtocol] = []
+    private var knownAppsByID: [String: DiscoveredApp] = [:]
+    private var taskbarItemOrder = TaskbarItemOrder()
 
     init(workspace: NSWorkspace = .shared) {
         self.workspace = workspace
@@ -32,7 +58,7 @@ final class AppDiscoveryService: ObservableObject {
     }
 
     func reloadRunningApps() {
-        runningApps = workspace.runningApplications
+        let discovered = workspace.runningApplications
             .filter { $0.activationPolicy == .regular && !$0.isTerminated }
             .compactMap { app -> DiscoveredApp? in
                 guard let url = app.bundleURL, let name = app.localizedName else { return nil }
@@ -46,6 +72,8 @@ final class AppDiscoveryService: ObservableObject {
                 )
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        remember(discovered)
+        runningApps = discovered
     }
 
     func reloadInstalledApps() {
@@ -59,9 +87,11 @@ final class AppDiscoveryService: ObservableObject {
         for root in roots {
             scanApps(in: root, depth: 0, into: &appsByID)
         }
-        installedApps = appsByID.values.sorted {
+        let discovered = appsByID.values.sorted {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
+        remember(discovered)
+        installedApps = discovered
     }
 
     private func scanApps(in directory: URL, depth: Int, into result: inout [String: DiscoveredApp]) {
@@ -106,6 +136,7 @@ final class AppDiscoveryService: ObservableObject {
     func app(bundleIdentifier: String) -> DiscoveredApp? {
         runningApps.first { $0.bundleIdentifier == bundleIdentifier }
             ?? installedApps.first { $0.bundleIdentifier == bundleIdentifier }
+            ?? knownApp(bundleIdentifier: bundleIdentifier)
     }
 
     func taskbarItems(pinnedBundleIDs: [String], badges: [String: String], showFinder: Bool) -> [TaskbarItem] {
@@ -118,38 +149,41 @@ final class AppDiscoveryService: ObservableObject {
             if let bundleID = app.bundleIdentifier, runningByID[bundleID] == nil { runningByID[bundleID] = app }
         }
 
-        var items: [TaskbarItem] = []
-        var included = Set<String>()
-        for bundleID in pinnedBundleIDs {
-            guard let app = runningByID[bundleID] ?? installedByID[bundleID] else { continue }
+        let pinnedSet = Set(pinnedBundleIDs)
+        let availablePinnedBundleIDs = pinnedBundleIDs.filter { knownApp(bundleIdentifier: $0) != nil }
+        var visibleRunningBundleIDs: [String] = []
+        var includedRunning = Set<String>()
+        for app in runningApps {
+            guard let bundleID = app.bundleIdentifier,
+                  includedRunning.insert(bundleID).inserted else { continue }
+            if !showFinder && bundleID == "com.apple.finder" && !pinnedSet.contains(bundleID) { continue }
+            visibleRunningBundleIDs.append(bundleID)
+        }
+
+        let orderedBundleIDs = taskbarItemOrder.reconcile(
+            pinnedBundleIDs: availablePinnedBundleIDs,
+            runningBundleIDs: visibleRunningBundleIDs
+        )
+        return orderedBundleIDs.compactMap { bundleID in
+            guard let app = runningByID[bundleID] ?? installedByID[bundleID] ?? knownAppsByID[bundleID] else {
+                return nil
+            }
             let running = runningByID[bundleID]
-            items.append(TaskbarItem(
+            return TaskbarItem(
                 bundleIdentifier: bundleID,
                 name: app.name,
                 url: app.url,
-                isPinned: true,
+                isPinned: pinnedSet.contains(bundleID),
                 isRunning: running != nil,
                 isActive: running?.isActive ?? false,
                 processIdentifier: running?.processIdentifier,
                 badge: badges[bundleID]
-            ))
-            included.insert(bundleID)
+            )
         }
-        for app in runningApps {
-            guard let bundleID = app.bundleIdentifier, !included.contains(bundleID) else { continue }
-            if !showFinder && bundleID == "com.apple.finder" { continue }
-            items.append(TaskbarItem(
-                bundleIdentifier: bundleID,
-                name: app.name,
-                url: app.url,
-                isPinned: false,
-                isRunning: true,
-                isActive: app.isActive,
-                processIdentifier: app.processIdentifier,
-                badge: badges[bundleID]
-            ))
-        }
-        return items
+    }
+
+    func reorderTaskbarItem(_ bundleID: String, before destination: String) {
+        taskbarItemOrder.move(bundleID, before: destination)
     }
 
     func open(_ item: TaskbarItem) {
@@ -170,5 +204,29 @@ final class AppDiscoveryService: ObservableObject {
 
     func showInFinder(_ item: TaskbarItem) {
         workspace.activateFileViewerSelecting([item.url])
+    }
+
+    private func remember(_ apps: [DiscoveredApp]) {
+        for app in apps {
+            guard let bundleID = app.bundleIdentifier else { continue }
+            knownAppsByID[bundleID] = app
+        }
+    }
+
+    private func knownApp(bundleIdentifier: String) -> DiscoveredApp? {
+        if let app = knownAppsByID[bundleIdentifier] { return app }
+        guard let url = workspace.urlForApplication(withBundleIdentifier: bundleIdentifier) else { return nil }
+        let bundle = Bundle(url: url)
+        let name = (bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? url.deletingPathExtension().lastPathComponent
+        let app = DiscoveredApp(
+            name: name,
+            bundleIdentifier: bundleIdentifier,
+            url: url,
+            isRunning: false
+        )
+        knownAppsByID[bundleIdentifier] = app
+        return app
     }
 }

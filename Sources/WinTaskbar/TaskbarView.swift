@@ -165,7 +165,10 @@ struct TaskbarView: View {
         )
         .draggable(item.bundleIdentifier)
         .dropDestination(for: String.self) { bundleIDs, _ in
-            guard item.isPinned, let source = bundleIDs.first else { return false }
+            guard item.isPinned,
+                  let source = bundleIDs.first,
+                  preferences.pinnedBundleIDs.contains(source) else { return false }
+            apps.reorderTaskbarItem(source, before: item.bundleIdentifier)
             preferences.reorderPinned(source, before: item.bundleIdentifier)
             return true
         }
