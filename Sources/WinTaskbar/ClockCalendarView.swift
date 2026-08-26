@@ -7,7 +7,8 @@ enum ClockCalendarMetrics {
     static let collapsedHeight: CGFloat = 181
     static let headerHeight: CGFloat = 128
     static let calendarHeight: CGFloat = 508
-    static let agendaHeight: CGFloat = 178
+    static let calendarDividerSpacing: CGFloat = 4
+    static let agendaHeight: CGFloat = 178 - calendarDividerSpacing
     static let focusHeight: CGFloat = 52
 }
 
@@ -495,6 +496,7 @@ struct ClockCalendarPanelView: View {
             }
             .frame(height: 252, alignment: .top)
             .clipped()
+            .padding(.bottom, ClockCalendarMetrics.calendarDividerSpacing)
 
             Divider().overlay(dividerColor)
             agendaSection
@@ -532,7 +534,7 @@ struct ClockCalendarPanelView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .padding(.horizontal, 16)
-        .padding(.top, 4)
+        .padding(.top, ClockCalendarMetrics.calendarDividerSpacing)
     }
 
     @ViewBuilder
