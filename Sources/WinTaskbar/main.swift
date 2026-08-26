@@ -244,31 +244,35 @@ func runSelfTest() async -> Int32 {
           BatteryPresentationState.resolve(level: 20, isCharging: false, isLowPowerModeEnabled: false) == .saver,
           BatteryPresentationState.resolve(level: 82, isCharging: false, isLowPowerModeEnabled: true) == .saver,
           BatteryPresentationState.resolve(level: 6, isCharging: false, isLowPowerModeEnabled: false) == .critical,
-          QuickSettingsPanelMetrics.contentSize == CGSize(width: 360, height: 246),
+          QuickSettingsPanelMetrics.contentSize == CGSize(width: 360, height: 335),
+          QuickSettingsPanelMetrics.settingsGridHeight == 213,
+          QuickSettingsPanelMetrics.tileSize == CGSize(width: 96, height: 47),
+          QuickSettingsPanelMetrics.volumeHeight == 72,
+          QuickSettingsPanelMetrics.footerHeight == 48,
           QuickSettingsPanelGeometry.frame(
               screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 800),
               visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 775),
               position: .bottom,
               barHeight: 48
-          ) == CGRect(x: 828, y: 56, width: 360, height: 246),
+          ) == CGRect(x: 828, y: 56, width: 360, height: 335),
           QuickSettingsPanelGeometry.frame(
               screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 800),
               visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 775),
               position: .top,
               barHeight: 48
-          ) == CGRect(x: 828, y: 473, width: 360, height: 246),
+          ) == CGRect(x: 828, y: 384, width: 360, height: 335),
           QuickSettingsPanelGeometry.frame(
               screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 800),
               visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 775),
               position: .left,
               barHeight: 48
-          ) == CGRect(x: 56, y: 12, width: 360, height: 246),
+          ) == CGRect(x: 56, y: 12, width: 360, height: 335),
           QuickSettingsPanelGeometry.frame(
               screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 800),
               visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 775),
               position: .right,
               barHeight: 48
-          ) == CGRect(x: 784, y: 12, width: 360, height: 246) else {
+          ) == CGRect(x: 784, y: 12, width: 360, height: 335) else {
         fputs("SELF-TEST FAILED: quick settings presentation mismatch\n", stderr)
         return 1
     }
