@@ -2,6 +2,17 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.11] - 2026-08-26
+
+### Added
+
+- Add Windows-style app jump lists positioned above their taskbar icons, with app, pin, shortcut, Finder, and close actions.
+- Restore Recent project tracking from the original Demo behavior and show captured items at the top of app jump lists.
+
+### Fixed
+
+- Restore the original standalone shortcut management window instead of the incomplete replacement dialog.
+
 ## [0.0.10] - 2026-08-26
 
 ### Fixed
@@ -62,6 +73,7 @@ All notable changes to WinTaskbar for macOS are documented here.
 - Show window previews immediately when hovering over a taskbar app while retaining a short dismissal delay.
 - Match Windows preview thumbnail proportions and refine preview panel styling.
 
+[0.0.11]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.7...v0.0.8
