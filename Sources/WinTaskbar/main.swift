@@ -246,6 +246,7 @@ func runSelfTest() async -> Int32 {
           BatteryPresentationState.resolve(level: 6, isCharging: false, isLowPowerModeEnabled: false) == .critical,
           QuickSettingsPanelMetrics.contentSize == CGSize(width: 360, height: 335),
           QuickSettingsPanelMetrics.settingsGridHeight == 213,
+          QuickSettingsPanelMetrics.settingsPageCount == 2,
           QuickSettingsPanelMetrics.tileSize == CGSize(width: 96, height: 47),
           QuickSettingsPanelMetrics.splitSegmentWidth == 47.5,
           QuickSettingsPanelMetrics.splitDividerOpacity == 0.08,
@@ -265,6 +266,10 @@ func runSelfTest() async -> Int32 {
           WindowsVolumeSliderGeometry.value(at: 0, width: 200) == 0,
           WindowsVolumeSliderGeometry.value(at: 100, width: 200) == 0.5,
           WindowsVolumeSliderGeometry.value(at: 200, width: 200) == 1,
+          QuickSettingsPageNavigation.targetPage(currentPage: 0, deltaY: -1, pageCount: 2) == 1,
+          QuickSettingsPageNavigation.targetPage(currentPage: 1, deltaY: -1, pageCount: 2) == 1,
+          QuickSettingsPageNavigation.targetPage(currentPage: 1, deltaY: 1, pageCount: 2) == 0,
+          QuickSettingsPageNavigation.targetPage(currentPage: 0, deltaY: 1, pageCount: 2) == 0,
           WiFiScanIssue.locationAuthorizationRequired != .locationPermissionDenied,
           WiFiScanIssue.locationPermissionDenied != .scanFailed,
           QuickSettingsPanelGeometry.frame(

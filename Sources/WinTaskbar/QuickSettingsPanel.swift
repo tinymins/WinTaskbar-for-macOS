@@ -33,10 +33,19 @@ enum QuickSettingsPanelMetrics {
     static let tileLabelHeight: CGFloat = 15
     static let volumeHeight: CGFloat = 72
     static let footerHeight: CGFloat = 48
+    static let settingsPageCount = 2
     static let detailHeaderHeight: CGFloat = 52
     static let detailContentHeight: CGFloat = 233
     static let detailBackButtonSize: CGFloat = 40
     static let detailBackButtonCornerRadius: CGFloat = 4
+}
+
+enum QuickSettingsPageNavigation {
+    static func targetPage(currentPage: Int, deltaY: CGFloat, pageCount: Int) -> Int {
+        guard deltaY != 0, pageCount > 0 else { return currentPage }
+        let requestedPage = currentPage + (deltaY < 0 ? 1 : -1)
+        return min(max(requestedPage, 0), pageCount - 1)
+    }
 }
 
 enum WindowsVolumeSliderMetrics {
@@ -164,6 +173,8 @@ private struct QuickSettingsPanelView: View {
     @State private var password = ""
     @State private var joinFailed = false
     @State private var isDetailBackHovering = false
+    @State private var settingsPage = 0
+    @State private var lastSettingsPageChange = Date.distantPast
 
     var body: some View {
         VStack(spacing: 0) {
@@ -193,6 +204,28 @@ private struct QuickSettingsPanelView: View {
     }
 
     private var quickSettingsGrid: some View {
+        VStack(spacing: 0) {
+            quickSettingsPageOne
+                .frame(height: QuickSettingsPanelMetrics.settingsGridHeight)
+                .accessibilityHidden(settingsPage != 0)
+            quickSettingsPageTwo
+                .frame(height: QuickSettingsPanelMetrics.settingsGridHeight)
+                .accessibilityHidden(settingsPage != 1)
+        }
+        .offset(y: -CGFloat(settingsPage) * QuickSettingsPanelMetrics.settingsGridHeight)
+        .frame(height: QuickSettingsPanelMetrics.settingsGridHeight, alignment: .top)
+        .clipped()
+        .background {
+            QuickSettingsScrollMonitor(onScroll: handleQuickSettingsScroll)
+        }
+        .overlay(alignment: .trailing) {
+            settingsPageIndicator
+                .padding(.trailing, 6)
+        }
+        .animation(.easeInOut(duration: 0.18), value: settingsPage)
+    }
+
+    private var quickSettingsPageOne: some View {
         VStack(spacing: 25) {
             HStack(spacing: 12) {
                 QuickSettingTile(
@@ -248,17 +281,127 @@ private struct QuickSettingsPanelView: View {
             }
         }
         .padding(.horizontal, 24)
-        .frame(height: QuickSettingsPanelMetrics.settingsGridHeight)
-        .overlay(alignment: .trailing) {
-            VStack(spacing: 5) {
-                Circle().frame(width: 5, height: 5)
-                Circle().frame(width: 5, height: 5).opacity(0.45)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 7, weight: .bold))
+    }
+
+    private var quickSettingsPageTwo: some View {
+        VStack(spacing: 25) {
+            HStack(spacing: 12) {
+                QuickSettingTile(
+                    label: "Night light",
+                    symbol: "sun.max",
+                    isActive: false,
+                    primaryAction: {
+                        QuickSettingsDestination.open("com.apple.Displays-Settings.extension")
+                    },
+                    detailAction: nil,
+                    showsInlineChevron: false
+                )
+                QuickSettingTile(
+                    label: "Mobile hotspot",
+                    symbol: "antenna.radiowaves.left.and.right",
+                    isActive: false,
+                    primaryAction: {
+                        QuickSettingsDestination.open("com.apple.Sharing-Settings.extension")
+                    },
+                    detailAction: nil,
+                    showsInlineChevron: false
+                )
+                QuickSettingTile(
+                    label: "Nearby sharing",
+                    symbol: "square.and.arrow.up",
+                    isActive: false,
+                    primaryAction: {
+                        QuickSettingsDestination.open("com.apple.Sharing-Settings.extension")
+                    },
+                    detailAction: nil,
+                    showsInlineChevron: false
+                )
             }
-            .foregroundStyle(.secondary)
-            .padding(.trailing, 9)
+            HStack(spacing: 12) {
+                QuickSettingTile(
+                    label: "Wired display",
+                    symbol: "rectangle.on.rectangle",
+                    isActive: false,
+                    primaryAction: {
+                        QuickSettingsDestination.open("com.apple.Displays-Settings.extension")
+                    },
+                    detailAction: nil,
+                    showsInlineChevron: true
+                )
+                QuickSettingTile(
+                    label: "Project",
+                    symbol: "rectangle.on.rectangle.angled",
+                    isActive: false,
+                    primaryAction: {
+                        QuickSettingsDestination.open("com.apple.Displays-Settings.extension")
+                    },
+                    detailAction: nil,
+                    showsInlineChevron: true
+                )
+                Color.clear
+                    .frame(width: QuickSettingsPanelMetrics.tileSize.width,
+                           height: QuickSettingsPanelMetrics.tileSize.height
+                                + 8 + QuickSettingsPanelMetrics.tileLabelHeight)
+                    .accessibilityHidden(true)
+            }
         }
+        .padding(.horizontal, 24)
+    }
+
+    private var settingsPageIndicator: some View {
+        VStack(spacing: 5) {
+            if settingsPage > 0 {
+                settingsPageArrow(symbol: "chevron.up", page: settingsPage - 1)
+            }
+            Button { showSettingsPage(0) } label: {
+                Circle()
+                    .frame(width: 5, height: 5)
+                    .opacity(settingsPage == 0 ? 1 : 0.45)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Quick settings page 1")
+            Button { showSettingsPage(1) } label: {
+                Circle()
+                    .frame(width: 5, height: 5)
+                    .opacity(settingsPage == 1 ? 1 : 0.45)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Quick settings page 2")
+            if settingsPage < QuickSettingsPanelMetrics.settingsPageCount - 1 {
+                settingsPageArrow(symbol: "chevron.down", page: settingsPage + 1)
+            }
+        }
+        .foregroundStyle(.secondary)
+    }
+
+    private func settingsPageArrow(symbol: String, page: Int) -> some View {
+        Button { showSettingsPage(page) } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 7, weight: .bold))
+                .frame(width: 10, height: 8)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(page == 0 ? "Previous quick settings page" : "Next quick settings page")
+    }
+
+    private func handleQuickSettingsScroll(_ deltaY: CGFloat) {
+        guard abs(deltaY) > 0.1 else { return }
+        let targetPage = QuickSettingsPageNavigation.targetPage(
+            currentPage: settingsPage,
+            deltaY: deltaY,
+            pageCount: QuickSettingsPanelMetrics.settingsPageCount
+        )
+        guard targetPage != settingsPage,
+              Date().timeIntervalSince(lastSettingsPageChange) >= 0.35 else { return }
+        showSettingsPage(targetPage)
+    }
+
+    private func showSettingsPage(_ requestedPage: Int) {
+        let pageRange = 0..<QuickSettingsPanelMetrics.settingsPageCount
+        guard pageRange.contains(requestedPage), requestedPage != settingsPage else { return }
+        lastSettingsPageChange = Date()
+        settingsPage = requestedPage
     }
 
     private var volumeSection: some View {
@@ -926,6 +1069,52 @@ private struct QuickSettingsPanelAnchor: NSViewRepresentable {
 
 private final class QuickSettingsPanelAnchorView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+private struct QuickSettingsScrollMonitor: NSViewRepresentable {
+    let onScroll: @MainActor (CGFloat) -> Void
+
+    func makeNSView(context: Context) -> QuickSettingsScrollMonitorView {
+        let view = QuickSettingsScrollMonitorView()
+        view.onScroll = onScroll
+        return view
+    }
+
+    func updateNSView(_ nsView: QuickSettingsScrollMonitorView, context: Context) {
+        nsView.onScroll = onScroll
+    }
+
+    static func dismantleNSView(_ nsView: QuickSettingsScrollMonitorView, coordinator: Void) {
+        nsView.removeEventMonitor()
+    }
+}
+
+@MainActor
+private final class QuickSettingsScrollMonitorView: NSView {
+    var onScroll: (@MainActor (CGFloat) -> Void)?
+    private var eventMonitor: Any?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        removeEventMonitor()
+        guard window != nil else { return }
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self,
+                  event.window === self.window,
+                  abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX),
+                  self.bounds.contains(self.convert(event.locationInWindow, from: nil)) else {
+                return event
+            }
+            self.onScroll?(event.scrollingDeltaY)
+            return nil
+        }
+    }
+
+    func removeEventMonitor() {
+        guard let eventMonitor else { return }
+        NSEvent.removeMonitor(eventMonitor)
+        self.eventMonitor = nil
+    }
 }
 
 extension View {
