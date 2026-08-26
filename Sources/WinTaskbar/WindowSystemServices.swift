@@ -3,6 +3,29 @@ import ApplicationServices
 import CoreGraphics
 import Foundation
 
+enum TaskbarAppClickAction: Equatable {
+    case activateApplication
+    case doNothing
+    case restoreWindow
+    case minimizeWindow
+    case bringWindowToFront
+}
+
+struct TaskbarAppClickPolicy {
+    static func action(
+        windows: [WindowInfo],
+        isApplicationActive: Bool,
+        isSingleWindowFocused: Bool
+    ) -> TaskbarAppClickAction {
+        guard windows.count == 1, let window = windows.first else {
+            return windows.isEmpty ? .activateApplication : .doNothing
+        }
+        if window.isMinimized { return .restoreWindow }
+        if isApplicationActive && isSingleWindowFocused { return .minimizeWindow }
+        return .bringWindowToFront
+    }
+}
+
 @MainActor
 final class WindowActivationService {
     private let windowsService: WindowsService
@@ -18,11 +41,26 @@ final class WindowActivationService {
             return
         }
 
-        if application.isActive, hasVisibleWindow(pid: pid) {
-            windowsService.cacheThumbnails(forPID: pid)
-            minimize(pid: pid)
-        } else {
+        let windows = windowsService.windows(forPID: pid)
+        let applicationElement = AXUIElementCreateApplication(pid)
+        let isSingleWindowFocused = windows.first.map {
+            windows.count == 1 && isFocused($0, in: applicationElement)
+        } ?? false
+
+        switch TaskbarAppClickPolicy.action(
+            windows: windows,
+            isApplicationActive: application.isActive,
+            isSingleWindowFocused: isSingleWindowFocused
+        ) {
+        case .activateApplication:
             application.activate(options: [.activateIgnoringOtherApps])
+        case .doNothing:
+            break
+        case .restoreWindow, .bringWindowToFront:
+            raise(window: windows[0])
+        case .minimizeWindow:
+            windowsService.cacheThumbnails(forPID: pid)
+            minimize(window: windows[0])
         }
     }
 
@@ -39,21 +77,9 @@ final class WindowActivationService {
         AXUIElementPerformAction(closeButton, kAXPressAction as CFString)
     }
 
-    func hasVisibleWindow(pid: pid_t) -> Bool {
-        windows(of: AXUIElementCreateApplication(pid)).contains { element in
-            let minimized: Bool = attribute(element, kAXMinimizedAttribute) ?? false
-            return !minimized
-        }
-    }
-
-    func minimize(pid: pid_t) {
-        let application = AXUIElementCreateApplication(pid)
-        let candidates = windows(of: application)
-        let main: AXUIElement? = attribute(application, kAXMainWindowAttribute)
-        let target = main ?? candidates.first
-        if let target {
-            AXUIElementSetAttributeValue(target, kAXMinimizedAttribute as CFString, true as CFBoolean)
-        }
+    func minimize(window: WindowInfo) {
+        guard let match = matchingWindow(for: window) else { return }
+        AXUIElementSetAttributeValue(match, kAXMinimizedAttribute as CFString, true as CFBoolean)
     }
 
     func openNewWindow(_ item: TaskbarItem) {
@@ -76,11 +102,18 @@ final class WindowActivationService {
     }
 
     private func matchingWindow(for window: WindowInfo) -> AXUIElement? {
-        windows(of: AXUIElementCreateApplication(window.ownerPID)).first { element in
-            let elementTitle: String? = attribute(element, kAXTitleAttribute)
-            let elementFrame = frame(of: element)
-            return elementTitle == window.title || elementFrame.map { framesMatch($0, window.frame) } == true
-        }
+        windows(of: AXUIElementCreateApplication(window.ownerPID)).first { matches($0, window) }
+    }
+
+    private func isFocused(_ window: WindowInfo, in application: AXUIElement) -> Bool {
+        guard let focusedWindow: AXUIElement = attribute(application, kAXFocusedWindowAttribute) else { return false }
+        return matches(focusedWindow, window)
+    }
+
+    private func matches(_ element: AXUIElement, _ window: WindowInfo) -> Bool {
+        let elementTitle: String? = attribute(element, kAXTitleAttribute)
+        let elementFrame = frame(of: element)
+        return elementTitle == window.title || elementFrame.map { framesMatch($0, window.frame) } == true
     }
 
     private func frame(of element: AXUIElement) -> CGRect? {

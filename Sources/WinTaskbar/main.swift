@@ -352,6 +352,13 @@ func runSelfTest() async -> Int32 {
         frame: CGRect(x: 0, y: 0, width: 1080, height: 1920),
         isMinimized: false
     )
+    let minimizedPreviewWindow = WindowInfo(
+        windowID: 3,
+        title: "Minimized",
+        ownerPID: 1,
+        frame: CGRect(x: 100, y: 100, width: 900, height: 600),
+        isMinimized: true
+    )
     var previewSelection = WindowPreviewSelection()
     previewSelection.activate(firstPreviewOwner)
     previewSelection.activate(secondPreviewOwner)
@@ -385,6 +392,36 @@ func runSelfTest() async -> Int32 {
           TaskbarButtonMotion.pressedScale == 0.82,
           TaskbarButtonMotion.pressDuration == 0.06,
           TaskbarButtonMotion.releaseDuration == 0.08,
+          TaskbarAppClickPolicy.action(
+              windows: [],
+              isApplicationActive: true,
+              isSingleWindowFocused: false
+          ) == .activateApplication,
+          TaskbarAppClickPolicy.action(
+              windows: [landscapePreviewWindow, portraitPreviewWindow],
+              isApplicationActive: true,
+              isSingleWindowFocused: true
+          ) == .doNothing,
+          TaskbarAppClickPolicy.action(
+              windows: [minimizedPreviewWindow],
+              isApplicationActive: false,
+              isSingleWindowFocused: false
+          ) == .restoreWindow,
+          TaskbarAppClickPolicy.action(
+              windows: [landscapePreviewWindow],
+              isApplicationActive: true,
+              isSingleWindowFocused: true
+          ) == .minimizeWindow,
+          TaskbarAppClickPolicy.action(
+              windows: [landscapePreviewWindow],
+              isApplicationActive: true,
+              isSingleWindowFocused: false
+          ) == .bringWindowToFront,
+          TaskbarAppClickPolicy.action(
+              windows: [landscapePreviewWindow],
+              isApplicationActive: false,
+              isSingleWindowFocused: true
+          ) == .bringWindowToFront,
           WindowPreviewHoverPolicy.action(
               hovering: true,
               previewsEnabled: true,
