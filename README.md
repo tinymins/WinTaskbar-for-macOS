@@ -55,8 +55,11 @@ Release archives use a stable self-signed certificate so macOS permission identi
 ## Run from source
 
 ```bash
+bun run init
 swift run WinTaskbar
 ```
+
+`bun run init` installs the pinned, checksum-verified `rcodesign` binary into the ignored `.tools/` directory. It does not import certificates or change the macOS keychain.
 
 ## Build the macOS app
 
@@ -65,7 +68,7 @@ bash Scripts/package_app.sh
 open dist/WinTaskbar.app
 ```
 
-The build automatically uses the same pinned identity as GitHub Actions when `.signing/WinTaskbar-CI-Code-Signing.p12` and `.signing/WinTaskbar-CI-Code-Signing.password` exist. This preserves Accessibility and Screen Recording permissions across rebuilds without reading the login keychain. The ignored `.signing/` directory must remain private because it contains both the encrypted certificate and its password. If neither file exists, the script falls back to ad-hoc signing.
+The build automatically uses the same pinned identity as GitHub Actions when `.signing/WinTaskbar-CI-Code-Signing.p12` and `.signing/WinTaskbar-CI-Code-Signing.password` exist. Local signing reads those files directly through `rcodesign`; it does not import certificates or change the macOS keychain. The ignored `.signing/` directory must remain private because it contains both the encrypted certificate and its password. If neither file exists, the script falls back to ad-hoc signing. If signing material exists but `rcodesign` has not been initialized, the build fails with an instruction to run `bun run init`.
 
 ## Verification
 

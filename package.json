@@ -2,6 +2,7 @@
   "name": "wintaskbar-for-macos",
   "private": true,
   "scripts": {
+    "init": "bash Scripts/init_local.sh",
     "lint": "bash Scripts/lint.sh",
     "tsc": "bash Scripts/typecheck.sh"
   }
