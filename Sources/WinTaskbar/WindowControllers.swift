@@ -575,6 +575,9 @@ final class StartMenuController: NSObject, NSWindowDelegate {
     private let backdrop = NSView()
     private var cancellable: AnyCancellable?
     private var lastResignDate = Date.distantPast
+    private var isPresented = false
+    private var targetFrame: NSRect?
+    private var orderOutTask: Task<Void, Never>?
 
     init(
         preferences: PreferencesStore,
@@ -608,17 +611,67 @@ final class StartMenuController: NSObject, NSWindowDelegate {
     }
 
     func toggle(on screen: NSScreen? = nil) {
-        if panel.isVisible {
+        if isPresented {
             hide()
         } else {
             guard Date().timeIntervalSince(lastResignDate) >= 0.3 else { return }
-            positionPanel(on: screen ?? taskbar.activeScreen)
-            panel.makeKeyAndOrderFront(nil)
-            applyBlur()
+            show(on: screen ?? taskbar.activeScreen)
         }
     }
 
-    func hide() { panel.orderOut(nil) }
+    private func show(on screen: NSScreen) {
+        orderOutTask?.cancel()
+        orderOutTask = nil
+        isPresented = true
+
+        let finalFrame = frame(on: screen)
+        targetFrame = finalFrame
+        if !panel.isVisible {
+            panel.setFrame(
+                StartMenuMotion.dismissedFrame(from: finalFrame, position: preferences.position),
+                display: false
+            )
+            panel.alphaValue = 0
+            panel.makeKeyAndOrderFront(nil)
+        }
+        applyBlur()
+
+        animateFrame(
+            to: finalFrame,
+            duration: StartMenuMotion.entranceDuration,
+            timingFunction: StartMenuMotion.entranceTimingFunction()
+        )
+        animateAlpha(to: 1)
+    }
+
+    func hide() {
+        guard isPresented else { return }
+        isPresented = false
+        guard panel.isVisible, let targetFrame else {
+            panel.orderOut(nil)
+            panel.alphaValue = 1
+            return
+        }
+
+        let duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            ? StartMenuMotion.fadeDuration
+            : StartMenuMotion.exitDuration
+        animateFrame(
+            to: StartMenuMotion.dismissedFrame(from: targetFrame, position: preferences.position),
+            duration: duration,
+            timingFunction: StartMenuMotion.exitTimingFunction()
+        )
+        animateAlpha(to: 0)
+
+        orderOutTask?.cancel()
+        orderOutTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+            guard !Task.isCancelled, self?.isPresented == false else { return }
+            self?.panel.orderOut(nil)
+            self?.panel.setFrame(targetFrame, display: false)
+            self?.panel.alphaValue = 1
+        }
+    }
 
     func windowDidResignKey(_ notification: Notification) {
         lastResignDate = Date()
@@ -678,8 +731,8 @@ final class StartMenuController: NSObject, NSWindowDelegate {
         )
     }
 
-    private func positionPanel(on screen: NSScreen) {
-        let frame = StartMenuGeometry.frame(
+    private func frame(on screen: NSScreen) -> NSRect {
+        StartMenuGeometry.frame(
             screenFrame: screen.frame,
             visibleFrame: screen.visibleFrame,
             position: preferences.position,
@@ -687,7 +740,56 @@ final class StartMenuController: NSObject, NSWindowDelegate {
             heightMode: preferences.menuHeightMode,
             oppositeEnd: preferences.startButtonAtEnd || preferences.menuButtonPlacement != .standard
         )
-        panel.setFrame(frame, display: true)
+    }
+
+    private func animateFrame(
+        to frame: NSRect,
+        duration: TimeInterval,
+        timingFunction: CAMediaTimingFunction
+    ) {
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            panel.setFrame(frame, display: true)
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = duration
+            context.timingFunction = timingFunction
+            panel.animator().setFrame(frame, display: true)
+        }
+    }
+
+    private func animateAlpha(to alphaValue: CGFloat) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = StartMenuMotion.fadeDuration
+            context.timingFunction = CAMediaTimingFunction(name: .linear)
+            panel.animator().alphaValue = alphaValue
+        }
+    }
+}
+
+struct StartMenuMotion {
+    static let travel: CGFloat = 16
+    static let entranceDuration: TimeInterval = 0.25
+    static let exitDuration: TimeInterval = 0.167
+    static let fadeDuration: TimeInterval = 0.083
+
+    static func dismissedFrame(from frame: NSRect, position: TaskbarPosition) -> NSRect {
+        var dismissed = frame
+        switch position {
+        case .bottom: dismissed.origin.y -= travel
+        case .top: dismissed.origin.y += travel
+        case .left: dismissed.origin.x -= travel
+        case .right: dismissed.origin.x += travel
+        }
+        return dismissed
+    }
+
+    static func entranceTimingFunction() -> CAMediaTimingFunction {
+        CAMediaTimingFunction(controlPoints: 0, 0, 0, 1)
+    }
+
+    static func exitTimingFunction() -> CAMediaTimingFunction {
+        CAMediaTimingFunction(controlPoints: 1, 0, 1, 1)
     }
 }
 

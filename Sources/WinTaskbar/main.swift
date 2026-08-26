@@ -270,6 +270,21 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    guard StartMenuMotion.dismissedFrame(from: bottomMenuFrame, position: .bottom).origin
+        == CGPoint(x: 12, y: 44),
+        StartMenuMotion.dismissedFrame(from: bottomMenuFrame, position: .top).origin
+        == CGPoint(x: 12, y: 76),
+        StartMenuMotion.dismissedFrame(from: bottomMenuFrame, position: .left).origin
+        == CGPoint(x: -4, y: 60),
+        StartMenuMotion.dismissedFrame(from: bottomMenuFrame, position: .right).origin
+        == CGPoint(x: 28, y: 60),
+        StartMenuMotion.entranceDuration == 0.25,
+        StartMenuMotion.exitDuration == 0.167,
+        StartMenuMotion.fadeDuration == 0.083 else {
+        fputs("SELF-TEST FAILED: start menu motion mismatch\n", stderr)
+        return 1
+    }
+
     guard RunningIndicatorLayout.underline(
         position: .bottom,
         cellSize: 40,
