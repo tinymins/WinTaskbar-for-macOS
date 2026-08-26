@@ -382,6 +382,9 @@ func runSelfTest() async -> Int32 {
           WindowPreviewPanelMotion.duration == 0.22,
           WindowPreviewPanelMotion.firstControlPoint == CGPoint(x: 0.8, y: 0),
           WindowPreviewPanelMotion.secondControlPoint == CGPoint(x: 0.2, y: 1),
+          TaskbarButtonMotion.pressedScale == 0.82,
+          TaskbarButtonMotion.pressDuration == 0.06,
+          TaskbarButtonMotion.releaseDuration == 0.08,
           WindowPreviewHoverPolicy.action(
               hovering: true,
               previewsEnabled: true,

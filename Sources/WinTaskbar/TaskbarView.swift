@@ -443,7 +443,9 @@ private struct TaskbarAppButton: View {
     var body: some View {
         Button {
             dockBadges.acknowledge(item.bundleIdentifier)
-            windowActivator.activateOrMinimize(item)
+            DispatchQueue.main.async {
+                windowActivator.activateOrMinimize(item)
+            }
         } label: {
             appIconCell
             .background {
@@ -919,15 +921,25 @@ private struct WindowPreviewButton: View {
     }
 }
 
+struct TaskbarButtonMotion {
+    static let pressedScale: CGFloat = 0.82
+    static let pressDuration: TimeInterval = 0.06
+    static let releaseDuration: TimeInterval = 0.08
+
+    static func animation(isPressed: Bool) -> Animation {
+        .easeOut(duration: isPressed ? pressDuration : releaseDuration)
+    }
+}
+
 private struct TaskbarButtonStyle: ButtonStyle {
     var contentPadding: CGFloat = 3
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.82 : 1)
+            .scaleEffect(configuration.isPressed ? TaskbarButtonMotion.pressedScale : 1)
             .padding(contentPadding)
             .background(configuration.isPressed ? Color.primary.opacity(0.15) : .clear)
             .clipShape(RoundedRectangle(cornerRadius: 6))
-            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+            .animation(TaskbarButtonMotion.animation(isPressed: configuration.isPressed), value: configuration.isPressed)
     }
 }
