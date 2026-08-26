@@ -36,6 +36,29 @@ enum QuickSettingsPanelMetrics {
     static let detailContentHeight: CGFloat = 233
 }
 
+enum WindowsVolumeSliderMetrics {
+    static let trackHeight: CGFloat = 4
+    static let thumbDiameter: CGFloat = 20
+    static let normalIndicatorDiameter: CGFloat = 10
+    static let pressedIndicatorDiameter: CGFloat = 8
+    static let hitHeight: CGFloat = 28
+}
+
+enum WindowsVolumeSliderGeometry {
+    static func thumbCenter(value: Double, width: CGFloat) -> CGFloat {
+        let radius = WindowsVolumeSliderMetrics.thumbDiameter / 2
+        let travel = max(0, width - WindowsVolumeSliderMetrics.thumbDiameter)
+        return radius + CGFloat(min(max(value, 0), 1)) * travel
+    }
+
+    static func value(at location: CGFloat, width: CGFloat) -> Double {
+        let radius = WindowsVolumeSliderMetrics.thumbDiameter / 2
+        let travel = max(0, width - WindowsVolumeSliderMetrics.thumbDiameter)
+        guard travel > 0 else { return 0 }
+        return Double(min(max((location - radius) / travel, 0), 1))
+    }
+}
+
 enum QuickSettingsPanelPage: Equatable {
     case root
     case wifi
@@ -242,15 +265,12 @@ private struct QuickSettingsPanelView: View {
                     .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
-            Slider(
+            WindowsVolumeSlider(
                 value: Binding(
                     get: { Double(service.volume) },
                     set: { service.setVolume(Float($0)) }
-                ),
-                in: 0...1
+                )
             )
-            .controlSize(.small)
-            .tint(.accentColor)
             Button(action: onOpenSystemSettings) {
                 HStack(spacing: 1) {
                     Image(systemName: "slider.horizontal.3")
@@ -552,6 +572,76 @@ private struct QuickSettingsPanelView: View {
             isCharging: service.isCharging,
             isLowPowerModeEnabled: service.isLowPowerModeEnabled
         )
+    }
+}
+
+private struct WindowsVolumeSlider: View {
+    @Binding var value: Double
+    @GestureState private var isPressed = false
+
+    private let accent = Color(red: 0.35, green: 0.80, blue: 1)
+
+    var body: some View {
+        GeometryReader { proxy in
+            let thumbCenter = WindowsVolumeSliderGeometry.thumbCenter(
+                value: value,
+                width: proxy.size.width
+            )
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.white.opacity(0.16))
+                    .frame(height: WindowsVolumeSliderMetrics.trackHeight)
+                Capsule()
+                    .fill(accent)
+                    .frame(width: thumbCenter,
+                           height: WindowsVolumeSliderMetrics.trackHeight)
+                Circle()
+                    .fill(Color.white.opacity(isPressed ? 0.20 : 0.16))
+                    .frame(width: WindowsVolumeSliderMetrics.thumbDiameter,
+                           height: WindowsVolumeSliderMetrics.thumbDiameter)
+                    .overlay {
+                        Circle()
+                            .fill(accent.opacity(isPressed ? 0.82 : 1))
+                            .frame(
+                                width: isPressed
+                                    ? WindowsVolumeSliderMetrics.pressedIndicatorDiameter
+                                    : WindowsVolumeSliderMetrics.normalIndicatorDiameter,
+                                height: isPressed
+                                    ? WindowsVolumeSliderMetrics.pressedIndicatorDiameter
+                                    : WindowsVolumeSliderMetrics.normalIndicatorDiameter
+                            )
+                    }
+                    .offset(x: thumbCenter - WindowsVolumeSliderMetrics.thumbDiameter / 2)
+            }
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .updating($isPressed) { _, pressed, _ in pressed = true }
+                    .onChanged { gesture in
+                        value = WindowsVolumeSliderGeometry.value(
+                            at: gesture.location.x,
+                            width: proxy.size.width
+                        )
+                    }
+            )
+        }
+        .frame(height: WindowsVolumeSliderMetrics.hitHeight)
+        .animation(.easeOut(duration: 0.08), value: isPressed)
+        .accessibilityElement()
+        .accessibilityLabel("Volume")
+        .accessibilityValue("\(Int((value * 100).rounded())) percent")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment:
+                value = min(1, value + 0.05)
+            case .decrement:
+                value = max(0, value - 0.05)
+            @unknown default:
+                break
+            }
+        }
     }
 }
 
