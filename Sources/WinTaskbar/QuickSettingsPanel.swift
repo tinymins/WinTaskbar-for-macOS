@@ -34,6 +34,8 @@ enum QuickSettingsPanelMetrics {
     static let footerHeight: CGFloat = 48
     static let detailHeaderHeight: CGFloat = 52
     static let detailContentHeight: CGFloat = 233
+    static let detailBackButtonSize: CGFloat = 40
+    static let detailBackButtonCornerRadius: CGFloat = 4
 }
 
 enum WindowsVolumeSliderMetrics {
@@ -160,6 +162,7 @@ private struct QuickSettingsPanelView: View {
     @State private var pendingSSID: String?
     @State private var password = ""
     @State private var joinFailed = false
+    @State private var isDetailBackHovering = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -525,20 +528,32 @@ private struct QuickSettingsPanelView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
+            HStack(spacing: 4) {
                 Button { page = .root } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 12, weight: .semibold))
-                        .frame(width: 26, height: 26)
+                        .frame(
+                            width: QuickSettingsPanelMetrics.detailBackButtonSize,
+                            height: QuickSettingsPanelMetrics.detailBackButtonSize
+                        )
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .background(
+                    isDetailBackHovering ? Color.primary.opacity(0.08) : .clear,
+                    in: RoundedRectangle(
+                        cornerRadius: QuickSettingsPanelMetrics.detailBackButtonCornerRadius
+                    )
+                )
+                .onHover { isDetailBackHovering = $0 }
+                .accessibilityLabel("Back")
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
                 if let trailing { trailing }
             }
-            .padding(.horizontal, 14)
+            .padding(.leading, 6)
+            .padding(.trailing, 14)
             .frame(height: QuickSettingsPanelMetrics.detailHeaderHeight)
             Divider()
             content()
