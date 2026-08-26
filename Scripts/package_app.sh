@@ -81,12 +81,6 @@ if [[ "$STABLE_SIGNING" == "true" ]]; then
     exit 1
   fi
 
-  security add-trusted-cert \
-    -d \
-    -r trustRoot \
-    -p codeSign \
-    -k "$temporary_keychain_path" \
-    "$PINNED_CERTIFICATE_PATH"
   security set-key-partition-list \
     -S apple-tool:,apple: \
     -k "$keychain_password" \
