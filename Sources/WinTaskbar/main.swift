@@ -530,25 +530,25 @@ func runSelfTest() async -> Int32 {
               contentSize: jumpListSize,
               position: .bottom,
               screenFrame: jumpListScreen
-          ) == CGRect(x: 374, y: 54, width: 292, height: 195),
+          ) == CGRect(x: 374, y: 56, width: 292, height: 195),
           TaskbarJumpListGeometry.frame(
               anchorFrame: CGRect(x: 500, y: 752, width: 40, height: 48),
               contentSize: jumpListSize,
               position: .top,
               screenFrame: jumpListScreen
-          ) == CGRect(x: 374, y: 551, width: 292, height: 195),
+          ) == CGRect(x: 374, y: 549, width: 292, height: 195),
           TaskbarJumpListGeometry.frame(
               anchorFrame: CGRect(x: 0, y: 300, width: 48, height: 40),
               contentSize: jumpListSize,
               position: .left,
               screenFrame: jumpListScreen
-          ) == CGRect(x: 54, y: 222.5, width: 292, height: 195),
+          ) == CGRect(x: 56, y: 222.5, width: 292, height: 195),
           TaskbarJumpListGeometry.frame(
               anchorFrame: CGRect(x: 1152, y: 300, width: 48, height: 40),
               contentSize: jumpListSize,
               position: .right,
               screenFrame: jumpListScreen
-          ) == CGRect(x: 854, y: 222.5, width: 292, height: 195),
+          ) == CGRect(x: 852, y: 222.5, width: 292, height: 195),
           TaskbarJumpListGeometry.frame(
               anchorFrame: CGRect(x: 0, y: 0, width: 40, height: 48),
               contentSize: jumpListSize,

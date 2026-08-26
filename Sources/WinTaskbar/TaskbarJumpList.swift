@@ -56,7 +56,7 @@ enum TaskbarJumpListMetrics {
 }
 
 struct TaskbarJumpListGeometry {
-    static let gap: CGFloat = 6
+    static let gap = StartMenuGeometry.taskbarGap
     static let screenInset: CGFloat = 8
 
     static func frame(
