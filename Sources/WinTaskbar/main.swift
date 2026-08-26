@@ -681,11 +681,14 @@ func runSelfTest() async -> Int32 {
 
     let thirdPreviewOwner = WindowPreviewOwnerID(displayID: 1, bundleIdentifier: "com.example.third")
     var previewHoverIntent = WindowPreviewHoverIntent()
-    guard WindowPreviewHoverIntent.switchDelayNanoseconds == 180_000_000,
+    guard WindowPreviewHoverIntent.initialDelayNanoseconds == 400_000_000,
+          WindowPreviewHoverIntent.switchDelayNanoseconds == 180_000_000,
           previewHoverIntent.hover(
               activeOwnerID: nil,
               candidateOwnerID: firstPreviewOwner
-          ) == .activateImmediately,
+          ) == .scheduleInitial,
+          previewHoverIntent.pendingOwnerID == firstPreviewOwner,
+          previewHoverIntent.resolve(firstPreviewOwner),
           previewHoverIntent.hover(
               activeOwnerID: firstPreviewOwner,
               candidateOwnerID: firstPreviewOwner

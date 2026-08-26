@@ -116,12 +116,13 @@ struct WindowPreviewSelection: Equatable {
 }
 
 enum WindowPreviewHoverIntentDecision: Equatable {
-    case activateImmediately
+    case scheduleInitial
     case keepCurrent
     case scheduleSwitch
 }
 
 struct WindowPreviewHoverIntent {
+    static let initialDelayNanoseconds: UInt64 = 400_000_000
     static let switchDelayNanoseconds: UInt64 = 180_000_000
 
     private(set) var pendingOwnerID: WindowPreviewOwnerID?
@@ -131,8 +132,8 @@ struct WindowPreviewHoverIntent {
         candidateOwnerID: WindowPreviewOwnerID
     ) -> WindowPreviewHoverIntentDecision {
         if activeOwnerID == nil {
-            pendingOwnerID = nil
-            return .activateImmediately
+            pendingOwnerID = candidateOwnerID
+            return .scheduleInitial
         }
         if activeOwnerID == candidateOwnerID {
             pendingOwnerID = nil
@@ -221,17 +222,27 @@ final class WindowPreviewPanelController: ObservableObject {
         activationTask = nil
 
         switch hoverIntent.hover(activeOwnerID: selection.activeOwnerID, candidateOwnerID: ownerID) {
-        case .activateImmediately:
-            activateImmediately(ownerID: ownerID)
+        case .scheduleInitial:
+            scheduleActivation(
+                ownerID: ownerID,
+                delayNanoseconds: WindowPreviewHoverIntent.initialDelayNanoseconds
+            )
         case .keepCurrent:
             break
         case .scheduleSwitch:
-            activationTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: WindowPreviewHoverIntent.switchDelayNanoseconds)
-                guard !Task.isCancelled, self?.hoverIntent.resolve(ownerID) == true else { return }
-                self?.activationTask = nil
-                self?.activateImmediately(ownerID: ownerID)
-            }
+            scheduleActivation(
+                ownerID: ownerID,
+                delayNanoseconds: WindowPreviewHoverIntent.switchDelayNanoseconds
+            )
+        }
+    }
+
+    private func scheduleActivation(ownerID: WindowPreviewOwnerID, delayNanoseconds: UInt64) {
+        activationTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: delayNanoseconds)
+            guard !Task.isCancelled, self?.hoverIntent.resolve(ownerID) == true else { return }
+            self?.activationTask = nil
+            self?.activateImmediately(ownerID: ownerID)
         }
     }
 
@@ -250,6 +261,12 @@ final class WindowPreviewPanelController: ObservableObject {
         ownerID: WindowPreviewOwnerID,
         onDismiss: @escaping @MainActor () -> Void
     ) {
+        if selection.activeOwnerID == nil {
+            activationTask?.cancel()
+            activationTask = nil
+            hoverIntent.cancel(ownerID)
+            return
+        }
         guard let activeOwnerID = selection.activeOwnerID,
               activeOwnerID == ownerID || hoverIntent.pendingOwnerID == ownerID else { return }
         activationTask?.cancel()
@@ -465,12 +482,16 @@ final class TaskbarWindowController {
         rebuildPanels()
     }
 
-    func rebuildPanels() {
+    func dismissTransientSurfaces() {
         windowPeekController.hideImmediately()
         windowPreviewPanelController.dismissAll()
         taskbarJumpListController.dismiss()
         startButtonContextMenuController.dismiss()
         startButtonPowerMenuController.dismiss()
+    }
+
+    func rebuildPanels() {
+        dismissTransientSurfaces()
         panels.forEach { $0.orderOut(nil) }
         panels.removeAll()
 
@@ -623,6 +644,7 @@ final class StartMenuController: NSObject, NSWindowDelegate {
         orderOutTask?.cancel()
         orderOutTask = nil
         isPresented = true
+        taskbar.dismissTransientSurfaces()
 
         let finalFrame = frame(on: screen)
         targetFrame = finalFrame
