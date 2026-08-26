@@ -21,6 +21,55 @@ struct ClockCalendarPanelTransitionSequence {
     }
 }
 
+struct ClockCalendarScrollIntent {
+    static let preciseThreshold: CGFloat = 18
+
+    private var accumulatedDelta: CGFloat = 0
+    private var didTriggerInGesture = false
+    private var lastTimestamp: TimeInterval?
+
+    mutating func consume(
+        deltaY: CGFloat,
+        isPrecise: Bool,
+        timestamp: TimeInterval,
+        startsGesture: Bool = false,
+        endsGesture: Bool = false,
+        isMomentum: Bool = false
+    ) -> Int? {
+        guard !isMomentum else { return nil }
+        guard deltaY != 0 else {
+            if endsGesture { resetGesture() }
+            return nil
+        }
+        guard isPrecise else { return deltaY > 0 ? -1 : 1 }
+
+        let isNewGesture = startsGesture || (lastTimestamp.map { timestamp - $0 > 0.25 } ?? true)
+        if isNewGesture {
+            resetGesture()
+        }
+        lastTimestamp = timestamp
+        accumulatedDelta += deltaY
+
+        var result: Int?
+        if !didTriggerInGesture, abs(accumulatedDelta) >= Self.preciseThreshold {
+            didTriggerInGesture = true
+            result = accumulatedDelta > 0 ? -1 : 1
+        }
+        if endsGesture { resetGesture() }
+        return result
+    }
+
+    mutating func reset() {
+        resetGesture()
+    }
+
+    private mutating func resetGesture() {
+        accumulatedDelta = 0
+        didTriggerInGesture = false
+        lastTimestamp = nil
+    }
+}
+
 @MainActor
 final class ClockCalendarPanelController: ObservableObject {
     let state = ClockCalendarState()
@@ -34,6 +83,7 @@ final class ClockCalendarPanelController: ObservableObject {
     private var presentation: Presentation?
     private var isShowing = false
     private var transitionSequence = ClockCalendarPanelTransitionSequence()
+    private var scrollIntent = ClockCalendarScrollIntent()
 
     private struct Presentation {
         let screen: NSScreen
@@ -188,10 +238,26 @@ final class ClockCalendarPanelController: ObservableObject {
 
     private func installEventMonitors() {
         removeEventMonitors()
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseUp, .rightMouseUp, .keyDown]) { [weak self] event in
+        localMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseUp, .rightMouseUp, .keyDown, .scrollWheel]
+        ) { [weak self] event in
             guard let self else { return event }
             if event.type == .keyDown, event.keyCode == 53 {
                 self.dismiss()
+                return nil
+            }
+            if event.type == .scrollWheel, event.window === self.panel, self.state.isExpanded {
+                let offset = self.scrollIntent.consume(
+                    deltaY: event.scrollingDeltaY,
+                    isPrecise: event.hasPreciseScrollingDeltas,
+                    timestamp: event.timestamp,
+                    startsGesture: event.phase.contains(.began) || event.phase.contains(.mayBegin),
+                    endsGesture: event.phase.contains(.ended) || event.phase.contains(.cancelled),
+                    isMomentum: event.momentumPhase != []
+                )
+                if let offset {
+                    withAnimation(.easeOut(duration: 0.18)) { self.state.scrollWeeks(by: offset) }
+                }
                 return nil
             }
             if event.window !== self.panel {
@@ -209,6 +275,7 @@ final class ClockCalendarPanelController: ObservableObject {
         if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
         localMonitor = nil
         globalMonitor = nil
+        scrollIntent.reset()
     }
 
     private func appearance(for theme: AppTheme) -> NSAppearance? {

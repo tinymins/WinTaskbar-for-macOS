@@ -704,6 +704,54 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    let rollingCalendarState = ClockCalendarState(now: february2024)
+    let initialVisibleStartDate = rollingCalendarState.visibleStartDate
+    for _ in 0..<260 { rollingCalendarState.scrollWeeks(by: -1) }
+    let expectedFiveYearStartDate = ClockCalendarState.calendar.date(
+        byAdding: .day,
+        value: -(260 * 7),
+        to: initialVisibleStartDate
+    )!
+    guard ClockCalendarState.calendar.isDate(
+        rollingCalendarState.visibleStartDate,
+        inSameDayAs: expectedFiveYearStartDate
+    ), rollingCalendarState.gridRevision == 260 else {
+        fputs("SELF-TEST FAILED: clock calendar week scrolling range mismatch\n", stderr)
+        return 1
+    }
+
+    var calendarScrollIntent = ClockCalendarScrollIntent()
+    guard calendarScrollIntent.consume(deltaY: -1, isPrecise: false, timestamp: 0) == 1,
+          calendarScrollIntent.consume(
+              deltaY: 8,
+              isPrecise: true,
+              timestamp: 1,
+              startsGesture: true
+          ) == nil,
+          calendarScrollIntent.consume(deltaY: 10, isPrecise: true, timestamp: 1.01) == -1,
+          calendarScrollIntent.consume(deltaY: 30, isPrecise: true, timestamp: 1.02) == nil,
+          calendarScrollIntent.consume(
+              deltaY: 0,
+              isPrecise: true,
+              timestamp: 1.03,
+              endsGesture: true
+          ) == nil,
+          calendarScrollIntent.consume(
+              deltaY: -18,
+              isPrecise: true,
+              timestamp: 2,
+              startsGesture: true
+          ) == 1,
+          calendarScrollIntent.consume(
+              deltaY: -30,
+              isPrecise: true,
+              timestamp: 2.01,
+              isMomentum: true
+          ) == nil else {
+        fputs("SELF-TEST FAILED: clock calendar scroll gesture mismatch\n", stderr)
+        return 1
+    }
+
     let shanghaiTimeZone = TimeZone(identifier: "Asia/Shanghai")!
     let lunarNewYear = ClockCalendarLunarCalendar.lunarDate(
         for: calendar.date(from: DateComponents(year: 2024, month: 2, day: 10))!,
