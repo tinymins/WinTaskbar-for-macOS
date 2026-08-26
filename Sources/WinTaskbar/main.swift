@@ -239,6 +239,40 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    guard BatteryPresentationState.resolve(level: 82, isCharging: false, isLowPowerModeEnabled: false) == .normal,
+          BatteryPresentationState.resolve(level: 82, isCharging: true, isLowPowerModeEnabled: false) == .charging,
+          BatteryPresentationState.resolve(level: 20, isCharging: false, isLowPowerModeEnabled: false) == .saver,
+          BatteryPresentationState.resolve(level: 82, isCharging: false, isLowPowerModeEnabled: true) == .saver,
+          BatteryPresentationState.resolve(level: 6, isCharging: false, isLowPowerModeEnabled: false) == .critical,
+          QuickSettingsPanelMetrics.contentSize == CGSize(width: 360, height: 246),
+          QuickSettingsPanelGeometry.frame(
+              screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 800),
+              visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 775),
+              position: .bottom,
+              barHeight: 48
+          ) == CGRect(x: 828, y: 56, width: 360, height: 246),
+          QuickSettingsPanelGeometry.frame(
+              screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 800),
+              visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 775),
+              position: .top,
+              barHeight: 48
+          ) == CGRect(x: 828, y: 473, width: 360, height: 246),
+          QuickSettingsPanelGeometry.frame(
+              screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 800),
+              visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 775),
+              position: .left,
+              barHeight: 48
+          ) == CGRect(x: 56, y: 12, width: 360, height: 246),
+          QuickSettingsPanelGeometry.frame(
+              screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 800),
+              visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 775),
+              position: .right,
+              barHeight: 48
+          ) == CGRect(x: 784, y: 12, width: 360, height: 246) else {
+        fputs("SELF-TEST FAILED: quick settings presentation mismatch\n", stderr)
+        return 1
+    }
+
     guard DockExitPolicy.shouldRestoreDock(configuration: DockConfiguration(
         autohide: true,
         autohideDelay: 1000,

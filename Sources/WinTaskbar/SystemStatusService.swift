@@ -55,6 +55,7 @@ final class SystemStatusService: ObservableObject {
     @Published private(set) var now = Date()
     @Published private(set) var batteryLevel: Int?
     @Published private(set) var isCharging = false
+    @Published private(set) var isLowPowerModeEnabled = false
     @Published private(set) var volume: Float = 0
     @Published private(set) var isMuted = false
     @Published private(set) var wifiSSID: String?
@@ -163,6 +164,7 @@ final class SystemStatusService: ObservableObject {
     }
 
     private func readBattery() {
+        isLowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
         guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
               let list = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as? [CFTypeRef],
               let source = list.first,

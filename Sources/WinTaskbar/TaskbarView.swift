@@ -94,6 +94,7 @@ struct TaskbarView: View {
     @State private var taskbarOrderRevision = 0
     @State private var dragGrabOffset = CGSize.zero
     @State private var dragFixedCrossAxisPosition: CGFloat?
+    @StateObject private var quickSettingsPanelController = QuickSettingsPanelController()
 
     var body: some View {
         GeometryReader { geometry in
@@ -454,13 +455,32 @@ struct TaskbarView: View {
     @ViewBuilder
     private var trayContents: some View {
         if preferences.trayWifiEnabled {
-            WiFiTrayView(service: status)
+            WiFiTrayView(
+                service: status,
+                panelController: quickSettingsPanelController,
+                actions: actions,
+                position: preferences.position,
+                barHeight: CGFloat(preferences.barHeight)
+            )
         }
         if preferences.trayVolumeEnabled {
-            VolumeTrayView(service: status)
+            VolumeTrayView(
+                service: status,
+                panelController: quickSettingsPanelController,
+                actions: actions,
+                position: preferences.position,
+                barHeight: CGFloat(preferences.barHeight)
+            )
         }
         if preferences.trayBatteryEnabled {
-            BatteryTrayView(service: status, horizontal: preferences.position.isHorizontal)
+            BatteryTrayView(
+                service: status,
+                panelController: quickSettingsPanelController,
+                actions: actions,
+                position: preferences.position,
+                barHeight: CGFloat(preferences.barHeight),
+                horizontal: preferences.position.isHorizontal
+            )
         }
         if preferences.trayInputSourceEnabled {
             InputSourceTrayView(
