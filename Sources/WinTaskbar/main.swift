@@ -768,6 +768,24 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    let resetCalendarState = ClockCalendarState(now: february2024)
+    resetCalendarState.scrollWeeks(by: -260)
+    let resetDate = calendar.date(from: DateComponents(year: 2024, month: 9, day: 17))!
+    resetCalendarState.resetToToday(now: resetDate)
+    let resetMonth = ClockCalendarState.calendar.dateInterval(of: .month, for: resetDate)!.start
+    let resetVisibleStart = ClockCalendarGrid.startDate(
+        displayedMonth: resetMonth,
+        calendar: ClockCalendarState.calendar
+    )!
+    guard ClockCalendarState.calendar.isDate(resetCalendarState.selectedDate, inSameDayAs: resetDate),
+          ClockCalendarState.calendar.isDate(resetCalendarState.displayedMonth, inSameDayAs: resetMonth),
+          ClockCalendarState.calendar.isDate(resetCalendarState.visibleStartDate, inSameDayAs: resetVisibleStart),
+          resetCalendarState.gridOffset == -42,
+          resetCalendarState.renderedDays.count == 56 else {
+        fputs("SELF-TEST FAILED: clock calendar reset-to-today mismatch\n", stderr)
+        return 1
+    }
+
     let shanghaiTimeZone = TimeZone(identifier: "Asia/Shanghai")!
     let lunarNewYear = ClockCalendarLunarCalendar.lunarDate(
         for: calendar.date(from: DateComponents(year: 2024, month: 2, day: 10))!,

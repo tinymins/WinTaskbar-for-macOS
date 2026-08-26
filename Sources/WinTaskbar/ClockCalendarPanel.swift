@@ -86,6 +86,7 @@ final class ClockCalendarPanelController: ObservableObject {
 
     private func present(screen: NSScreen, position: TaskbarPosition, barHeight: CGFloat, theme: AppTheme) {
         let transitionRevision = transitionSequence.begin()
+        state.resetToToday()
         let presentation = Presentation(screen: screen, position: position, barHeight: barHeight)
         self.presentation = presentation
         let panel = panel ?? makePanel()

@@ -147,6 +147,17 @@ final class ClockCalendarState: ObservableObject {
         showMonth(month)
     }
 
+    func resetToToday(now: Date = Date()) {
+        cancelWheelScrolling()
+        cancelCalendarScrollSettling()
+        let calendar = Self.calendar
+        let month = calendar.dateInterval(of: .month, for: now)?.start ?? now
+        displayedMonth = month
+        selectedDate = now
+        visibleStartDate = ClockCalendarGrid.startDate(displayedMonth: month, calendar: calendar) ?? month
+        resetRenderedWindow()
+    }
+
     func scrollWeeks(by offset: Int) {
         guard offset != 0,
               let startDate = shiftedStartDate(by: offset) else { return }
