@@ -122,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+        dockToggleService.restoreDockOnExit()
     }
 
     @objc private func showSettings(_ sender: Any?) { settingsController?.show() }
@@ -194,6 +195,25 @@ func runSelfTest() async -> Int32 {
           PowerAction.restart.requiresConfirmation,
           PowerAction.shutDown.requiresConfirmation else {
         fputs("SELF-TEST FAILED: power confirmation policy mismatch\n", stderr)
+        return 1
+    }
+
+    guard DockExitPolicy.shouldRestoreDock(configuration: DockConfiguration(
+        autohide: true,
+        autohideDelay: 1000,
+        autohideTimeModifier: 0
+    )),
+    !DockExitPolicy.shouldRestoreDock(configuration: DockConfiguration(
+        autohide: false,
+        autohideDelay: 1000,
+        autohideTimeModifier: 0
+    )),
+    !DockExitPolicy.shouldRestoreDock(configuration: DockConfiguration(
+        autohide: true,
+        autohideDelay: nil,
+        autohideTimeModifier: nil
+    )) else {
+        fputs("SELF-TEST FAILED: Dock exit policy mismatch\n", stderr)
         return 1
     }
 

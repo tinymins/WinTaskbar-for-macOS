@@ -89,7 +89,7 @@ final class DockToggleService: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        isDockHidden = defaults.bool(forKey: "wintaskbar.dockHidden")
+        isDockHidden = DockExitPolicy.shouldRestoreDock(configuration: Self.currentDockConfiguration())
     }
 
     func hideDock() {
@@ -110,6 +110,11 @@ final class DockToggleService: ObservableObject {
         defaults.set(false, forKey: "wintaskbar.dockHidden")
     }
 
+    func restoreDockOnExit() {
+        guard DockExitPolicy.shouldRestoreDock(configuration: Self.currentDockConfiguration()) else { return }
+        restoreDock()
+    }
+
     func syncDock(orientation: String) {
         run("/usr/bin/defaults", ["write", "com.apple.dock", "orientation", "-string", orientation])
         restartDock()
@@ -123,6 +128,52 @@ final class DockToggleService: ObservableObject {
         process.arguments = arguments
         try? process.run()
         process.waitUntilExit()
+    }
+
+    private static func currentDockConfiguration() -> DockConfiguration {
+        DockConfiguration(
+            autohide: readDockValue("autohide").flatMap(DockConfiguration.parseBool),
+            autohideDelay: readDockValue("autohide-delay").flatMap(Double.init),
+            autohideTimeModifier: readDockValue("autohide-time-modifier").flatMap(Double.init)
+        )
+    }
+
+    private static func readDockValue(_ key: String) -> String? {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
+        process.arguments = ["read", "com.apple.dock", key]
+        process.standardOutput = output
+        process.standardError = Pipe()
+
+        guard (try? process.run()) != nil else { return nil }
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+struct DockConfiguration {
+    let autohide: Bool?
+    let autohideDelay: Double?
+    let autohideTimeModifier: Double?
+
+    static func parseBool(_ value: String) -> Bool? {
+        switch value.lowercased() {
+        case "1", "true", "yes": true
+        case "0", "false", "no": false
+        default: nil
+        }
+    }
+}
+
+struct DockExitPolicy {
+    static func shouldRestoreDock(configuration: DockConfiguration) -> Bool {
+        configuration.autohide == true
+            && configuration.autohideDelay == 1000
+            && configuration.autohideTimeModifier == 0
     }
 }
 

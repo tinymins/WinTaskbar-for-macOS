@@ -203,9 +203,40 @@ struct SettingsView: View {
                     NSWorkspace.shared.open(url)
                 }
             }
-            Button(dockToggle.isDockHidden ? "Restore system Dock" : "Hide system Dock") {
-                dockToggle.isDockHidden ? dockToggle.restoreDock() : dockToggle.hideDock()
+            HStack {
+                Button(dockToggle.isDockHidden ? "Restore system Dock" : "Hide system Dock") {
+                    dockToggle.isDockHidden ? dockToggle.restoreDock() : dockToggle.hideDock()
+                }
+                Button("Exit", role: .destructive) {
+                    confirmExit()
+                }
             }
+        }
+    }
+
+    private func confirmExit() {
+        let alert = NSAlert()
+        alert.messageText = "Exit WinTaskbar?"
+        alert.informativeText = "WinTaskbar will exit and restore the system Dock."
+        alert.alertStyle = .warning
+
+        let exitButton = alert.addButton(withTitle: "Exit")
+        exitButton.hasDestructiveAction = true
+        let cancelButton = alert.addButton(withTitle: "Cancel")
+        cancelButton.keyEquivalent = "\u{1b}"
+
+        alert.window.level = .modalPanel
+        if let screen = NSApp.keyWindow?.screen ?? NSScreen.main {
+            let alertSize = alert.window.frame.size
+            alert.window.setFrameOrigin(NSPoint(
+                x: screen.visibleFrame.midX - alertSize.width / 2,
+                y: screen.visibleFrame.midY - alertSize.height / 2
+            ))
+        }
+
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSApp.terminate(nil)
         }
     }
 
