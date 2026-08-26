@@ -31,6 +31,15 @@ enum QuickSettingsPanelMetrics {
     static let tileLabelHeight: CGFloat = 15
     static let volumeHeight: CGFloat = 72
     static let footerHeight: CGFloat = 48
+    static let detailHeaderHeight: CGFloat = 52
+    static let detailContentHeight: CGFloat = 233
+}
+
+enum QuickSettingsPanelPage: Equatable {
+    case root
+    case wifi
+    case bluetooth
+    case accessibility
 }
 
 enum QuickSettingsPanelGeometry {
@@ -123,83 +132,36 @@ private struct QuickSettingsPanelView: View {
     let onOpenSystemSettings: () -> Void
     let onOpenBluetoothSettings: () -> Void
     let onOpenAccessibilitySettings: () -> Void
+    @State private var page = QuickSettingsPanelPage.root
+    @State private var pendingSSID: String?
+    @State private var password = ""
+    @State private var joinFailed = false
 
     var body: some View {
         VStack(spacing: 0) {
-            quickSettingsGrid
-
-            Divider()
-
-            HStack(spacing: 12) {
-                Button(action: service.toggleMute) {
-                    Image(systemName: volumeSymbol)
-                        .font(.system(size: 15, weight: .medium))
-                        .frame(width: 22, height: 22)
-                }
-                .buttonStyle(.plain)
-                Slider(
-                    value: Binding(
-                        get: { Double(service.volume) },
-                        set: { service.setVolume(Float($0)) }
-                    ),
-                    in: 0...1
-                )
-                .controlSize(.small)
-                .tint(.accentColor)
-                Button(action: onOpenSystemSettings) {
-                    HStack(spacing: 1) {
-                        Image(systemName: "slider.horizontal.3")
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
-                    }
-                    .font(.system(size: 12))
-                    .frame(width: 31, height: 24)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Sound settings")
+            switch page {
+            case .root:
+                rootPage
+            case .wifi:
+                wifiPage
+            case .bluetooth:
+                bluetoothPage
+            case .accessibility:
+                accessibilityPage
             }
-            .padding(.leading, 19)
-            .padding(.trailing, 10)
-            .frame(height: QuickSettingsPanelMetrics.volumeHeight)
-
-            Divider()
-
-            HStack {
-                if let level = service.batteryLevel {
-                    Button(action: onOpenBatterySettings) {
-                        HStack(spacing: 8) {
-                            WindowsBatteryIcon(
-                                level: level,
-                                isCharging: service.isCharging,
-                                state: batteryState
-                            )
-                            Text("\(level)%")
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
-                                .monospacedDigit()
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help(service.isCharging ? "Battery charging" : "Battery")
-                    .accessibilityLabel(service.isCharging ? "Battery charging, \(level)%" : "Battery, \(level)%")
-                }
-                Spacer()
-                Button(action: onOpenSystemSettings) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 14, weight: .medium))
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Settings")
-            }
-            .padding(.horizontal, 16)
-            .frame(height: QuickSettingsPanelMetrics.footerHeight)
-            .background(Color.black.opacity(0.10))
         }
         .frame(width: QuickSettingsPanelMetrics.contentSize.width,
                height: QuickSettingsPanelMetrics.contentSize.height)
+    }
+
+    private var rootPage: some View {
+        VStack(spacing: 0) {
+            quickSettingsGrid
+            Divider()
+            volumeSection
+            Divider()
+            footer
+        }
     }
 
     private var quickSettingsGrid: some View {
@@ -209,22 +171,22 @@ private struct QuickSettingsPanelView: View {
                     label: service.wifiPoweredOn ? (service.wifiSSID ?? "Available") : "Wi-Fi off",
                     symbol: service.wifiPoweredOn ? "wifi" : "wifi.slash",
                     isActive: service.wifiPoweredOn,
-                    isSplit: true,
-                    action: { service.setWiFiPower(!service.wifiPoweredOn) }
+                    primaryAction: { service.setWiFiPower(!service.wifiPoweredOn) },
+                    detailAction: showWiFiPage
                 )
                 QuickSettingTile(
                     label: "Not connected",
                     symbol: "bluetooth",
                     isActive: true,
-                    isSplit: true,
-                    action: onOpenBluetoothSettings
+                    primaryAction: onOpenBluetoothSettings,
+                    detailAction: { page = .bluetooth }
                 )
                 QuickSettingTile(
                     label: "Airplane mode",
                     symbol: "airplane",
                     isActive: false,
-                    isSplit: false,
-                    action: {}
+                    primaryAction: {},
+                    detailAction: nil
                 )
             }
             HStack(spacing: 12) {
@@ -232,22 +194,22 @@ private struct QuickSettingsPanelView: View {
                     label: "Accessibility",
                     symbol: "figure.arms.open",
                     isActive: false,
-                    isSplit: true,
-                    action: onOpenAccessibilitySettings
+                    primaryAction: onOpenAccessibilitySettings,
+                    detailAction: { page = .accessibility }
                 )
                 QuickSettingTile(
                     label: "Energy saver",
                     symbol: "leaf",
                     isActive: service.isLowPowerModeEnabled,
-                    isSplit: false,
-                    action: onOpenBatterySettings
+                    primaryAction: onOpenBatterySettings,
+                    detailAction: nil
                 )
                 QuickSettingTile(
                     label: "Live captions",
                     symbol: "captions.bubble",
                     isActive: false,
-                    isSplit: false,
-                    action: onOpenAccessibilitySettings
+                    primaryAction: onOpenAccessibilitySettings,
+                    detailAction: nil
                 )
             }
         }
@@ -263,6 +225,311 @@ private struct QuickSettingsPanelView: View {
             .foregroundStyle(.secondary)
             .padding(.trailing, 9)
         }
+    }
+
+    private var volumeSection: some View {
+        HStack(spacing: 12) {
+            Button(action: service.toggleMute) {
+                Image(systemName: volumeSymbol)
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.plain)
+            Slider(
+                value: Binding(
+                    get: { Double(service.volume) },
+                    set: { service.setVolume(Float($0)) }
+                ),
+                in: 0...1
+            )
+            .controlSize(.small)
+            .tint(.accentColor)
+            Button(action: onOpenSystemSettings) {
+                HStack(spacing: 1) {
+                    Image(systemName: "slider.horizontal.3")
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                .font(.system(size: 12))
+                .frame(width: 31, height: 24)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Sound settings")
+        }
+        .padding(.leading, 19)
+        .padding(.trailing, 10)
+        .frame(height: QuickSettingsPanelMetrics.volumeHeight)
+    }
+
+    private var footer: some View {
+        HStack {
+            if let level = service.batteryLevel {
+                Button(action: onOpenBatterySettings) {
+                    HStack(spacing: 8) {
+                        WindowsBatteryIcon(
+                            level: level,
+                            isCharging: service.isCharging,
+                            state: batteryState
+                        )
+                        Text("\(level)%")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .monospacedDigit()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(service.isCharging ? "Battery charging" : "Battery")
+                .accessibilityLabel(service.isCharging ? "Battery charging, \(level)%" : "Battery, \(level)%")
+            }
+            Spacer()
+            Button(action: onOpenSystemSettings) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Settings")
+        }
+        .padding(.horizontal, 16)
+        .frame(height: QuickSettingsPanelMetrics.footerHeight)
+        .background(Color.black.opacity(0.10))
+    }
+
+    private var wifiPage: some View {
+        detailPage(title: "Wi-Fi", trailing: AnyView(wifiHeaderControls)) {
+            Group {
+                if service.wifiPoweredOn {
+                    if let issue = service.wifiScanIssue {
+                        wifiScanIssueView(issue)
+                    } else {
+                        wifiNetworkList
+                    }
+                } else {
+                    DetailEmptyState(
+                        symbol: "wifi.slash",
+                        title: "Wi-Fi is off",
+                        detail: "Turn on Wi-Fi to see available networks.",
+                        actionTitle: "Turn on",
+                        action: { service.setWiFiPower(true) }
+                    )
+                }
+            }
+        }
+    }
+
+    private var wifiHeaderControls: some View {
+        HStack(spacing: 8) {
+            Button {
+                service.scanWiFi()
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
+            .help("Scan for networks")
+            Toggle(
+                "",
+                isOn: Binding(
+                    get: { service.wifiPoweredOn },
+                    set: { service.setWiFiPower($0) }
+                )
+            )
+            .labelsHidden()
+            .controlSize(.small)
+        }
+    }
+
+    private var wifiNetworkList: some View {
+        ScrollView {
+            LazyVStack(spacing: 2) {
+                if service.isScanningWiFi && service.wifiNetworks.isEmpty {
+                    ProgressView("Scanning…")
+                        .frame(maxWidth: .infinity, minHeight: 80)
+                } else if service.wifiNetworks.isEmpty {
+                    Text("No networks found")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 80)
+                } else {
+                    ForEach(service.wifiNetworks) { network in
+                        wifiNetworkEntry(network)
+                    }
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private func wifiScanIssueView(_ issue: WiFiScanIssue) -> some View {
+        switch issue {
+        case .locationAuthorizationRequired:
+            return DetailEmptyState(
+                symbol: "location",
+                title: "Allow location access",
+                detail: "macOS requires location access to list nearby Wi-Fi networks.",
+                actionTitle: "Request Access",
+                action: service.scanWiFi
+            )
+        case .locationPermissionDenied:
+            return DetailEmptyState(
+                symbol: "location.slash",
+                title: "Location access is off",
+                detail: "macOS requires location access to list nearby Wi-Fi networks.",
+                actionTitle: "Open Location Settings",
+                action: {
+                    QuickSettingsDestination.open("com.apple.preference.security?Privacy_LocationServices")
+                }
+            )
+        case .scanFailed:
+            return DetailEmptyState(
+                symbol: "wifi.exclamationmark",
+                title: "Could not scan for networks",
+                detail: "Check Wi-Fi and location access, then try again.",
+                actionTitle: "Try again",
+                action: service.scanWiFi
+            )
+        }
+    }
+
+    private func wifiNetworkEntry(_ network: WiFiNetworkInfo) -> some View {
+        VStack(spacing: 0) {
+            Button {
+                joinFailed = false
+                if service.wifiSSID == network.ssid {
+                    service.disconnectWiFi()
+                    pendingSSID = nil
+                } else {
+                    pendingSSID = network.ssid
+                    password = ""
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: wifiSymbol(for: network.rssi))
+                        .frame(width: 22)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(network.ssid)
+                            .font(.system(size: 12, weight: .medium))
+                            .lineLimit(1)
+                        if service.wifiSSID == network.ssid {
+                            Text("Connected")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    Image(systemName: service.wifiSSID == network.ssid ? "checkmark" : "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 10)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+                .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
+            }
+            .buttonStyle(.plain)
+
+            if pendingSSID == network.ssid {
+                VStack(spacing: 7) {
+                    SecureField("Network password", text: $password)
+                        .textFieldStyle(.roundedBorder)
+                    if joinFailed {
+                        Text("Could not connect. Check the password and try again.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    HStack {
+                        Button("Cancel") { pendingSSID = nil }
+                        Spacer()
+                        Button("Connect") {
+                            if service.joinWiFi(
+                                ssid: network.ssid,
+                                password: password.isEmpty ? nil : password
+                            ) {
+                                pendingSSID = nil
+                            } else {
+                                joinFailed = true
+                            }
+                        }
+                        .keyboardShortcut(.defaultAction)
+                    }
+                    .controlSize(.small)
+                }
+                .padding(10)
+            }
+        }
+    }
+
+    private var bluetoothPage: some View {
+        detailPage(title: "Bluetooth") {
+            DetailActionList(
+                rows: [
+                    DetailActionRowData(
+                        symbol: "antenna.radiowaves.left.and.right",
+                        title: "Nearby and paired devices",
+                        detail: "View and connect devices in System Settings."
+                    )
+                ],
+                action: onOpenBluetoothSettings
+            )
+        }
+    }
+
+    private var accessibilityPage: some View {
+        detailPage(title: "Accessibility") {
+            DetailActionList(
+                rows: [
+                    DetailActionRowData(symbol: "speaker.wave.2", title: "VoiceOver", detail: "Screen reader settings"),
+                    DetailActionRowData(symbol: "plus.magnifyingglass", title: "Zoom", detail: "Screen magnification settings"),
+                    DetailActionRowData(symbol: "circle.lefthalf.filled", title: "Display", detail: "Visual accessibility settings"),
+                ],
+                action: onOpenAccessibilitySettings
+            )
+        }
+    }
+
+    private func detailPage<Content: View>(
+        title: String,
+        trailing: AnyView? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Button { page = .root } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 26, height: 26)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                if let trailing { trailing }
+            }
+            .padding(.horizontal, 14)
+            .frame(height: QuickSettingsPanelMetrics.detailHeaderHeight)
+            Divider()
+            content()
+                .frame(height: QuickSettingsPanelMetrics.detailContentHeight)
+            Divider()
+            footer
+        }
+    }
+
+    private func showWiFiPage() {
+        page = .wifi
+        pendingSSID = nil
+        joinFailed = false
+        Task { @MainActor in service.scanWiFi() }
+    }
+
+    private func wifiSymbol(for rssi: Int) -> String {
+        rssi > -75 ? "wifi" : "wifi.exclamationmark"
     }
 
     private var volumeSymbol: String {
@@ -285,46 +552,50 @@ private struct QuickSettingTile: View {
     let label: String
     let symbol: String
     let isActive: Bool
-    let isSplit: Bool
-    let action: () -> Void
+    let primaryAction: () -> Void
+    let detailAction: (() -> Void)?
     @State private var isHovering = false
 
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                ZStack {
-                    HStack(spacing: 0) {
-                        tileIcon
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        if isSplit {
-                            Divider()
-                                .overlay(isActive ? Color.white.opacity(0.22) : Color.primary.opacity(0.12))
-                                .frame(width: 1, height: QuickSettingsPanelMetrics.tileSize.height)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 10, weight: .semibold))
-                                .frame(width: 31, height: QuickSettingsPanelMetrics.tileSize.height)
-                        }
-                    }
-                    .foregroundStyle(isActive ? Color.black.opacity(0.88) : Color.primary)
-                    .frame(width: QuickSettingsPanelMetrics.tileSize.width,
-                           height: QuickSettingsPanelMetrics.tileSize.height)
-                    .background(tileBackground, in: RoundedRectangle(cornerRadius: 5))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 5)
-                            .stroke(Color.primary.opacity(isActive ? 0 : 0.12), lineWidth: 0.5)
-                    }
+        VStack(spacing: 8) {
+            HStack(spacing: 0) {
+                Button(action: primaryAction) {
+                    tileIcon
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(Rectangle())
                 }
-                Text(label)
-                    .font(.system(size: 11))
-                    .lineLimit(1)
-                    .frame(width: QuickSettingsPanelMetrics.tileSize.width,
-                           height: QuickSettingsPanelMetrics.tileLabelHeight)
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(label) toggle")
+                if let detailAction {
+                    Divider()
+                        .overlay(isActive ? Color.white.opacity(0.22) : Color.primary.opacity(0.12))
+                        .frame(width: 1, height: QuickSettingsPanelMetrics.tileSize.height)
+                    Button(action: detailAction) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .frame(width: 31, height: QuickSettingsPanelMetrics.tileSize.height)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(label) details")
+                }
             }
-            .contentShape(Rectangle())
+            .foregroundStyle(isActive ? Color.black.opacity(0.88) : Color.primary)
+            .frame(width: QuickSettingsPanelMetrics.tileSize.width,
+                   height: QuickSettingsPanelMetrics.tileSize.height)
+            .background(tileBackground, in: RoundedRectangle(cornerRadius: 5))
+            .overlay {
+                RoundedRectangle(cornerRadius: 5)
+                    .stroke(Color.primary.opacity(isActive ? 0 : 0.12), lineWidth: 0.5)
+            }
+            Text(label)
+                .font(.system(size: 11))
+                .lineLimit(1)
+                .frame(width: QuickSettingsPanelMetrics.tileSize.width,
+                       height: QuickSettingsPanelMetrics.tileLabelHeight)
         }
-        .buttonStyle(.plain)
+        .contentShape(Rectangle())
         .onHover { isHovering = $0 }
-        .accessibilityLabel(label)
     }
 
     private var tileBackground: Color {
@@ -342,6 +613,71 @@ private struct QuickSettingTile: View {
             Image(systemName: symbol)
                 .font(.system(size: 14, weight: .medium))
         }
+    }
+}
+
+private struct DetailEmptyState: View {
+    let symbol: String
+    let title: String
+    let detail: String
+    let actionTitle: String
+    let action: () -> Void
+
+    var body: some View {
+        VStack(spacing: 9) {
+            Image(systemName: symbol)
+                .font(.system(size: 24))
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+            Text(detail)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Button(actionTitle, action: action)
+                .controlSize(.small)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct DetailActionRowData {
+    let symbol: String
+    let title: String
+    let detail: String
+}
+
+private struct DetailActionList: View {
+    let rows: [DetailActionRowData]
+    let action: () -> Void
+
+    var body: some View {
+        VStack(spacing: 4) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                Button(action: action) {
+                    HStack(spacing: 12) {
+                        Image(systemName: row.symbol)
+                            .frame(width: 24)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(row.title)
+                                .font(.system(size: 12, weight: .medium))
+                            Text(row.detail)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "arrow.up.forward.app")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+        }
+        .padding(10)
     }
 }
 

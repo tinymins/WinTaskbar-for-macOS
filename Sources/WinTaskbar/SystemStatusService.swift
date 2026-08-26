@@ -1,6 +1,8 @@
+import AppKit
 import Carbon
 import Combine
 import CoreAudio
+import CoreLocation
 import CoreWLAN
 import Foundation
 import IOKit.ps
@@ -9,6 +11,12 @@ struct WiFiNetworkInfo: Identifiable, Hashable {
     let ssid: String
     let rssi: Int
     var id: String { ssid }
+}
+
+enum WiFiScanIssue: Equatable {
+    case locationAuthorizationRequired
+    case locationPermissionDenied
+    case scanFailed
 }
 
 struct InputSourceOption: Identifiable, Hashable {
@@ -51,7 +59,7 @@ enum InputSourcePresentation {
 }
 
 @MainActor
-final class SystemStatusService: ObservableObject {
+final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var now = Date()
     @Published private(set) var batteryLevel: Int?
     @Published private(set) var isCharging = false
@@ -64,13 +72,17 @@ final class SystemStatusService: ObservableObject {
     @Published private(set) var wifiPoweredOn = false
     @Published private(set) var wifiNetworks: [WiFiNetworkInfo] = []
     @Published private(set) var isScanningWiFi = false
+    @Published private(set) var wifiScanIssue: WiFiScanIssue?
     @Published private(set) var inputSources: [InputSourceOption] = []
 
     private var timer: Timer?
+    private let locationManager = CLLocationManager()
     private var scannedNetworks: [String: CWNetwork] = [:]
     private var inputSourceRefs: [String: TISInputSource] = [:]
 
-    init() {
+    override init() {
+        super.init()
+        locationManager.delegate = self
         refresh()
         reloadInputSources()
         timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
@@ -115,13 +127,41 @@ final class SystemStatusService: ObservableObject {
     }
 
     func scanWiFi() {
+        switch locationManager.authorizationStatus {
+        case .notDetermined:
+            wifiNetworks = []
+            wifiScanIssue = .locationAuthorizationRequired
+            NSApp.activate(ignoringOtherApps: true)
+            locationManager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
+            locationManager.requestWhenInUseAuthorization()
+            locationManager.startUpdatingLocation()
+            return
+        case .restricted, .denied:
+            wifiNetworks = []
+            wifiScanIssue = .locationPermissionDenied
+            return
+        case .authorizedAlways:
+            break
+        @unknown default:
+            wifiNetworks = []
+            wifiScanIssue = .locationPermissionDenied
+            return
+        }
         guard let interface = CWWiFiClient.shared().interface(), interface.powerOn() else {
             wifiNetworks = []
+            wifiScanIssue = nil
             return
         }
         isScanningWiFi = true
         defer { isScanningWiFi = false }
-        guard let networks = try? interface.scanForNetworks(withSSID: nil) else { return }
+        let networks: Set<CWNetwork>
+        do {
+            networks = try interface.scanForNetworks(withSSID: nil)
+        } catch {
+            wifiNetworks = []
+            wifiScanIssue = .scanFailed
+            return
+        }
         var bestBySSID: [String: CWNetwork] = [:]
         for network in networks {
             guard let ssid = network.ssid, !ssid.isEmpty else { continue }
@@ -132,6 +172,32 @@ final class SystemStatusService: ObservableObject {
         scannedNetworks = bestBySSID
         wifiNetworks = bestBySSID.map { WiFiNetworkInfo(ssid: $0.key, rssi: $0.value.rssiValue) }
             .sorted { $0.rssi > $1.rssi }
+        wifiScanIssue = nil
+    }
+
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let authorizationStatus = manager.authorizationStatus
+        Task { @MainActor [weak self] in
+            if authorizationStatus == .authorizedAlways {
+                self?.locationManager.stopUpdatingLocation()
+                self?.scanWiFi()
+            } else if authorizationStatus == .denied || authorizationStatus == .restricted {
+                self?.locationManager.stopUpdatingLocation()
+                self?.wifiScanIssue = .locationPermissionDenied
+            }
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        Task { @MainActor [weak self] in
+            self?.locationManager.stopUpdatingLocation()
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        Task { @MainActor [weak self] in
+            self?.locationManager.stopUpdatingLocation()
+        }
     }
 
     func joinWiFi(ssid: String, password: String?) -> Bool {

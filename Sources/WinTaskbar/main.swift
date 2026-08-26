@@ -249,6 +249,10 @@ func runSelfTest() async -> Int32 {
           QuickSettingsPanelMetrics.tileSize == CGSize(width: 96, height: 47),
           QuickSettingsPanelMetrics.volumeHeight == 72,
           QuickSettingsPanelMetrics.footerHeight == 48,
+          QuickSettingsPanelMetrics.detailHeaderHeight == 52,
+          QuickSettingsPanelMetrics.detailContentHeight == 233,
+          WiFiScanIssue.locationAuthorizationRequired != .locationPermissionDenied,
+          WiFiScanIssue.locationPermissionDenied != .scanFailed,
           QuickSettingsPanelGeometry.frame(
               screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 800),
               visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 775),

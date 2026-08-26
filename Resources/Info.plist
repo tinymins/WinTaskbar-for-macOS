@@ -42,7 +42,9 @@
     <key>LSUIElement</key>
     <true/>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Used only to display the current Wi-Fi network name in the taskbar.</string>
+    <string>Used only to display the current Wi-Fi network and nearby available networks.</string>
+    <key>NSLocationUsageDescription</key>
+    <string>Used only to display the current Wi-Fi network and nearby available networks.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Used for the power actions selected from the WinTaskbar Start menu.</string>
     <key>NSCalendarsFullAccessUsageDescription</key>
