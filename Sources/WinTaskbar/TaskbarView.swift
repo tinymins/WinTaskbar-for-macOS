@@ -2,6 +2,36 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct TaskbarDragMotion {
+    static let duration: TimeInterval = 0.167
+    static let reorderFirstControlPoint = CGPoint(x: 0.55, y: 0.55)
+    static let reorderSecondControlPoint = CGPoint(x: 0, y: 1)
+    static let reorder = Animation.timingCurve(
+        reorderFirstControlPoint.x,
+        reorderFirstControlPoint.y,
+        reorderSecondControlPoint.x,
+        reorderSecondControlPoint.y,
+        duration: duration
+    )
+    static let decoration = Animation.timingCurve(0, 0, 0, 1, duration: duration)
+}
+
+private enum TaskbarDragCoordinateSpace {
+    static let name = "WinTaskbar.AppItems"
+}
+
+private struct TaskbarItemFramePreferenceKey: PreferenceKey {
+    static let defaultValue: [String: CGRect] = [:]
+
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+private final class TaskbarDragGeometryState {
+    var itemFrames: [String: CGRect] = [:]
+}
+
 struct TaskbarView: View {
     @ObservedObject var preferences: PreferencesStore
     @ObservedObject var apps: AppDiscoveryService
@@ -16,10 +46,17 @@ struct TaskbarView: View {
     let shortcutEditorController: ShortcutEditorController
     @ObservedObject var recentDocuments: RecentDocumentsService
     let screen: NSScreen
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dragGeometry = TaskbarDragGeometryState()
+    @State private var taskbarOrderRevision = 0
+    @State private var draggedBundleID: String?
+    @State private var dragPreviewCenter: CGPoint?
+    @State private var dragGrabOffset = CGSize.zero
 
     var body: some View {
         GeometryReader { geometry in
             let horizontal = preferences.position.isHorizontal
+            let _ = taskbarOrderRevision
             let items = apps.taskbarItems(
                 pinnedBundleIDs: preferences.pinnedBundleIDs,
                 badges: dockBadges.badges,
@@ -61,6 +98,17 @@ struct TaskbarView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: contentAlignment)
             .background(panelBackground)
             .preferredColorScheme(preferredColorScheme)
+            .coordinateSpace(name: TaskbarDragCoordinateSpace.name)
+            .onPreferenceChange(TaskbarItemFramePreferenceKey.self) { dragGeometry.itemFrames = $0 }
+            .overlay(alignment: .topLeading) {
+                if let draggedBundleID,
+                   let item = items.first(where: { $0.bundleIdentifier == draggedBundleID }),
+                   let dragPreviewCenter {
+                    dragPreview(for: item)
+                        .position(dragPreviewCenter)
+                        .allowsHitTesting(false)
+                }
+            }
             .dropDestination(for: URL.self) { urls, _ in
                 var accepted = false
                 for url in urls where url.pathExtension.lowercased() == "app" {
@@ -136,11 +184,19 @@ struct TaskbarView: View {
                 ForEach(items) { itemButton($0) }
             }
             .frame(maxHeight: .infinity)
+            .animation(
+                reduceMotion ? nil : TaskbarDragMotion.reorder,
+                value: items.map(\.bundleIdentifier)
+            )
         } else {
             VStack(spacing: TaskbarItemGeometry.itemSpacing) {
                 ForEach(items) { itemButton($0) }
             }
             .frame(maxWidth: .infinity)
+            .animation(
+                reduceMotion ? nil : TaskbarDragMotion.reorder,
+                value: items.map(\.bundleIdentifier)
+            )
         }
     }
 
@@ -161,17 +217,110 @@ struct TaskbarView: View {
             windowPreviewPanelController: windowPreviewPanelController,
             taskbarJumpListController: taskbarJumpListController,
             shortcutEditorController: shortcutEditorController,
-            recentDocuments: recentDocuments
+            recentDocuments: recentDocuments,
+            isTaskbarReordering: draggedBundleID != nil,
+            isDraggedItem: draggedBundleID == item.bundleIdentifier
         )
-        .draggable(item.bundleIdentifier)
-        .dropDestination(for: String.self) { bundleIDs, _ in
-            guard item.isPinned,
-                  let source = bundleIDs.first,
-                  preferences.pinnedBundleIDs.contains(source) else { return false }
-            apps.reorderTaskbarItem(source, before: item.bundleIdentifier)
-            preferences.reorderPinned(source, before: item.bundleIdentifier)
-            return true
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: TaskbarItemFramePreferenceKey.self,
+                    value: [
+                        item.bundleIdentifier: proxy.frame(in: .named(TaskbarDragCoordinateSpace.name)),
+                    ]
+                )
+            }
         }
+        .simultaneousGesture(reorderGesture(for: item))
+    }
+
+    private func reorderGesture(for item: TaskbarItem) -> some Gesture {
+        DragGesture(minimumDistance: 5, coordinateSpace: .named(TaskbarDragCoordinateSpace.name))
+            .onChanged { value in
+                if draggedBundleID == nil { beginReordering(item, value: value) }
+                guard draggedBundleID == item.bundleIdentifier else { return }
+                dragPreviewCenter = CGPoint(
+                    x: value.location.x + dragGrabOffset.width,
+                    y: value.location.y + dragGrabOffset.height
+                )
+                updateReorderTarget(for: item, location: value.location)
+            }
+            .onEnded { _ in finishReordering(item) }
+    }
+
+    private func beginReordering(_ item: TaskbarItem, value: DragGesture.Value) {
+        draggedBundleID = item.bundleIdentifier
+        if let frame = dragGeometry.itemFrames[item.bundleIdentifier] {
+            dragGrabOffset = CGSize(
+                width: frame.midX - value.startLocation.x,
+                height: frame.midY - value.startLocation.y
+            )
+            dragPreviewCenter = CGPoint(x: frame.midX, y: frame.midY)
+        } else {
+            dragGrabOffset = .zero
+            dragPreviewCenter = value.startLocation
+        }
+        taskbarJumpListController.dismiss()
+        windowPreviewPanelController.dismissAll()
+        windowPeekController.hideImmediately()
+    }
+
+    private func updateReorderTarget(for item: TaskbarItem, location: CGPoint) {
+        guard dragGeometry.itemFrames[item.bundleIdentifier]?.contains(location) != true else { return }
+        let taskbarBounds = dragGeometry.itemFrames.values.reduce(CGRect.null) { $0.union($1) }
+            .insetBy(dx: -TaskbarItemGeometry.itemSpacing, dy: -TaskbarItemGeometry.itemSpacing)
+        guard taskbarBounds.contains(location),
+              let target = dragGeometry.itemFrames
+                .filter({ $0.key != item.bundleIdentifier })
+                .min(by: { lhs, rhs in
+                    if preferences.position.isHorizontal {
+                        return abs(lhs.value.midX - location.x) < abs(rhs.value.midX - location.x)
+                    }
+                    return abs(lhs.value.midY - location.y) < abs(rhs.value.midY - location.y)
+                }) else { return }
+        let after = preferences.position.isHorizontal
+            ? location.x > target.value.midX
+            : location.y > target.value.midY
+        let animation: Animation? = reduceMotion ? nil : TaskbarDragMotion.reorder
+        withAnimation(animation) {
+            guard apps.reorderTaskbarItem(
+                item.bundleIdentifier,
+                relativeTo: target.key,
+                after: after
+            ) else { return }
+            taskbarOrderRevision &+= 1
+        }
+    }
+
+    private func finishReordering(_ item: TaskbarItem) {
+        guard draggedBundleID == item.bundleIdentifier else { return }
+        preferences.alignPinnedOrder(to: apps.taskbarBundleOrder)
+        let animation: Animation? = reduceMotion ? nil : TaskbarDragMotion.reorder
+        withAnimation(animation) {
+            clearReorderingState()
+        }
+    }
+
+    private func clearReorderingState() {
+        draggedBundleID = nil
+        dragPreviewCenter = nil
+        dragGrabOffset = .zero
+    }
+
+    private func dragPreview(for item: TaskbarItem) -> some View {
+        Image(nsImage: item.icon)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: itemGeometry.iconSize, height: itemGeometry.iconSize)
+            .overlay(alignment: .topTrailing) {
+                if let badge = item.badge {
+                    Text(badge)
+                        .font(.system(size: 8, weight: .bold))
+                        .padding(3)
+                        .background(Color.red)
+                        .clipShape(Capsule())
+                }
+            }
     }
 
     private func overflowButton(_ items: [TaskbarItem]) -> some View {
@@ -443,6 +592,8 @@ private struct TaskbarAppButton: View {
     @ObservedObject var taskbarJumpListController: TaskbarJumpListController
     let shortcutEditorController: ShortcutEditorController
     @ObservedObject var recentDocuments: RecentDocumentsService
+    let isTaskbarReordering: Bool
+    let isDraggedItem: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
     @State private var attentionPulse = false
@@ -450,28 +601,41 @@ private struct TaskbarAppButton: View {
 
     var body: some View {
         Button {
+            guard !isTaskbarReordering else { return }
             dockBadges.acknowledge(item.bundleIdentifier)
             DispatchQueue.main.async {
                 windowActivator.activateOrMinimize(item)
             }
         } label: {
             appIconCell
+            .opacity(isDraggedItem ? 0 : 1)
             .background {
                 appBackground
+                    .opacity(isDraggedItem ? 0 : 1)
+                    .animation(dragDecorationAnimation, value: isDraggedItem)
             }
             .overlay(alignment: indicatorAlignment) {
                 if preferences.showRunningIndicators && !preferences.showAppLabels {
                     runningIndicator
+                        .scaleEffect(
+                            x: preferences.position.isHorizontal && isDraggedItem ? 0 : 1,
+                            y: preferences.position.isHorizontal || !isDraggedItem ? 1 : 0
+                        )
+                        .opacity(isDraggedItem ? 0 : 1)
+                        .animation(dragDecorationAnimation, value: isDraggedItem)
                 }
             }
             .overlay {
                 if preferences.activeIndicator == .border && item.isActive {
-                    RoundedRectangle(cornerRadius: 6).stroke(Color.accentColor, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.accentColor, lineWidth: 1)
+                        .opacity(isDraggedItem ? 0 : 1)
+                        .animation(dragDecorationAnimation, value: isDraggedItem)
                 }
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(TaskbarButtonStyle(contentPadding: 0))
+        .buttonStyle(TaskbarButtonStyle(contentPadding: 0, suppressPressFeedback: isTaskbarReordering))
         .overlay {
             TaskbarContextClickAnchor { anchorView in
                 showJumpList(relativeTo: anchorView)
@@ -598,6 +762,12 @@ private struct TaskbarAppButton: View {
     }
 
     private func handlePreviewHover(_ hovering: Bool) {
+        if isTaskbarReordering {
+            isHovering = false
+            windowPreviewPanelController.dismiss(ownerID: previewOwnerID)
+            windowPeekController.hideImmediately()
+            return
+        }
         if TaskbarJumpListInteractionPolicy.shouldDismissMenuOnAppHover(hovering: hovering) {
             taskbarJumpListController.dismiss()
         }
@@ -632,6 +802,10 @@ private struct TaskbarAppButton: View {
         windowPreviewPanelController.scheduleDismissal(ownerID: previewOwnerID) {
             windowPeekController.hide()
         }
+    }
+
+    private var dragDecorationAnimation: Animation? {
+        reduceMotion ? nil : TaskbarDragMotion.decoration
     }
 
     @ViewBuilder
@@ -948,13 +1122,15 @@ struct TaskbarButtonMotion {
 
 private struct TaskbarButtonStyle: ButtonStyle {
     var contentPadding: CGFloat = 3
+    var suppressPressFeedback = false
 
     func makeBody(configuration: Configuration) -> some View {
+        let isPressed = configuration.isPressed && !suppressPressFeedback
         configuration.label
-            .scaleEffect(configuration.isPressed ? TaskbarButtonMotion.pressedScale : 1)
+            .scaleEffect(isPressed ? TaskbarButtonMotion.pressedScale : 1)
             .padding(contentPadding)
-            .background(configuration.isPressed ? Color.primary.opacity(0.15) : .clear)
+            .background(isPressed ? Color.primary.opacity(0.15) : .clear)
             .clipShape(RoundedRectangle(cornerRadius: 6))
-            .animation(TaskbarButtonMotion.animation(isPressed: configuration.isPressed), value: configuration.isPressed)
+            .animation(TaskbarButtonMotion.animation(isPressed: isPressed), value: isPressed)
     }
 }

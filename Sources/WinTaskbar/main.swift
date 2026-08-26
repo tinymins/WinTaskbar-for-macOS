@@ -406,6 +406,8 @@ func runSelfTest() async -> Int32 {
         pinnedBundleIDs: ["finder", "terminal"],
         runningBundleIDs: ["finder"]
     )
+    let movedTaskbarItem = taskbarItemOrder.move("terminal", relativeTo: "finder", after: false)
+    let liveReorderedTaskbarOrder = taskbarItemOrder.bundleIDs
     var previewSelection = WindowPreviewSelection()
     previewSelection.activate(firstPreviewOwner)
     previewSelection.activate(secondPreviewOwner)
@@ -461,6 +463,11 @@ func runSelfTest() async -> Int32 {
           pinnedInPlaceTaskbarOrder == ["finder", "safari", "terminal"],
           unpinnedExitTaskbarOrder == ["finder", "terminal"],
           pinnedExitTaskbarOrder == ["finder", "terminal"],
+          movedTaskbarItem,
+          liveReorderedTaskbarOrder == ["terminal", "finder"],
+          TaskbarDragMotion.duration == 0.167,
+          TaskbarDragMotion.reorderFirstControlPoint == CGPoint(x: 0.55, y: 0.55),
+          TaskbarDragMotion.reorderSecondControlPoint == CGPoint(x: 0, y: 1),
           RecentDocumentsService.documentURL(from: "file:///tmp/project/")
               == URL(string: "file:///tmp/project/"),
           RecentDocumentsService.documentURL(from: "https://example.com/project/")?.isFileURL == true,
@@ -847,13 +854,16 @@ func runSelfTest() async -> Int32 {
     preferences.barHeight = 64
     preferences.trayWifiEnabled = false
     preferences.pinnedBundleIDs = ["one", "two", "three"]
-    preferences.reorderPinned("three", before: "one")
+    preferences.reorderPinned("three", relativeTo: "one", after: false)
+    let reorderedPinnedBundleIDs = preferences.pinnedBundleIDs
+    preferences.alignPinnedOrder(to: ["two", "three", "one"])
     preferences.appFolders = [AppFolder(name: "Work", bundleIDs: ["one"])]
     preferences.hotkeyShortcuts[0] = HotkeyShortcut(keyCode: 0, modifiers: UInt32(cmdKey), keyLabel: "A")
     guard defaults.string(forKey: "wintaskbar.position") == "Left",
           defaults.double(forKey: "wintaskbar.barHeight") == 64,
           defaults.bool(forKey: "wintaskbar.feature.trayWifi") == false,
-          preferences.pinnedBundleIDs == ["three", "one", "two"],
+          reorderedPinnedBundleIDs == ["three", "one", "two"],
+          preferences.pinnedBundleIDs == ["two", "three", "one"],
           PreferencesStore(defaults: defaults).appFolders.first?.bundleIDs == ["one"],
           PreferencesStore(defaults: defaults).hotkeyShortcuts.first?.keyLabel == "A",
           DockBadgeService.parseStatusLabel("124 notifications") == "124",

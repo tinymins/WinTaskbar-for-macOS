@@ -172,13 +172,21 @@ final class PreferencesStore: ObservableObject {
         pinnedBundleIDs.removeAll { $0 == bundleID }
     }
 
-    func reorderPinned(_ bundleID: String, before destination: String) {
+    func reorderPinned(_ bundleID: String, relativeTo destination: String, after: Bool) {
         guard bundleID != destination,
               let sourceIndex = pinnedBundleIDs.firstIndex(of: bundleID),
               let destinationIndex = pinnedBundleIDs.firstIndex(of: destination) else { return }
         let value = pinnedBundleIDs.remove(at: sourceIndex)
         let adjusted = sourceIndex < destinationIndex ? destinationIndex - 1 : destinationIndex
-        pinnedBundleIDs.insert(value, at: adjusted)
+        pinnedBundleIDs.insert(value, at: after ? adjusted + 1 : adjusted)
+    }
+
+    func alignPinnedOrder(to taskbarBundleIDs: [String]) {
+        let pinned = Set(pinnedBundleIDs)
+        let ordered = taskbarBundleIDs.filter { pinned.contains($0) }
+        let missing = pinnedBundleIDs.filter { !ordered.contains($0) }
+        let result = ordered + missing
+        if result != pinnedBundleIDs { pinnedBundleIDs = result }
     }
 
     private static func store<T: Encodable>(_ value: T, key: String, defaults: UserDefaults) {

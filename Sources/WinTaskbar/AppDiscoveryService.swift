@@ -16,13 +16,15 @@ struct TaskbarItemOrder {
         return bundleIDs
     }
 
-    mutating func move(_ bundleID: String, before destination: String) {
+    mutating func move(_ bundleID: String, relativeTo destination: String, after: Bool) -> Bool {
         guard bundleID != destination,
               let sourceIndex = bundleIDs.firstIndex(of: bundleID),
-              let destinationIndex = bundleIDs.firstIndex(of: destination) else { return }
+              bundleIDs.contains(destination) else { return false }
+        let previous = bundleIDs
         let value = bundleIDs.remove(at: sourceIndex)
-        let adjusted = sourceIndex < destinationIndex ? destinationIndex - 1 : destinationIndex
-        bundleIDs.insert(value, at: adjusted)
+        guard let destinationIndex = bundleIDs.firstIndex(of: destination) else { return false }
+        bundleIDs.insert(value, at: after ? destinationIndex + 1 : destinationIndex)
+        return bundleIDs != previous
     }
 }
 
@@ -182,9 +184,12 @@ final class AppDiscoveryService: ObservableObject {
         }
     }
 
-    func reorderTaskbarItem(_ bundleID: String, before destination: String) {
-        taskbarItemOrder.move(bundleID, before: destination)
+    @discardableResult
+    func reorderTaskbarItem(_ bundleID: String, relativeTo destination: String, after: Bool) -> Bool {
+        taskbarItemOrder.move(bundleID, relativeTo: destination, after: after)
     }
+
+    var taskbarBundleOrder: [String] { taskbarItemOrder.bundleIDs }
 
     func open(_ item: TaskbarItem) {
         if let pid = item.processIdentifier,
