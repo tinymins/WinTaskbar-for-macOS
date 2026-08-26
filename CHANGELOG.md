@@ -2,6 +2,13 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.6] - 2026-08-26
+
+### Fixed
+
+- Delay the first Aero Peek activation by 300ms to prevent flashes when the pointer only passes over a window preview.
+- Switch Aero Peek immediately between window previews after it has activated for the current hover session.
+
 ## [0.0.5] - 2026-08-26
 
 ### Fixed
@@ -27,6 +34,7 @@ All notable changes to WinTaskbar for macOS are documented here.
 - Show window previews immediately when hovering over a taskbar app while retaining a short dismissal delay.
 - Match Windows preview thumbnail proportions and refine preview panel styling.
 
+[0.0.6]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.2...v0.0.3
