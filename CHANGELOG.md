@@ -2,6 +2,15 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.13] - 2026-08-26
+
+### Fixed
+
+- Reorder taskbar app icons live while dragging, with Fluent-style animated avoidance instead of a full taskbar refresh.
+- Fade the dragged icon background and shrink its running indicator while keeping the icon attached to the pointer.
+- Trigger avoidance when the dragged icon center crosses the target icon center, independent of where the icon was grabbed.
+- Lock taskbar icon dragging to the taskbar axis so icons cannot be pulled away from the bar.
+
 ## [0.0.12] - 2026-08-26
 
 ### Fixed
@@ -81,6 +90,7 @@ All notable changes to WinTaskbar for macOS are documented here.
 - Show window previews immediately when hovering over a taskbar app while retaining a short dismissal delay.
 - Match Windows preview thumbnail proportions and refine preview panel styling.
 
+[0.0.13]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.9...v0.0.10
