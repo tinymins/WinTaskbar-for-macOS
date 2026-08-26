@@ -2,6 +2,15 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.15] - 2026-08-26
+
+### Fixed
+
+- Isolate live drag position updates to the dragged icon overlay instead of recomputing the entire taskbar on every pointer event.
+- Load window preview snapshots only when the target app's hover preview activates, removing synchronous Accessibility queries from app icon rendering.
+- Preserve existing app icon views and cache their images during reorder layout changes, eliminating the full-row flash while dragging.
+- Animate the dragged icon into its final taskbar slot before restoring its background and running indicator on release.
+
 ## [0.0.14] - 2026-08-26
 
 ### Added
