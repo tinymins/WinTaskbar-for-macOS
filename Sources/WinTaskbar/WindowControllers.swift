@@ -168,7 +168,7 @@ struct WindowPreviewPanelTransitionPolicy {
 }
 
 struct WindowPreviewPanelMotion {
-    static let duration: TimeInterval = 0.22
+    static let duration: TimeInterval = 0.28
     static let firstControlPoint = CGPoint(x: 0.8, y: 0)
     static let secondControlPoint = CGPoint(x: 0.2, y: 1)
 
