@@ -463,7 +463,11 @@ struct TaskbarView: View {
             BatteryTrayView(service: status, horizontal: preferences.position.isHorizontal)
         }
         if preferences.trayInputSourceEnabled {
-            InputSourceTrayView(service: status, position: preferences.position)
+            InputSourceTrayView(
+                service: status,
+                position: preferences.position,
+                barHeight: CGFloat(preferences.barHeight)
+            )
         }
         if preferences.trayClockEnabled {
             ClockTrayView(

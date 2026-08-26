@@ -23,6 +23,25 @@ enum InputSourcePanelMetrics {
     }
 }
 
+enum InputSourcePanelGeometry {
+    static func frame(
+        screenFrame: CGRect,
+        visibleFrame: CGRect,
+        position: TaskbarPosition,
+        barHeight: CGFloat,
+        contentSize: CGSize
+    ) -> CGRect {
+        StartMenuGeometry.anchoredFrame(
+            screenFrame: screenFrame,
+            visibleFrame: visibleFrame,
+            position: position,
+            barHeight: barHeight,
+            contentSize: contentSize,
+            oppositeEnd: true
+        )
+    }
+}
+
 @MainActor
 final class InputSourcePanelController: ObservableObject {
     private let panelController = TaskbarJumpListController()
@@ -32,12 +51,15 @@ final class InputSourcePanelController: ObservableObject {
         self.anchorView = anchorView
     }
 
-    func toggle(service: SystemStatusService, position: TaskbarPosition) {
+    func toggle(service: SystemStatusService, position: TaskbarPosition, barHeight: CGFloat) {
         if panelController.isVisible {
             dismiss()
             return
         }
-        guard let anchorView else { return }
+        guard let anchorView,
+              let anchorWindow = anchorView.window,
+              let screen = anchorWindow.screen else { return }
+        let contentSize = InputSourcePanelMetrics.contentSize(inputSourceCount: service.inputSources.count)
         let rootView = InputSourcePanelView(
             sources: service.inputSources,
             selectedSourceID: service.inputSourceID,
@@ -52,9 +74,14 @@ final class InputSourcePanelController: ObservableObject {
         )
         panelController.show(
             rootView: AnyView(rootView),
-            contentSize: InputSourcePanelMetrics.contentSize(inputSourceCount: service.inputSources.count),
-            relativeTo: anchorView,
-            position: position
+            frame: InputSourcePanelGeometry.frame(
+                screenFrame: screen.frame,
+                visibleFrame: screen.visibleFrame,
+                position: position,
+                barHeight: barHeight,
+                contentSize: contentSize
+            ),
+            appearance: anchorWindow.appearance
         )
     }
 

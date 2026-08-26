@@ -206,7 +206,35 @@ func runSelfTest() async -> Int32 {
           InputSourcePresentation.abbreviation(languageCode: nil, fallbackName: "ABC") == "ABC",
           InputSourcePanelMetrics.contentSize(inputSourceCount: 2) == CGSize(width: 360, height: 215),
           InputSourcePanelMetrics.contentSize(inputSourceCount: 8)
-            == InputSourcePanelMetrics.contentSize(inputSourceCount: 5) else {
+            == InputSourcePanelMetrics.contentSize(inputSourceCount: 5),
+          InputSourcePanelGeometry.frame(
+              screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 800),
+              visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 775),
+              position: .bottom,
+              barHeight: 48,
+              contentSize: CGSize(width: 360, height: 215)
+          ) == CGRect(x: 828, y: 56, width: 360, height: 215),
+          InputSourcePanelGeometry.frame(
+              screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 800),
+              visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 775),
+              position: .top,
+              barHeight: 48,
+              contentSize: CGSize(width: 360, height: 215)
+          ) == CGRect(x: 828, y: 504, width: 360, height: 215),
+          InputSourcePanelGeometry.frame(
+              screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 800),
+              visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 775),
+              position: .left,
+              barHeight: 48,
+              contentSize: CGSize(width: 360, height: 215)
+          ) == CGRect(x: 56, y: 12, width: 360, height: 215),
+          InputSourcePanelGeometry.frame(
+              screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 800),
+              visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 775),
+              position: .right,
+              barHeight: 48,
+              contentSize: CGSize(width: 360, height: 215)
+          ) == CGRect(x: 784, y: 12, width: 360, height: 215) else {
         fputs("SELF-TEST FAILED: input source presentation mismatch\n", stderr)
         return 1
     }

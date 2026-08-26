@@ -130,11 +130,12 @@ struct BatteryTrayView: View {
 struct InputSourceTrayView: View {
     @ObservedObject var service: SystemStatusService
     let position: TaskbarPosition
+    let barHeight: CGFloat
     @StateObject private var panelController = InputSourcePanelController()
 
     var body: some View {
         Button {
-            panelController.toggle(service: service, position: position)
+            panelController.toggle(service: service, position: position, barHeight: barHeight)
         } label: {
             Text(currentAbbreviation)
                 .font(.caption2.weight(.medium))
