@@ -68,8 +68,13 @@ enum ClockCalendarGrid {
         return calendar.date(byAdding: .day, value: -leadingDays, to: startOfMonth)
     }
 
-    static func days(startingAt gridStart: Date, displayedMonth: Date, calendar: Calendar) -> [ClockCalendarDay] {
-        return (0..<42).compactMap { offset in
+    static func days(
+        startingAt gridStart: Date,
+        displayedMonth: Date,
+        calendar: Calendar,
+        count: Int = 42
+    ) -> [ClockCalendarDay] {
+        return (0..<count).compactMap { offset in
             guard let date = calendar.date(byAdding: .day, value: offset, to: gridStart) else { return nil }
             return ClockCalendarDay(
                 date: date,
@@ -91,8 +96,8 @@ final class ClockCalendarState: ObservableObject {
     @Published var displayedMonth: Date
     @Published var selectedDate: Date
     @Published private(set) var visibleStartDate: Date
-    @Published private(set) var gridRevision = 0
-    @Published private(set) var scrollDirection = 1
+    @Published private(set) var renderedStartDate: Date
+    @Published private(set) var gridOffset: CGFloat = 0
     @Published var isExpanded = true
     @Published private(set) var focusRemainingSeconds = 0
     @Published private(set) var isFocusing = false
@@ -100,13 +105,18 @@ final class ClockCalendarState: ObservableObject {
 
     private var focusEndDate: Date?
     private var focusTimer: Timer?
+    private var isWeekScrollAnimating = false
+    private var pendingWeekScrolls: [Int] = []
+    private var navigationRevision: UInt = 0
 
     init(now: Date = Date()) {
         let calendar = Self.calendar
         let month = calendar.dateInterval(of: .month, for: now)?.start ?? now
         displayedMonth = month
         selectedDate = now
-        visibleStartDate = ClockCalendarGrid.startDate(displayedMonth: month, calendar: calendar) ?? month
+        let startDate = ClockCalendarGrid.startDate(displayedMonth: month, calendar: calendar) ?? month
+        visibleStartDate = startDate
+        renderedStartDate = startDate
     }
 
     static var calendar: Calendar {
@@ -117,11 +127,12 @@ final class ClockCalendarState: ObservableObject {
         return calendar
     }
 
-    var days: [ClockCalendarDay] {
+    var renderedDays: [ClockCalendarDay] {
         ClockCalendarGrid.days(
-            startingAt: visibleStartDate,
+            startingAt: renderedStartDate,
             displayedMonth: displayedMonth,
-            calendar: Self.calendar
+            calendar: Self.calendar,
+            count: 49
         )
     }
 
@@ -131,33 +142,97 @@ final class ClockCalendarState: ObservableObject {
 
     func moveMonth(by offset: Int) {
         guard let month = Self.calendar.date(byAdding: .month, value: offset, to: displayedMonth) else { return }
-        showMonth(month, direction: offset)
+        showMonth(month)
     }
 
     func scrollWeeks(by offset: Int) {
         guard offset != 0,
-              let startDate = Self.calendar.date(byAdding: .day, value: offset * 7, to: visibleStartDate),
-              let referenceDate = Self.calendar.date(byAdding: .day, value: 7, to: startDate),
-              let month = Self.calendar.dateInterval(of: .month, for: referenceDate)?.start else { return }
-        visibleStartDate = startDate
-        displayedMonth = month
-        scrollDirection = offset
-        gridRevision &+= 1
+              let startDate = shiftedStartDate(by: offset) else { return }
+        cancelWeekScrollAnimation()
+        updateVisibleStartDate(startDate)
+        renderedStartDate = startDate
+        gridOffset = 0
+    }
+
+    func animateWeekScroll(by offset: Int) {
+        guard offset != 0 else { return }
+        let direction = offset > 0 ? 1 : -1
+        if isWeekScrollAnimating {
+            pendingWeekScrolls.append(direction)
+            return
+        }
+        startWeekScrollAnimation(direction: direction)
     }
 
     func select(_ date: Date) {
         selectedDate = date
         if !Self.calendar.isDate(date, equalTo: displayedMonth, toGranularity: .month),
            let month = Self.calendar.dateInterval(of: .month, for: date)?.start {
-            showMonth(month, direction: date < displayedMonth ? -1 : 1)
+            showMonth(month)
         }
     }
 
-    private func showMonth(_ month: Date, direction: Int) {
+    private func showMonth(_ month: Date) {
+        cancelWeekScrollAnimation()
         displayedMonth = month
-        visibleStartDate = ClockCalendarGrid.startDate(displayedMonth: month, calendar: Self.calendar) ?? month
-        scrollDirection = direction
-        gridRevision &+= 1
+        let startDate = ClockCalendarGrid.startDate(displayedMonth: month, calendar: Self.calendar) ?? month
+        visibleStartDate = startDate
+        renderedStartDate = startDate
+        gridOffset = 0
+    }
+
+    private func startWeekScrollAnimation(direction: Int) {
+        guard let targetStartDate = shiftedStartDate(by: direction) else { return }
+        isWeekScrollAnimating = true
+        navigationRevision &+= 1
+        let revision = navigationRevision
+
+        if direction > 0 {
+            renderedStartDate = visibleStartDate
+            gridOffset = 0
+        } else {
+            renderedStartDate = targetStartDate
+            gridOffset = -42
+        }
+
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self, self.navigationRevision == revision else { return }
+            withAnimation(.easeOut(duration: 0.18)) {
+                self.gridOffset = direction > 0 ? -42 : 0
+            }
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            guard self.navigationRevision == revision else { return }
+
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                self.updateVisibleStartDate(targetStartDate)
+                self.renderedStartDate = targetStartDate
+                self.gridOffset = 0
+            }
+            self.isWeekScrollAnimating = false
+            if !self.pendingWeekScrolls.isEmpty {
+                self.startWeekScrollAnimation(direction: self.pendingWeekScrolls.removeFirst())
+            }
+        }
+    }
+
+    private func shiftedStartDate(by weekOffset: Int) -> Date? {
+        Self.calendar.date(byAdding: .day, value: weekOffset * 7, to: visibleStartDate)
+    }
+
+    private func updateVisibleStartDate(_ startDate: Date) {
+        guard let referenceDate = Self.calendar.date(byAdding: .day, value: 7, to: startDate),
+              let month = Self.calendar.dateInterval(of: .month, for: referenceDate)?.start else { return }
+        visibleStartDate = startDate
+        displayedMonth = month
+    }
+
+    private func cancelWeekScrollAnimation() {
+        navigationRevision &+= 1
+        pendingWeekScrolls.removeAll()
+        isWeekScrollAnimating = false
     }
 
     func adjustFocusMinutes(by offset: Int) {
@@ -285,9 +360,8 @@ struct ClockCalendarPanelView: View {
             .frame(height: 28)
 
             ZStack {
-                ClockCalendarDaysGrid(days: state.days, state: state, columns: columns)
-                    .id(state.gridRevision)
-                    .transition(calendarGridTransition)
+                ClockCalendarDaysGrid(days: state.renderedDays, state: state, columns: columns)
+                    .offset(y: state.gridOffset)
             }
             .frame(height: 252)
             .clipped()
@@ -322,9 +396,7 @@ struct ClockCalendarPanelView: View {
     }
 
     private func monthButton(systemName: String, offset: Int, label: String) -> some View {
-        Button {
-            withAnimation(.easeOut(duration: 0.18)) { state.moveMonth(by: offset) }
-        } label: {
+        Button { state.moveMonth(by: offset) } label: {
             Image(systemName: systemName)
                 .font(.system(size: 9, weight: .bold))
                 .frame(width: 32, height: 32)
@@ -350,20 +422,6 @@ struct ClockCalendarPanelView: View {
 
     private var columns: [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: 0), count: 7)
-    }
-
-    private var calendarGridTransition: AnyTransition {
-        let distance = CGFloat(state.scrollDirection) * 42
-        return .asymmetric(
-            insertion: .modifier(
-                active: ClockCalendarGridOffset(y: distance),
-                identity: ClockCalendarGridOffset(y: 0)
-            ),
-            removal: .modifier(
-                active: ClockCalendarGridOffset(y: -distance),
-                identity: ClockCalendarGridOffset(y: 0)
-            )
-        )
     }
 
     private var monthTitle: String {
@@ -405,14 +463,6 @@ private struct ClockCalendarDaysGrid: View {
             }
         }
         .padding(.horizontal, 16)
-    }
-}
-
-private struct ClockCalendarGridOffset: ViewModifier {
-    let y: CGFloat
-
-    func body(content: Content) -> some View {
-        content.offset(y: y)
     }
 }
 

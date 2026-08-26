@@ -716,8 +716,29 @@ func runSelfTest() async -> Int32 {
     guard ClockCalendarState.calendar.isDate(
         rollingCalendarState.visibleStartDate,
         inSameDayAs: expectedFiveYearStartDate
-    ), rollingCalendarState.gridRevision == 260 else {
+    ), rollingCalendarState.renderedDays.count == 49 else {
         fputs("SELF-TEST FAILED: clock calendar week scrolling range mismatch\n", stderr)
+        return 1
+    }
+
+    let animatedCalendarState = ClockCalendarState(now: february2024)
+    let animatedStartDate = animatedCalendarState.visibleStartDate
+    animatedCalendarState.animateWeekScroll(by: 1)
+    animatedCalendarState.animateWeekScroll(by: 1)
+    animatedCalendarState.animateWeekScroll(by: 1)
+    try? await Task.sleep(nanoseconds: 600_000_000)
+    let expectedAnimatedStartDate = ClockCalendarState.calendar.date(
+        byAdding: .day,
+        value: 21,
+        to: animatedStartDate
+    )!
+    guard ClockCalendarState.calendar.isDate(
+        animatedCalendarState.visibleStartDate,
+        inSameDayAs: expectedAnimatedStartDate
+    ), animatedCalendarState.renderedDays.count == 49,
+       Set(animatedCalendarState.renderedDays.map(\.id)).count == 49,
+       animatedCalendarState.gridOffset == 0 else {
+        fputs("SELF-TEST FAILED: clock calendar animated week scrolling mismatch\n", stderr)
         return 1
     }
 

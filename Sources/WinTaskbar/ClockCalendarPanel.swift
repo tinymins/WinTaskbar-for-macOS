@@ -256,7 +256,7 @@ final class ClockCalendarPanelController: ObservableObject {
                     isMomentum: event.momentumPhase != []
                 )
                 if let offset {
-                    withAnimation(.easeOut(duration: 0.18)) { self.state.scrollWeeks(by: offset) }
+                    self.state.animateWeekScroll(by: offset)
                 }
                 return nil
             }
