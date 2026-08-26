@@ -441,27 +441,27 @@ private struct TaskbarAppButton: View {
     @State private var attentionTask: Task<Void, Never>?
 
     var body: some View {
-        appIconCell
-        .background {
-            appBackground
-        }
-        .overlay(alignment: indicatorAlignment) {
-            if preferences.showRunningIndicators && !preferences.showAppLabels {
-                runningIndicator
-            }
-        }
-        .overlay {
-            if preferences.activeIndicator == .border && item.isActive {
-                RoundedRectangle(cornerRadius: 6).stroke(Color.accentColor, lineWidth: 1)
-            }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            windowPreviewPanelController.dismiss(ownerID: previewOwnerID)
+        Button {
             dockBadges.acknowledge(item.bundleIdentifier)
             windowActivator.activateOrMinimize(item)
+        } label: {
+            appIconCell
+            .background {
+                appBackground
+            }
+            .overlay(alignment: indicatorAlignment) {
+                if preferences.showRunningIndicators && !preferences.showAppLabels {
+                    runningIndicator
+                }
+            }
+            .overlay {
+                if preferences.activeIndicator == .border && item.isActive {
+                    RoundedRectangle(cornerRadius: 6).stroke(Color.accentColor, lineWidth: 1)
+                }
+            }
+            .contentShape(Rectangle())
         }
-        .accessibilityAddTraits(.isButton)
+        .buttonStyle(TaskbarButtonStyle(contentPadding: 0))
         .help(item.name)
         .onChange(of: attentionState?.pulseGeneration ?? 0) { generation in
             if generation > 0 { startAttentionPulse() }
@@ -920,10 +920,12 @@ private struct WindowPreviewButton: View {
 }
 
 private struct TaskbarButtonStyle: ButtonStyle {
+    var contentPadding: CGFloat = 3
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.82 : 1)
-            .padding(3)
+            .padding(contentPadding)
             .background(configuration.isPressed ? Color.primary.opacity(0.15) : .clear)
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
