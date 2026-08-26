@@ -8,6 +8,19 @@ final class ClockCalendarPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+struct ClockCalendarPanelTransitionSequence {
+    private(set) var revision: UInt = 0
+
+    mutating func begin() -> UInt {
+        revision &+= 1
+        return revision
+    }
+
+    func isCurrent(_ revision: UInt) -> Bool {
+        self.revision == revision
+    }
+}
+
 @MainActor
 final class ClockCalendarPanelController: ObservableObject {
     let state = ClockCalendarState()
@@ -20,6 +33,7 @@ final class ClockCalendarPanelController: ObservableObject {
     private var expansionObserver: AnyCancellable?
     private var presentation: Presentation?
     private var isShowing = false
+    private var transitionSequence = ClockCalendarPanelTransitionSequence()
 
     private struct Presentation {
         let screen: NSScreen
@@ -44,6 +58,7 @@ final class ClockCalendarPanelController: ObservableObject {
 
     func dismiss(animated: Bool = true) {
         guard isShowing, let panel, let presentation else { return }
+        let transitionRevision = transitionSequence.begin()
         isShowing = false
         removeEventMonitors()
 
@@ -59,11 +74,18 @@ final class ClockCalendarPanelController: ObservableObject {
             panel.animator().setFrame(StartMenuMotion.dismissedFrame(from: targetFrame, position: presentation.position), display: true)
             panel.animator().alphaValue = 0
         } completionHandler: {
-            Task { @MainActor in panel.orderOut(nil) }
+            Task { @MainActor [weak self, weak panel] in
+                guard let self,
+                      let panel,
+                      !self.isShowing,
+                      self.transitionSequence.isCurrent(transitionRevision) else { return }
+                panel.orderOut(nil)
+            }
         }
     }
 
     private func present(screen: NSScreen, position: TaskbarPosition, barHeight: CGFloat, theme: AppTheme) {
+        let transitionRevision = transitionSequence.begin()
         let presentation = Presentation(screen: screen, position: position, barHeight: barHeight)
         self.presentation = presentation
         let panel = panel ?? makePanel()
@@ -76,7 +98,9 @@ final class ClockCalendarPanelController: ObservableObject {
         panel.makeKeyAndOrderFront(nil)
         isShowing = true
         DispatchQueue.main.asyncAfter(deadline: .now() + StartMenuMotion.entranceDuration) { [weak self] in
-            guard let self, self.isShowing else { return }
+            guard let self,
+                  self.isShowing,
+                  self.transitionSequence.isCurrent(transitionRevision) else { return }
             self.installEventMonitors()
         }
 
@@ -164,7 +188,7 @@ final class ClockCalendarPanelController: ObservableObject {
 
     private func installEventMonitors() {
         removeEventMonitors()
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] event in
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseUp, .rightMouseUp, .keyDown]) { [weak self] event in
             guard let self else { return event }
             if event.type == .keyDown, event.keyCode == 53 {
                 self.dismiss()

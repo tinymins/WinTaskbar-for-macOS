@@ -704,6 +704,17 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    var calendarTransitionSequence = ClockCalendarPanelTransitionSequence()
+    let firstCalendarPresentation = calendarTransitionSequence.begin()
+    let calendarDismissal = calendarTransitionSequence.begin()
+    let secondCalendarPresentation = calendarTransitionSequence.begin()
+    guard !calendarTransitionSequence.isCurrent(firstCalendarPresentation),
+          !calendarTransitionSequence.isCurrent(calendarDismissal),
+          calendarTransitionSequence.isCurrent(secondCalendarPresentation) else {
+        fputs("SELF-TEST FAILED: clock calendar transition sequence mismatch\n", stderr)
+        return 1
+    }
+
     let thirdPreviewOwner = WindowPreviewOwnerID(displayID: 1, bundleIdentifier: "com.example.third")
     var previewHoverIntent = WindowPreviewHoverIntent()
     guard WindowPreviewHoverIntent.initialDelayNanoseconds == 400_000_000,
