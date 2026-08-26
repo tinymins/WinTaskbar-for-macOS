@@ -166,9 +166,22 @@ struct WindowPreviewPanelTransitionPolicy {
     ) -> Bool {
         isVisible && displayedOwnerID != targetOwnerID
     }
+}
 
-    static func shouldApplyFrame(currentTargetFrame: CGRect?, targetFrame: CGRect) -> Bool {
-        currentTargetFrame != targetFrame
+struct WindowPreviewPanelUpdateSequence {
+    private(set) var revision: UInt = 0
+
+    mutating func schedule() -> UInt {
+        revision &+= 1
+        return revision
+    }
+
+    func isCurrent(_ scheduledRevision: UInt) -> Bool {
+        revision == scheduledRevision
+    }
+
+    mutating func cancel() {
+        revision &+= 1
     }
 }
 
@@ -192,7 +205,6 @@ final class WindowPreviewPanelController: ObservableObject {
     @Published private var selection = WindowPreviewSelection()
     private var hoverIntent = WindowPreviewHoverIntent()
     private var displayedOwnerID: WindowPreviewOwnerID?
-    private var targetFrame: CGRect?
     private var activationTask: Task<Void, Never>?
     private var dismissalTask: Task<Void, Never>?
     private var panel: WindowPreviewPanel?
@@ -329,7 +341,7 @@ final class WindowPreviewPanelController: ObservableObject {
         let windowRect = anchorView.convert(anchorView.bounds, to: nil)
         let anchorFrame = anchorWindow.convertToScreen(windowRect)
         let screenFrame = anchorWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? anchorFrame
-        let nextTargetFrame = WindowPreviewPanelGeometry.frame(
+        let targetFrame = WindowPreviewPanelGeometry.frame(
             anchorFrame: anchorFrame,
             contentSize: contentSize,
             position: position,
@@ -340,25 +352,20 @@ final class WindowPreviewPanelController: ObservableObject {
             displayedOwnerID: displayedOwnerID,
             targetOwnerID: ownerID
         )
-        let shouldApplyFrame = WindowPreviewPanelTransitionPolicy.shouldApplyFrame(
-            currentTargetFrame: targetFrame,
-            targetFrame: nextTargetFrame
-        )
 
         panel.appearance = anchorWindow.appearance
         displayedOwnerID = ownerID
-        targetFrame = nextTargetFrame
         if shouldAnimate {
             hostingView.alphaValue = 0.72
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = WindowPreviewPanelMotion.duration
                 context.timingFunction = WindowPreviewPanelMotion.timingFunction()
-                panel.animator().setFrame(nextTargetFrame, display: true)
+                panel.animator().setFrame(targetFrame, display: true)
                 hostingView.animator().alphaValue = 1
             }
-        } else if shouldApplyFrame {
+        } else {
             hostingView.alphaValue = 1
-            panel.setFrame(nextTargetFrame, display: true)
+            panel.setFrame(targetFrame, display: true)
         }
         panel.orderFrontRegardless()
     }
@@ -370,7 +377,6 @@ final class WindowPreviewPanelController: ObservableObject {
 
     private func hidePanel() {
         displayedOwnerID = nil
-        targetFrame = nil
         panel?.orderOut(nil)
         hostingView.alphaValue = 1
     }
@@ -426,9 +432,13 @@ struct WindowPreviewPanelPresenter<Content: View>: NSViewRepresentable {
         NSView()
     }
 
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
     func updateNSView(_ nsView: NSView, context: Context) {
         let rootView = AnyView(content())
-        DispatchQueue.main.async {
+        context.coordinator.schedule {
             if isPresented {
                 controller.show(
                     ownerID: ownerID,
@@ -439,6 +449,27 @@ struct WindowPreviewPanelPresenter<Content: View>: NSViewRepresentable {
                     animatesTransition: animatesTransition
                 )
             }
+        }
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.cancel()
+    }
+
+    @MainActor
+    final class Coordinator {
+        private var updateSequence = WindowPreviewPanelUpdateSequence()
+
+        func schedule(_ update: @escaping @MainActor () -> Void) {
+            let scheduledRevision = updateSequence.schedule()
+            DispatchQueue.main.async { [weak self] in
+                guard self?.updateSequence.isCurrent(scheduledRevision) == true else { return }
+                update()
+            }
+        }
+
+        func cancel() {
+            updateSequence.cancel()
         }
     }
 }
