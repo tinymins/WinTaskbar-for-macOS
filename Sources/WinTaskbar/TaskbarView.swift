@@ -11,6 +11,7 @@ struct TaskbarView: View {
     let windowActivator: WindowActivationService
     let windowsService: WindowsService
     let windowPeekController: WindowPeekController
+    @ObservedObject var windowPreviewPanelController: WindowPreviewPanelController
     let recentDocuments: RecentDocumentsService
     let screen: NSScreen
 
@@ -142,14 +143,20 @@ struct TaskbarView: View {
     }
 
     private func itemButton(_ item: TaskbarItem) -> some View {
-        TaskbarAppButton(
+        let previewOwnerID = WindowPreviewOwnerID(
+            displayID: displayID,
+            bundleIdentifier: item.bundleIdentifier
+        )
+        return TaskbarAppButton(
             item: item,
+            previewOwnerID: previewOwnerID,
             preferences: preferences,
             apps: apps,
             dockBadges: dockBadges,
             windowActivator: windowActivator,
             windowsService: windowsService,
             windowPeekController: windowPeekController,
+            windowPreviewPanelController: windowPreviewPanelController,
             recentDocuments: recentDocuments
         )
         .draggable(item.bundleIdentifier)
@@ -268,6 +275,11 @@ struct TaskbarView: View {
         )
     }
 
+    private var displayID: CGDirectDisplayID {
+        let key = NSDeviceDescriptionKey("NSScreenNumber")
+        return (screen.deviceDescription[key] as? NSNumber)?.uint32Value ?? 0
+    }
+
 }
 
 struct TaskbarItemGeometry: Equatable {
@@ -365,21 +377,65 @@ struct WindowPreviewThumbnailGeometry {
     static func contentWidth(for sourceSize: CGSize) -> CGFloat {
         max(minimumContentWidth, thumbnailSize(for: sourceSize).width)
     }
+
+    static func horizontalInset(for sourceSize: CGSize) -> CGFloat {
+        (contentWidth(for: sourceSize) - thumbnailSize(for: sourceSize).width) / 2
+    }
+}
+
+enum WindowPreviewMetrics {
+    static let horizontalPadding: CGFloat = 8
+    static let topPadding: CGFloat = 8
+    static let bottomPadding: CGFloat = 6
+    static let titleHeight: CGFloat = 24
+    static let titleToThumbnailSpacing: CGFloat = 3
+    static let closeControlSize: CGFloat = 24
+    static let emptySize = CGSize(width: 160, height: 48)
+}
+
+struct WindowPreviewContentGeometry {
+    static func itemSize(for window: WindowInfo) -> CGSize {
+        let thumbnailSize = WindowPreviewThumbnailGeometry.thumbnailSize(for: window.frame.size)
+        return CGSize(
+            width: WindowPreviewThumbnailGeometry.contentWidth(for: window.frame.size)
+                + (2 * WindowPreviewMetrics.horizontalPadding),
+            height: WindowPreviewMetrics.topPadding
+                + WindowPreviewMetrics.titleHeight
+                + WindowPreviewMetrics.titleToThumbnailSpacing
+                + thumbnailSize.height
+                + WindowPreviewMetrics.bottomPadding
+        )
+    }
+
+    static func contentSize(windows: [WindowInfo], position: TaskbarPosition) -> CGSize {
+        let sizes = windows.prefix(6).map(itemSize)
+        guard !sizes.isEmpty else { return WindowPreviewMetrics.emptySize }
+        if WindowPreviewLayout.axis(for: position) == .horizontal {
+            return CGSize(
+                width: sizes.reduce(0) { $0 + $1.width },
+                height: sizes.map(\.height).max() ?? 0
+            )
+        }
+        return CGSize(
+            width: sizes.map(\.width).max() ?? 0,
+            height: sizes.reduce(0) { $0 + $1.height }
+        )
+    }
 }
 
 private struct TaskbarAppButton: View {
     let item: TaskbarItem
+    let previewOwnerID: WindowPreviewOwnerID
     @ObservedObject var preferences: PreferencesStore
     @ObservedObject var apps: AppDiscoveryService
     @ObservedObject var dockBadges: DockBadgeService
     let windowActivator: WindowActivationService
     let windowsService: WindowsService
     let windowPeekController: WindowPeekController
+    @ObservedObject var windowPreviewPanelController: WindowPreviewPanelController
     let recentDocuments: RecentDocumentsService
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
-    @State private var showPreview = false
-    @State private var previewCloseTask: Task<Void, Never>?
     @State private var showShortcutEditor = false
     @State private var attentionPulse = false
     @State private var attentionTask: Task<Void, Never>?
@@ -401,6 +457,7 @@ private struct TaskbarAppButton: View {
         }
         .contentShape(Rectangle())
         .onTapGesture {
+            windowPreviewPanelController.dismiss(ownerID: previewOwnerID)
             dockBadges.acknowledge(item.bundleIdentifier)
             windowActivator.activateOrMinimize(item)
         }
@@ -414,26 +471,37 @@ private struct TaskbarAppButton: View {
         }
         .onDisappear {
             stopAttentionPulse()
-            cancelPreviewCloseTask()
+            windowPreviewPanelController.dismiss(ownerID: previewOwnerID)
             windowPeekController.hideImmediately()
         }
         .onHover(perform: handlePreviewHover)
         .background {
             if let pid = item.processIdentifier {
-                WindowPreviewPanelPresenter(isPresented: $showPreview, position: preferences.position) {
+                let windows = windowsService.windows(forPID: pid)
+                WindowPreviewPanelPresenter(
+                    isPresented: windowPreviewPanelController.activeOwnerID == previewOwnerID,
+                    ownerID: previewOwnerID,
+                    position: preferences.position,
+                    contentSize: WindowPreviewContentGeometry.contentSize(
+                        windows: windows,
+                        position: preferences.position
+                    ),
+                    animatesTransition: !reduceMotion,
+                    controller: windowPreviewPanelController
+                ) {
                     WindowPreviewPopover(
-                        windows: windowsService.windows(forPID: pid),
+                        windows: windows,
                         position: preferences.position,
                         service: windowsService,
                         windowPeekController: windowPeekController,
                         onSelect: {
                             windowActivator.raise(window: $0)
-                            showPreview = false
+                            windowPreviewPanelController.dismiss(ownerID: previewOwnerID)
                         },
                         onClose: {
                             windowPeekController.hideImmediately()
                             windowActivator.close(window: $0)
-                            showPreview = false
+                            windowPreviewPanelController.dismiss(ownerID: previewOwnerID)
                         }
                     )
                     .onHover(perform: handlePreviewPopoverHover)
@@ -476,12 +544,12 @@ private struct TaskbarAppButton: View {
             hasProcess: item.processIdentifier != nil
         ) {
         case .dismiss:
-            cancelPreviewCloseTask()
-            showPreview = false
+            windowPreviewPanelController.dismiss(ownerID: previewOwnerID)
         case .present:
-            previewCloseTask?.cancel()
-            previewCloseTask = nil
-            showPreview = true
+            if windowPreviewPanelController.activeOwnerID != previewOwnerID {
+                windowPeekController.hideImmediately()
+            }
+            windowPreviewPanelController.activate(ownerID: previewOwnerID)
         case .scheduleDismissal:
             schedulePreviewClose()
         }
@@ -489,26 +557,16 @@ private struct TaskbarAppButton: View {
 
     private func handlePreviewPopoverHover(_ hovering: Bool) {
         if hovering {
-            previewCloseTask?.cancel()
-            previewCloseTask = nil
+            windowPreviewPanelController.cancelDismissal(ownerID: previewOwnerID)
         } else {
             schedulePreviewClose()
         }
     }
 
     private func schedulePreviewClose() {
-        previewCloseTask?.cancel()
-        previewCloseTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            guard !Task.isCancelled else { return }
-            showPreview = false
+        windowPreviewPanelController.scheduleDismissal(ownerID: previewOwnerID) {
             windowPeekController.hide()
         }
-    }
-
-    private func cancelPreviewCloseTask() {
-        previewCloseTask?.cancel()
-        previewCloseTask = nil
     }
 
     @ViewBuilder
@@ -715,7 +773,9 @@ private struct WindowPreviewPopover: View {
     @ViewBuilder
     var body: some View {
         if windows.isEmpty {
-            Text("No open windows").foregroundStyle(.secondary).padding()
+            Text("No open windows")
+                .foregroundStyle(.secondary)
+                .frame(width: WindowPreviewMetrics.emptySize.width, height: WindowPreviewMetrics.emptySize.height)
         } else if WindowPreviewLayout.axis(for: position) == .horizontal {
             HStack(alignment: .top, spacing: 0) {
                 ForEach(windows.prefix(6)) { window in
@@ -740,14 +800,6 @@ private struct WindowPreviewPopover: View {
             closeAction: { onClose(window) }
         )
     }
-}
-
-private enum WindowPreviewMetrics {
-    static let horizontalPadding: CGFloat = 8
-    static let topPadding: CGFloat = 8
-    static let bottomPadding: CGFloat = 6
-    static let titleToThumbnailSpacing: CGFloat = 3
-    static let closeControlSize: CGFloat = 24
 }
 
 private struct WindowPreviewButton: View {
@@ -780,9 +832,13 @@ private struct WindowPreviewButton: View {
                             .lineLimit(1)
                             .help(window.title)
                         Spacer(minLength: 0)
-                        Color.clear.frame(width: WindowPreviewMetrics.closeControlSize)
+                        Color.clear.frame(
+                            width: WindowPreviewMetrics.closeControlSize,
+                            height: WindowPreviewMetrics.titleHeight
+                        )
                     }
                     thumbnail
+                        .padding(.horizontal, WindowPreviewThumbnailGeometry.horizontalInset(for: window.frame.size))
                 }
                 .frame(width: contentWidth, alignment: .topLeading)
                 .padding(.horizontal, WindowPreviewMetrics.horizontalPadding)

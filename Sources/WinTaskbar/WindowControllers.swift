@@ -91,23 +91,218 @@ struct WindowPreviewPanelGeometry {
     }
 }
 
+struct WindowPreviewOwnerID: Hashable {
+    let displayID: CGDirectDisplayID
+    let bundleIdentifier: String
+}
+
+struct WindowPreviewSelection: Equatable {
+    private(set) var activeOwnerID: WindowPreviewOwnerID?
+
+    mutating func activate(_ ownerID: WindowPreviewOwnerID) {
+        activeOwnerID = ownerID
+    }
+
+    @discardableResult
+    mutating func dismiss(_ ownerID: WindowPreviewOwnerID) -> Bool {
+        guard activeOwnerID == ownerID else { return false }
+        activeOwnerID = nil
+        return true
+    }
+
+    mutating func dismissAll() {
+        activeOwnerID = nil
+    }
+}
+
+struct WindowPreviewPanelTransitionPolicy {
+    static func shouldAnimate(
+        isVisible: Bool,
+        displayedOwnerID: WindowPreviewOwnerID?,
+        targetOwnerID: WindowPreviewOwnerID
+    ) -> Bool {
+        isVisible && displayedOwnerID != targetOwnerID
+    }
+}
+
+@MainActor
+final class WindowPreviewPanelController: ObservableObject {
+    @Published private var selection = WindowPreviewSelection()
+    private var displayedOwnerID: WindowPreviewOwnerID?
+    private var dismissalTask: Task<Void, Never>?
+    private var panel: WindowPreviewPanel?
+    private let backdrop = NSVisualEffectView()
+    private let hostingView = NSHostingView(rootView: AnyView(EmptyView()))
+
+    var activeOwnerID: WindowPreviewOwnerID? { selection.activeOwnerID }
+
+    init() {
+        backdrop.material = .popover
+        backdrop.blendingMode = .behindWindow
+        backdrop.state = .active
+        backdrop.wantsLayer = true
+        backdrop.layer?.cornerRadius = 8
+        backdrop.layer?.masksToBounds = true
+        backdrop.layer?.borderWidth = 0.5
+        backdrop.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
+
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        backdrop.addSubview(hostingView)
+        NSLayoutConstraint.activate([
+            hostingView.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor),
+            hostingView.topAnchor.constraint(equalTo: backdrop.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor),
+        ])
+    }
+
+    func activate(ownerID: WindowPreviewOwnerID) {
+        cancelDismissal()
+        guard selection.activeOwnerID != ownerID else { return }
+        var updatedSelection = selection
+        updatedSelection.activate(ownerID)
+        selection = updatedSelection
+    }
+
+    func cancelDismissal(ownerID: WindowPreviewOwnerID) {
+        guard selection.activeOwnerID == ownerID else { return }
+        cancelDismissal()
+    }
+
+    func scheduleDismissal(
+        ownerID: WindowPreviewOwnerID,
+        onDismiss: @escaping @MainActor () -> Void
+    ) {
+        guard selection.activeOwnerID == ownerID else { return }
+        cancelDismissal()
+        dismissalTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled, self?.selection.activeOwnerID == ownerID else { return }
+            self?.dismiss(ownerID: ownerID)
+            onDismiss()
+        }
+    }
+
+    func dismiss(ownerID: WindowPreviewOwnerID) {
+        guard selection.activeOwnerID == ownerID else { return }
+        cancelDismissal()
+        var updatedSelection = selection
+        guard updatedSelection.dismiss(ownerID) else { return }
+        selection = updatedSelection
+        hidePanel()
+    }
+
+    func dismissAll() {
+        cancelDismissal()
+        if selection.activeOwnerID != nil {
+            var updatedSelection = selection
+            updatedSelection.dismissAll()
+            selection = updatedSelection
+        }
+        hidePanel()
+    }
+
+    func show(
+        ownerID: WindowPreviewOwnerID,
+        rootView: AnyView,
+        relativeTo anchorView: NSView,
+        position: TaskbarPosition,
+        contentSize: CGSize,
+        animatesTransition: Bool
+    ) {
+        guard selection.activeOwnerID == ownerID, let anchorWindow = anchorView.window else { return }
+        let panel = panel ?? makePanel()
+        hostingView.rootView = rootView
+        guard contentSize.width > 0, contentSize.height > 0 else { return }
+
+        let windowRect = anchorView.convert(anchorView.bounds, to: nil)
+        let anchorFrame = anchorWindow.convertToScreen(windowRect)
+        let screenFrame = anchorWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? anchorFrame
+        let targetFrame = WindowPreviewPanelGeometry.frame(
+            anchorFrame: anchorFrame,
+            contentSize: contentSize,
+            position: position,
+            screenFrame: screenFrame
+        )
+        let shouldAnimate = animatesTransition && WindowPreviewPanelTransitionPolicy.shouldAnimate(
+            isVisible: panel.isVisible,
+            displayedOwnerID: displayedOwnerID,
+            targetOwnerID: ownerID
+        )
+
+        panel.appearance = anchorWindow.appearance
+        displayedOwnerID = ownerID
+        if shouldAnimate {
+            hostingView.alphaValue = 0.72
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.18
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                panel.animator().setFrame(targetFrame, display: true)
+                hostingView.animator().alphaValue = 1
+            }
+        } else {
+            hostingView.alphaValue = 1
+            panel.setFrame(targetFrame, display: true)
+        }
+        panel.orderFrontRegardless()
+    }
+
+    private func cancelDismissal() {
+        dismissalTask?.cancel()
+        dismissalTask = nil
+    }
+
+    private func hidePanel() {
+        displayedOwnerID = nil
+        panel?.orderOut(nil)
+        hostingView.alphaValue = 1
+    }
+
+    private func makePanel() -> WindowPreviewPanel {
+        let panel = WindowPreviewPanel(
+            contentRect: .zero,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.hidesOnDeactivate = false
+        panel.isMovable = false
+        panel.contentView = backdrop
+        self.panel = panel
+        return panel
+    }
+}
+
 struct WindowPreviewPanelPresenter<Content: View>: NSViewRepresentable {
-    @Binding private var isPresented: Bool
+    private let isPresented: Bool
+    private let ownerID: WindowPreviewOwnerID
     private let position: TaskbarPosition
+    private let contentSize: CGSize
+    private let animatesTransition: Bool
+    @ObservedObject private var controller: WindowPreviewPanelController
     private let content: () -> Content
 
     init(
-        isPresented: Binding<Bool>,
+        isPresented: Bool,
+        ownerID: WindowPreviewOwnerID,
         position: TaskbarPosition,
+        contentSize: CGSize,
+        animatesTransition: Bool,
+        controller: WindowPreviewPanelController,
         @ViewBuilder content: @escaping () -> Content
     ) {
-        _isPresented = isPresented
+        self.isPresented = isPresented
+        self.ownerID = ownerID
         self.position = position
+        self.contentSize = contentSize
+        self.animatesTransition = animatesTransition
+        self.controller = controller
         self.content = content
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
     }
 
     func makeNSView(context: Context) -> NSView {
@@ -118,86 +313,15 @@ struct WindowPreviewPanelPresenter<Content: View>: NSViewRepresentable {
         let rootView = AnyView(content())
         DispatchQueue.main.async {
             if isPresented {
-                context.coordinator.show(rootView, relativeTo: nsView, position: position)
-            } else {
-                context.coordinator.hide()
+                controller.show(
+                    ownerID: ownerID,
+                    rootView: rootView,
+                    relativeTo: nsView,
+                    position: position,
+                    contentSize: contentSize,
+                    animatesTransition: animatesTransition
+                )
             }
-        }
-    }
-
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-        coordinator.hide()
-    }
-
-    @MainActor
-    final class Coordinator {
-        private var panel: WindowPreviewPanel?
-        private let backdrop = NSVisualEffectView()
-        private let hostingView = NSHostingView(rootView: AnyView(EmptyView()))
-
-        init() {
-            backdrop.material = .popover
-            backdrop.blendingMode = .behindWindow
-            backdrop.state = .active
-            backdrop.wantsLayer = true
-            backdrop.layer?.cornerRadius = 8
-            backdrop.layer?.masksToBounds = true
-            backdrop.layer?.borderWidth = 0.5
-            backdrop.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
-
-            hostingView.translatesAutoresizingMaskIntoConstraints = false
-            backdrop.addSubview(hostingView)
-            NSLayoutConstraint.activate([
-                hostingView.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor),
-                hostingView.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor),
-                hostingView.topAnchor.constraint(equalTo: backdrop.topAnchor),
-                hostingView.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor),
-            ])
-        }
-
-        func show(_ rootView: AnyView, relativeTo anchorView: NSView, position: TaskbarPosition) {
-            guard let anchorWindow = anchorView.window else { return }
-            let panel = panel ?? makePanel()
-            hostingView.rootView = rootView
-            hostingView.invalidateIntrinsicContentSize()
-            let contentSize = hostingView.fittingSize
-            guard contentSize.width > 0, contentSize.height > 0 else { return }
-
-            let windowRect = anchorView.convert(anchorView.bounds, to: nil)
-            let anchorFrame = anchorWindow.convertToScreen(windowRect)
-            let screenFrame = anchorWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? anchorFrame
-            let frame = WindowPreviewPanelGeometry.frame(
-                anchorFrame: anchorFrame,
-                contentSize: contentSize,
-                position: position,
-                screenFrame: screenFrame
-            )
-            panel.appearance = anchorWindow.appearance
-            panel.setFrame(frame, display: true)
-            panel.orderFrontRegardless()
-        }
-
-        func hide() {
-            panel?.orderOut(nil)
-        }
-
-        private func makePanel() -> WindowPreviewPanel {
-            let panel = WindowPreviewPanel(
-                contentRect: .zero,
-                styleMask: [.borderless, .nonactivatingPanel],
-                backing: .buffered,
-                defer: false
-            )
-            panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
-            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-            panel.isOpaque = false
-            panel.backgroundColor = .clear
-            panel.hasShadow = true
-            panel.hidesOnDeactivate = false
-            panel.isMovable = false
-            panel.contentView = backdrop
-            self.panel = panel
-            return panel
         }
     }
 }
@@ -211,6 +335,7 @@ final class TaskbarWindowController {
     private let windowActivator: WindowActivationService
     private let windowsService: WindowsService
     private let windowPeekController: WindowPeekController
+    private let windowPreviewPanelController = WindowPreviewPanelController()
     private let recentDocuments: RecentDocumentsService
     private let dockBadges: DockBadgeService
     private var panels: [TaskbarPanel] = []
@@ -248,6 +373,7 @@ final class TaskbarWindowController {
 
     func rebuildPanels() {
         windowPeekController.hideImmediately()
+        windowPreviewPanelController.dismissAll()
         panels.forEach { $0.orderOut(nil) }
         panels.removeAll()
 
@@ -295,6 +421,7 @@ final class TaskbarWindowController {
             windowActivator: windowActivator,
             windowsService: windowsService,
             windowPeekController: windowPeekController,
+            windowPreviewPanelController: windowPreviewPanelController,
             recentDocuments: recentDocuments,
             screen: screen
         ))

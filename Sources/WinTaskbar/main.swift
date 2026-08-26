@@ -304,10 +304,49 @@ func runSelfTest() async -> Int32 {
 
     let previewScreen = CGRect(x: 0, y: 0, width: 1200, height: 800)
     let previewSize = CGSize(width: 340, height: 130)
+    let firstPreviewOwner = WindowPreviewOwnerID(displayID: 1, bundleIdentifier: "com.example.first")
+    let secondPreviewOwner = WindowPreviewOwnerID(displayID: 1, bundleIdentifier: "com.example.second")
+    let landscapePreviewWindow = WindowInfo(
+        windowID: 1,
+        title: "Landscape",
+        ownerPID: 1,
+        frame: CGRect(x: 0, y: 0, width: 1920, height: 1080),
+        isMinimized: false
+    )
+    let portraitPreviewWindow = WindowInfo(
+        windowID: 2,
+        title: "Portrait",
+        ownerPID: 1,
+        frame: CGRect(x: 0, y: 0, width: 1080, height: 1920),
+        isMinimized: false
+    )
+    var previewSelection = WindowPreviewSelection()
+    previewSelection.activate(firstPreviewOwner)
+    previewSelection.activate(secondPreviewOwner)
+    let staleDismissalChangedSelection = previewSelection.dismiss(firstPreviewOwner)
     guard WindowPreviewLayout.axis(for: .top) == .horizontal,
           WindowPreviewLayout.axis(for: .bottom) == .horizontal,
           WindowPreviewLayout.axis(for: .left) == .vertical,
           WindowPreviewLayout.axis(for: .right) == .vertical,
+          !staleDismissalChangedSelection,
+          previewSelection.activeOwnerID == secondPreviewOwner,
+          previewSelection.dismiss(secondPreviewOwner),
+          previewSelection.activeOwnerID == nil,
+          WindowPreviewPanelTransitionPolicy.shouldAnimate(
+              isVisible: true,
+              displayedOwnerID: firstPreviewOwner,
+              targetOwnerID: secondPreviewOwner
+          ),
+          !WindowPreviewPanelTransitionPolicy.shouldAnimate(
+              isVisible: true,
+              displayedOwnerID: secondPreviewOwner,
+              targetOwnerID: secondPreviewOwner
+          ),
+          !WindowPreviewPanelTransitionPolicy.shouldAnimate(
+              isVisible: false,
+              displayedOwnerID: firstPreviewOwner,
+              targetOwnerID: secondPreviewOwner
+          ),
           WindowPreviewHoverPolicy.action(
               hovering: true,
               previewsEnabled: true,
@@ -343,6 +382,24 @@ func runSelfTest() async -> Int32 {
           WindowPreviewThumbnailGeometry.contentWidth(
               for: CGSize(width: 1080, height: 1920)
           ) == 120,
+          WindowPreviewThumbnailGeometry.horizontalInset(
+              for: CGSize(width: 1080, height: 1920)
+          ) == 32,
+          WindowPreviewThumbnailGeometry.horizontalInset(
+              for: CGSize(width: 1920, height: 1080)
+          ) == 0,
+          WindowPreviewContentGeometry.itemSize(for: landscapePreviewWindow) == CGSize(width: 192, height: 140),
+          WindowPreviewContentGeometry.itemSize(for: portraitPreviewWindow) == CGSize(width: 136, height: 141),
+          WindowPreviewContentGeometry.contentSize(
+              windows: [landscapePreviewWindow, portraitPreviewWindow],
+              position: .bottom
+          ) == CGSize(width: 328, height: 141),
+          WindowPreviewContentGeometry.contentSize(
+              windows: [landscapePreviewWindow, portraitPreviewWindow],
+              position: .left
+          ) == CGSize(width: 192, height: 281),
+          WindowPreviewContentGeometry.contentSize(windows: [], position: .bottom)
+              == WindowPreviewMetrics.emptySize,
           WindowPreviewPanelGeometry.frame(
               anchorFrame: CGRect(x: 500, y: 0, width: 40, height: 48),
               contentSize: previewSize,
