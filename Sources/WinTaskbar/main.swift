@@ -786,6 +786,25 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    let selectionCalendarState = ClockCalendarState(now: february2024)
+    let selectionMonth = selectionCalendarState.displayedMonth
+    let selectionVisibleStart = selectionCalendarState.visibleStartDate
+    let selectionRenderedStart = selectionCalendarState.renderedStartDate
+    let adjacentMonthDate = selectionCalendarState.renderedDays.first { day in
+        !day.isInDisplayedMonth
+    }!.date
+    selectionCalendarState.select(adjacentMonthDate)
+    guard ClockCalendarState.calendar.isDate(
+        selectionCalendarState.selectedDate,
+        inSameDayAs: adjacentMonthDate
+    ), selectionCalendarState.displayedMonth == selectionMonth,
+       selectionCalendarState.visibleStartDate == selectionVisibleStart,
+       selectionCalendarState.renderedStartDate == selectionRenderedStart,
+       selectionCalendarState.gridOffset == -42 else {
+        fputs("SELF-TEST FAILED: selecting an adjacent-month date changed the calendar page\n", stderr)
+        return 1
+    }
+
     let shanghaiTimeZone = TimeZone(identifier: "Asia/Shanghai")!
     let lunarNewYear = ClockCalendarLunarCalendar.lunarDate(
         for: calendar.date(from: DateComponents(year: 2024, month: 2, day: 10))!,

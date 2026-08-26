@@ -224,12 +224,16 @@ final class ClockCalendarPanelController: ObservableObject {
                 return nil
             }
             if event.window !== self.panel {
-                DispatchQueue.main.async { [weak self] in self?.dismiss() }
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, !self.calendarService.isRequestingAccess else { return }
+                    self.dismiss()
+                }
             }
             return event
         }
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            self?.dismiss()
+            guard let self, !self.calendarService.isRequestingAccess else { return }
+            self.dismiss()
         }
     }
 

@@ -30,6 +30,7 @@ OUTPUT_ROOT="$ROOT_DIR/dist/releases"
 APP_DIR="$OUTPUT_ROOT/$ARCHITECTURE/WinTaskbar.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 EXECUTABLE_PATH="$CONTENTS_DIR/MacOS/WinTaskbar"
+ENTITLEMENTS_PATH="$ROOT_DIR/Resources/WinTaskbar.entitlements"
 ARCHIVE_NAME="WinTaskbar-$VERSION-macos-$ARCHITECTURE.zip"
 SIGNING_IDENTITY=${SIGNING_IDENTITY:--}
 
@@ -77,7 +78,7 @@ else
   cp "$bin_dir/WinTaskbar" "$EXECUTABLE_PATH"
 fi
 
-codesign_args=(--force --deep --sign "$SIGNING_IDENTITY")
+codesign_args=(--force --deep --sign "$SIGNING_IDENTITY" --entitlements "$ENTITLEMENTS_PATH")
 if [[ "$SIGNING_IDENTITY" != "-" ]]; then
   codesign_args+=(--options runtime)
 fi

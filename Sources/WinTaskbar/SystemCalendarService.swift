@@ -172,6 +172,7 @@ final class SystemCalendarService: ObservableObject {
     @Published private(set) var eventsByDay: [ClockCalendarDateKey: [SystemCalendarEvent]] = [:]
     @Published private(set) var writableCalendars: [SystemCalendarDescriptor] = []
     @Published private(set) var isLoading = false
+    @Published private(set) var isRequestingAccess = false
     @Published private(set) var errorMessage: String?
 
     private let eventStore: EKEventStore
@@ -232,6 +233,11 @@ final class SystemCalendarService: ObservableObject {
 
     @discardableResult
     func requestFullAccess() async -> Bool {
+        guard !isRequestingAccess else { return false }
+        isRequestingAccess = true
+        errorMessage = nil
+        defer { isRequestingAccess = false }
+
         do {
             let granted: Bool
             if #available(macOS 14.0, *) {
@@ -240,6 +246,9 @@ final class SystemCalendarService: ObservableObject {
                 granted = try await eventStore.requestAccess(to: .event)
             }
             refreshAuthorizationState()
+            if !granted, authorizationState == .notDetermined {
+                errorMessage = SystemCalendarServiceError.accessRequired.errorDescription
+            }
             if granted, let requestedInterval {
                 await loadEvents(in: requestedInterval, force: true)
             }

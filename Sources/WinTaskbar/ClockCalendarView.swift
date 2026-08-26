@@ -247,10 +247,6 @@ final class ClockCalendarState: ObservableObject {
 
     func select(_ date: Date) {
         selectedDate = date
-        if !Self.calendar.isDate(date, equalTo: displayedMonth, toGranularity: .month),
-           let month = Self.calendar.dateInterval(of: .month, for: date)?.start {
-            showMonth(month)
-        }
     }
 
     private func showMonth(_ month: Date) {
@@ -565,11 +561,19 @@ struct ClockCalendarPanelView: View {
                 Text("Show events from your Mac calendars.")
                     .font(.system(size: 11))
                     .foregroundStyle(secondaryText)
-                Button("Allow calendar access") {
+                Button {
                     Task { await requestCalendarAccess() }
+                } label: {
+                    HStack(spacing: 6) {
+                        if calendarService.isRequestingAccess {
+                            ProgressView().controlSize(.mini)
+                        }
+                        Text("Allow calendar access")
+                    }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .disabled(calendarService.isRequestingAccess)
             }
             .padding(.top, 10)
         case .denied, .restricted:
@@ -650,6 +654,9 @@ struct ClockCalendarPanelView: View {
     }
 
     private func requestCalendarAccess() async {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.keyWindow?.makeKeyAndOrderFront(nil)
+        try? await Task.sleep(nanoseconds: 100_000_000)
         guard await calendarService.requestFullAccess() else { return }
         await calendarService.loadEvents(in: state.eventQueryInterval, force: true)
     }
@@ -657,7 +664,8 @@ struct ClockCalendarPanelView: View {
     private func presentNewEvent() {
         Task {
             if !calendarService.authorizationState.canRead {
-                guard await calendarService.requestFullAccess() else { return }
+                await requestCalendarAccess()
+                guard calendarService.authorizationState.canRead else { return }
             }
             guard let draft = calendarService.newDraft(on: state.selectedDate) else { return }
             presentEventEditor(draft)

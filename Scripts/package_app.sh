@@ -8,6 +8,7 @@ SIGNING_DIRECTORY="$ROOT_DIR/.signing"
 SIGNING_P12_PATH="$SIGNING_DIRECTORY/WinTaskbar-CI-Code-Signing.p12"
 SIGNING_PASSWORD_PATH="$SIGNING_DIRECTORY/WinTaskbar-CI-Code-Signing.password"
 PINNED_CERTIFICATE_PATH="$ROOT_DIR/.github/WinTaskbar-CI-Code-Signing.pem"
+ENTITLEMENTS_PATH="$ROOT_DIR/Resources/WinTaskbar.entitlements"
 RCODESIGN_PATH="$ROOT_DIR/.tools/rcodesign"
 RCODESIGN_VERSION=0.29.0
 
@@ -90,6 +91,7 @@ if [[ "$STABLE_SIGNING" == "true" ]]; then
     --timestamp-url none \
     --code-signature-flags runtime \
     --code-requirements-file "$requirement_path" \
+    --entitlements-xml-file "$ENTITLEMENTS_PATH" \
     "$APP_DIR"
 
   expected_requirement="designated => $requirement_expression"
@@ -99,7 +101,7 @@ if [[ "$STABLE_SIGNING" == "true" ]]; then
     exit 1
   fi
 else
-  codesign --force --deep --sign - "$APP_DIR"
+  codesign --force --deep --sign - --entitlements "$ENTITLEMENTS_PATH" "$APP_DIR"
 fi
 
 codesign --verify --deep --strict --verbose=2 "$APP_DIR"
