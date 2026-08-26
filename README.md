@@ -67,6 +67,15 @@ open dist/WinTaskbar.app
 
 The generated app is ad-hoc signed for local use.
 
+To preserve Accessibility and Screen Recording permissions across local rebuilds, use the same pinned signing identity as GitHub Actions:
+
+```bash
+bash Scripts/package_app_signed.sh
+open dist/WinTaskbar.app
+```
+
+The signed build reads the encrypted certificate from `~/.config/wintaskbar/signing/WinTaskbar-CI-Code-Signing.p12` and its password from the login keychain item named `io.github.tinymins.WinTaskbar.ci-signing-p12`. Neither secret is stored in the repository. The certificate path, keychain service, and keychain account can be overridden with `WINTASKBAR_SIGNING_P12_PATH`, `WINTASKBAR_SIGNING_PASSWORD_SERVICE`, and `WINTASKBAR_SIGNING_PASSWORD_ACCOUNT`.
+
 ## Verification
 
 ```bash
