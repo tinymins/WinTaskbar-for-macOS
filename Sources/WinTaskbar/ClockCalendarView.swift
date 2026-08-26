@@ -377,12 +377,12 @@ struct ClockCalendarPanelView: View {
                     .frame(height: ClockCalendarMetrics.headerHeight)
 
                 if state.isExpanded {
-                    Divider().overlay(dividerColor)
+                    sectionDivider
                     calendarBody
                         .frame(height: ClockCalendarMetrics.calendarHeight)
                 }
 
-                Divider().overlay(dividerColor)
+                sectionDivider
                 focusFooter
                     .frame(height: ClockCalendarMetrics.focusHeight)
             }
@@ -499,7 +499,7 @@ struct ClockCalendarPanelView: View {
             .clipped()
             .padding(.bottom, ClockCalendarMetrics.calendarGridBottomSpacing)
 
-            Divider().overlay(dividerColor)
+            sectionDivider
             agendaSection
                 .frame(height: ClockCalendarMetrics.agendaHeight)
         }
@@ -798,7 +798,12 @@ struct ClockCalendarPanelView: View {
 
     private var primaryText: Color { colorScheme == .dark ? .white.opacity(0.96) : .black.opacity(0.90) }
     private var secondaryText: Color { colorScheme == .dark ? .white.opacity(0.74) : .black.opacity(0.68) }
-    private var dividerColor: Color { colorScheme == .dark ? .white.opacity(0.08) : .black.opacity(0.08) }
+
+    private var sectionDivider: some View {
+        Divider()
+            .overlay(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.06))
+            .padding(.horizontal, 16)
+    }
 }
 
 private struct ClockCalendarDaysGrid: View {
