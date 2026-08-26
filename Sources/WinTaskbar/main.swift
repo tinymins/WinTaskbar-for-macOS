@@ -252,6 +252,8 @@ func runSelfTest() async -> Int32 {
           QuickSettingsPanelMetrics.splitDividerOpacity == 0.08,
           QuickSettingsPanelMetrics.volumeHeight == 72,
           QuickSettingsPanelMetrics.footerHeight == 48,
+          QuickSettingsPanelMetrics.footerLeadingPadding == 24,
+          QuickSettingsPanelMetrics.footerTrailingPadding == 16,
           QuickSettingsPanelMetrics.detailHeaderHeight == 52,
           QuickSettingsPanelMetrics.detailContentHeight == 233,
           QuickSettingsPanelMetrics.detailBackButtonSize == 40,

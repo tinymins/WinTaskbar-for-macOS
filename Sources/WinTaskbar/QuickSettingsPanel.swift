@@ -33,6 +33,8 @@ enum QuickSettingsPanelMetrics {
     static let tileLabelHeight: CGFloat = 15
     static let volumeHeight: CGFloat = 72
     static let footerHeight: CGFloat = 48
+    static let footerLeadingPadding: CGFloat = 24
+    static let footerTrailingPadding: CGFloat = 16
     static let settingsPageCount = 2
     static let detailHeaderHeight: CGFloat = 52
     static let detailContentHeight: CGFloat = 233
@@ -466,7 +468,8 @@ private struct QuickSettingsPanelView: View {
             .buttonStyle(.plain)
             .help("Settings")
         }
-        .padding(.horizontal, 16)
+        .padding(.leading, QuickSettingsPanelMetrics.footerLeadingPadding)
+        .padding(.trailing, QuickSettingsPanelMetrics.footerTrailingPadding)
         .frame(height: QuickSettingsPanelMetrics.footerHeight)
         .background(Color.black.opacity(0.10))
     }
