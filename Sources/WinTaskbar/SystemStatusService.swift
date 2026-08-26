@@ -19,6 +19,12 @@ enum WiFiScanIssue: Equatable {
     case scanFailed
 }
 
+enum VolumeAdjustmentPolicy {
+    static func shouldUnmute(targetVolume: Float) -> Bool {
+        targetVolume > 0
+    }
+}
+
 struct InputSourceOption: Identifiable, Hashable {
     let id: String
     let name: String
@@ -111,19 +117,34 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
             mElement: kAudioObjectPropertyElementMain
         )
         AudioObjectSetPropertyData(device, &address, 0, nil, UInt32(MemoryLayout<Float32>.size), &newValue)
+        if VolumeAdjustmentPolicy.shouldUnmute(targetVolume: newValue) {
+            writeMute(false, to: device)
+        }
         refresh()
     }
 
     func toggleMute() {
         guard let device = defaultOutputDevice() else { return }
-        var muted: UInt32 = isMuted ? 0 : 1
+        writeMute(!isMuted, to: device)
+        refresh()
+    }
+
+    private func writeMute(_ muted: Bool, to device: AudioDeviceID) {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyMute,
             mScope: kAudioDevicePropertyScopeOutput,
             mElement: kAudioObjectPropertyElementMain
         )
-        AudioObjectSetPropertyData(device, &address, 0, nil, UInt32(MemoryLayout<UInt32>.size), &muted)
-        refresh()
+        guard AudioObjectHasProperty(device, &address) else { return }
+        var muteValue: UInt32 = muted ? 1 : 0
+        AudioObjectSetPropertyData(
+            device,
+            &address,
+            0,
+            nil,
+            UInt32(MemoryLayout<UInt32>.size),
+            &muteValue
+        )
     }
 
     func scanWiFi() {
