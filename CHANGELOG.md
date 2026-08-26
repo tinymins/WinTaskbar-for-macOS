@@ -2,6 +2,14 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.12] - 2026-08-26
+
+### Fixed
+
+- Restore the Quit action for running apps in Windows-style jump lists while keeping window Close actions separate.
+- Keep newly pinned running apps in their current taskbar positions instead of immediately regrouping them.
+- Retain pinned app icons after exit and let only unpinned exiting apps collapse the remaining taskbar items to the left.
+
 ## [0.0.11] - 2026-08-26
 
 ### Added
@@ -73,6 +81,7 @@ All notable changes to WinTaskbar for macOS are documented here.
 - Show window previews immediately when hovering over a taskbar app while retaining a short dismissal delay.
 - Match Windows preview thumbnail proportions and refine preview panel styling.
 
+[0.0.12]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.8...v0.0.9
