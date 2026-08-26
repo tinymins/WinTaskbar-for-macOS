@@ -425,7 +425,7 @@ final class TaskbarWindowController {
     private let windowsService: WindowsService
     private let windowPeekController: WindowPeekController
     private let windowPreviewPanelController = WindowPreviewPanelController()
-    private let recentDocuments: RecentDocumentsService
+    private let taskbarJumpListController = TaskbarJumpListController()
     private let dockBadges: DockBadgeService
     private var panels: [TaskbarPanel] = []
     private var cancellable: AnyCancellable?
@@ -437,7 +437,6 @@ final class TaskbarWindowController {
         actions: AppActions,
         windowActivator: WindowActivationService,
         windowsService: WindowsService,
-        recentDocuments: RecentDocumentsService,
         dockBadges: DockBadgeService
     ) {
         self.preferences = preferences
@@ -447,7 +446,6 @@ final class TaskbarWindowController {
         self.windowActivator = windowActivator
         self.windowsService = windowsService
         windowPeekController = WindowPeekController(windowsService: windowsService)
-        self.recentDocuments = recentDocuments
         self.dockBadges = dockBadges
         cancellable = preferences.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async {
@@ -463,6 +461,7 @@ final class TaskbarWindowController {
     func rebuildPanels() {
         windowPeekController.hideImmediately()
         windowPreviewPanelController.dismissAll()
+        taskbarJumpListController.dismiss()
         panels.forEach { $0.orderOut(nil) }
         panels.removeAll()
 
@@ -475,6 +474,7 @@ final class TaskbarWindowController {
     }
 
     func applyLayout() {
+        taskbarJumpListController.dismiss()
         let expectedCount = preferences.displayMode == .primary ? min(1, NSScreen.screens.count) : NSScreen.screens.count
         guard panels.count == expectedCount else {
             rebuildPanels()
@@ -511,7 +511,7 @@ final class TaskbarWindowController {
             windowsService: windowsService,
             windowPeekController: windowPeekController,
             windowPreviewPanelController: windowPreviewPanelController,
-            recentDocuments: recentDocuments,
+            taskbarJumpListController: taskbarJumpListController,
             screen: screen
         ))
         applyAppearance(to: panel)

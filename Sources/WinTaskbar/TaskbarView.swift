@@ -12,7 +12,7 @@ struct TaskbarView: View {
     let windowsService: WindowsService
     let windowPeekController: WindowPeekController
     @ObservedObject var windowPreviewPanelController: WindowPreviewPanelController
-    let recentDocuments: RecentDocumentsService
+    @ObservedObject var taskbarJumpListController: TaskbarJumpListController
     let screen: NSScreen
 
     var body: some View {
@@ -157,7 +157,7 @@ struct TaskbarView: View {
             windowsService: windowsService,
             windowPeekController: windowPeekController,
             windowPreviewPanelController: windowPreviewPanelController,
-            recentDocuments: recentDocuments
+            taskbarJumpListController: taskbarJumpListController
         )
         .draggable(item.bundleIdentifier)
         .dropDestination(for: String.self) { bundleIDs, _ in
@@ -433,7 +433,7 @@ private struct TaskbarAppButton: View {
     let windowsService: WindowsService
     let windowPeekController: WindowPeekController
     @ObservedObject var windowPreviewPanelController: WindowPreviewPanelController
-    let recentDocuments: RecentDocumentsService
+    @ObservedObject var taskbarJumpListController: TaskbarJumpListController
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
     @State private var showShortcutEditor = false
@@ -464,6 +464,11 @@ private struct TaskbarAppButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(TaskbarButtonStyle(contentPadding: 0))
+        .overlay {
+            TaskbarContextClickAnchor { anchorView in
+                showJumpList(relativeTo: anchorView)
+            }
+        }
         .help(item.name)
         .onChange(of: attentionState?.pulseGeneration ?? 0) { generation in
             if generation > 0 { startAttentionPulse() }
@@ -510,23 +515,6 @@ private struct TaskbarAppButton: View {
                 }
             }
         }
-        .contextMenu {
-            Button("New Window") { windowActivator.openNewWindow(item) }
-            let recent = recentDocuments.recentDocuments(forBundleID: item.bundleIdentifier)
-            if preferences.showRecentInMenu && !recent.isEmpty {
-                Menu("Recent") { ForEach(recent) { document in Button(document.label) { recentDocuments.open(document, with: item) } } }
-            }
-            let shortcuts = preferences.pinnedShortcuts[item.bundleIdentifier] ?? []
-            if preferences.showShortcutsInMenu && !shortcuts.isEmpty {
-                Menu("Shortcuts") { ForEach(shortcuts) { shortcut in Button(shortcut.name) { if let url = shortcut.url { NSWorkspace.shared.open(url) } } } }
-            }
-            Button("Manage Shortcuts…") { showShortcutEditor = true }
-            Divider()
-            if item.isPinned { Button("Unpin") { preferences.unpin(item.bundleIdentifier) } }
-            else { Button("Pin to Taskbar") { preferences.pin(item.bundleIdentifier) } }
-            Button("Show in Finder") { apps.showInFinder(item) }
-            if item.isRunning { Divider(); Button("Quit") { apps.quit(item) } }
-        }
         .sheet(isPresented: $showShortcutEditor) {
             ShortcutEditorView(
                 bundleID: item.bundleIdentifier,
@@ -537,7 +525,63 @@ private struct TaskbarAppButton: View {
         }
     }
 
+    private func showJumpList(relativeTo anchorView: NSView) {
+        windowPreviewPanelController.dismissAll()
+        windowPeekController.hideImmediately()
+
+        let windows = item.processIdentifier.map(windowsService.windows(forPID:)) ?? []
+        let shortcuts = preferences.showShortcutsInMenu
+            ? preferences.pinnedShortcuts[item.bundleIdentifier] ?? []
+            : []
+        let model = TaskbarJumpListModel(
+            shortcuts: shortcuts,
+            isPinned: item.isPinned,
+            windowCount: windows.count
+        )
+        let contentSize = TaskbarJumpListMetrics.contentSize(shortcutCount: shortcuts.count)
+        let rootView = TaskbarJumpListView(
+            item: item,
+            model: model,
+            onOpenApp: {
+                taskbarJumpListController.dismiss()
+                windowActivator.openNewWindow(item)
+            },
+            onOpenShortcut: { shortcut in
+                taskbarJumpListController.dismiss()
+                if let url = shortcut.url { NSWorkspace.shared.open(url) }
+            },
+            onManageShortcuts: {
+                taskbarJumpListController.dismiss()
+                showShortcutEditor = true
+            },
+            onShowInFinder: {
+                taskbarJumpListController.dismiss()
+                apps.showInFinder(item)
+            },
+            onTogglePin: {
+                taskbarJumpListController.dismiss()
+                if item.isPinned { preferences.unpin(item.bundleIdentifier) }
+                else { preferences.pin(item.bundleIdentifier) }
+            },
+            onClose: {
+                taskbarJumpListController.dismiss()
+                for window in windows { windowActivator.close(window: window) }
+            }
+        )
+        .frame(width: contentSize.width, height: contentSize.height)
+
+        taskbarJumpListController.show(
+            rootView: AnyView(rootView),
+            contentSize: contentSize,
+            relativeTo: anchorView,
+            position: preferences.position
+        )
+    }
+
     private func handlePreviewHover(_ hovering: Bool) {
+        if TaskbarJumpListInteractionPolicy.shouldDismissMenuOnAppHover(hovering: hovering) {
+            taskbarJumpListController.dismiss()
+        }
         isHovering = hovering
 
         switch WindowPreviewHoverPolicy.action(

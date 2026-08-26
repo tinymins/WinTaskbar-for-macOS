@@ -11,7 +11,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let actions = AppActions()
     private let windowsService = WindowsService()
     private lazy var windowActivator = WindowActivationService(windowsService: windowsService)
-    private let recentDocuments = RecentDocumentsService()
     private let dockBadges = DockBadgeService()
     private let powerService = PowerService()
     private let showDesktopService = ShowDesktopService()
@@ -40,7 +39,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             actions: actions,
             windowActivator: windowActivator,
             windowsService: windowsService,
-            recentDocuments: recentDocuments,
             dockBadges: dockBadges
         )
         let startMenu = StartMenuController(
@@ -359,6 +357,16 @@ func runSelfTest() async -> Int32 {
         frame: CGRect(x: 100, y: 100, width: 900, height: 600),
         isMinimized: true
     )
+    let jumpListScreen = CGRect(x: 0, y: 0, width: 1200, height: 800)
+    let jumpListSize = TaskbarJumpListMetrics.contentSize(shortcutCount: 0)
+    let jumpListShortcuts = (0..<9).map {
+        PinnedShortcut(id: "shortcut-\($0)", name: "Shortcut \($0)", target: "/tmp/shortcut-\($0)")
+    }
+    let jumpListModel = TaskbarJumpListModel(
+        shortcuts: jumpListShortcuts,
+        isPinned: true,
+        windowCount: 2
+    )
     var previewSelection = WindowPreviewSelection()
     previewSelection.activate(firstPreviewOwner)
     previewSelection.activate(secondPreviewOwner)
@@ -392,6 +400,47 @@ func runSelfTest() async -> Int32 {
           TaskbarButtonMotion.pressedScale == 0.82,
           TaskbarButtonMotion.pressDuration == 0.06,
           TaskbarButtonMotion.releaseDuration == 0.08,
+          jumpListSize == CGSize(width: 292, height: 195),
+          TaskbarJumpListMetrics.contentSize(shortcutCount: 1) == CGSize(width: 292, height: 260),
+          TaskbarJumpListMetrics.contentSize(shortcutCount: 9) == CGSize(width: 292, height: 498),
+          jumpListModel.displayedShortcuts.count == 8,
+          jumpListModel.closeTitle == "Close all windows",
+          jumpListModel.canClose,
+          TaskbarJumpListModel(shortcuts: [], isPinned: false, windowCount: 0).closeTitle == "Close",
+          !TaskbarJumpListModel(shortcuts: [], isPinned: false, windowCount: 0).canClose,
+          TaskbarJumpListModel(shortcuts: [], isPinned: false, windowCount: 1).closeTitle == "Close window",
+          TaskbarJumpListGeometry.frame(
+              anchorFrame: CGRect(x: 500, y: 0, width: 40, height: 48),
+              contentSize: jumpListSize,
+              position: .bottom,
+              screenFrame: jumpListScreen
+          ) == CGRect(x: 374, y: 54, width: 292, height: 195),
+          TaskbarJumpListGeometry.frame(
+              anchorFrame: CGRect(x: 500, y: 752, width: 40, height: 48),
+              contentSize: jumpListSize,
+              position: .top,
+              screenFrame: jumpListScreen
+          ) == CGRect(x: 374, y: 551, width: 292, height: 195),
+          TaskbarJumpListGeometry.frame(
+              anchorFrame: CGRect(x: 0, y: 300, width: 48, height: 40),
+              contentSize: jumpListSize,
+              position: .left,
+              screenFrame: jumpListScreen
+          ) == CGRect(x: 54, y: 222.5, width: 292, height: 195),
+          TaskbarJumpListGeometry.frame(
+              anchorFrame: CGRect(x: 1152, y: 300, width: 48, height: 40),
+              contentSize: jumpListSize,
+              position: .right,
+              screenFrame: jumpListScreen
+          ) == CGRect(x: 854, y: 222.5, width: 292, height: 195),
+          TaskbarJumpListGeometry.frame(
+              anchorFrame: CGRect(x: 0, y: 0, width: 40, height: 48),
+              contentSize: jumpListSize,
+              position: .bottom,
+              screenFrame: jumpListScreen
+          ).minX == 8,
+          TaskbarJumpListInteractionPolicy.shouldDismissMenuOnAppHover(hovering: true),
+          !TaskbarJumpListInteractionPolicy.shouldDismissMenuOnAppHover(hovering: false),
           TaskbarAppClickPolicy.action(
               windows: [],
               isApplicationActive: true,

@@ -185,9 +185,3 @@ struct WindowInfo: Identifiable, Hashable {
 
     var id: CGWindowID { windowID }
 }
-
-struct RecentDocument: Identifiable, Hashable {
-    let url: URL
-    let label: String
-    var id: URL { url }
-}

@@ -252,27 +252,3 @@ struct WindowPreviewWindowPolicy {
         }
     }
 }
-
-@MainActor
-final class RecentDocumentsService {
-    private let defaults: UserDefaults
-
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-    }
-
-    func recentDocuments(forBundleID bundleID: String, limit: Int = 10) -> [RecentDocument] {
-        let recentProjects = defaults.dictionary(forKey: "wintaskbar.recentProjects") as? [String: [String]]
-        return (recentProjects?[bundleID] ?? []).prefix(limit).compactMap { raw in
-            guard let url = URL(string: raw) else { return nil }
-            let label = url.lastPathComponent.isEmpty ? url.absoluteString : url.lastPathComponent
-            return RecentDocument(url: url, label: label)
-        }
-    }
-
-    func open(_ document: RecentDocument, with item: TaskbarItem) {
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = true
-        NSWorkspace.shared.open([document.url], withApplicationAt: item.url, configuration: configuration)
-    }
-}
