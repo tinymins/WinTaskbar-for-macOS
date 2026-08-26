@@ -361,7 +361,11 @@ func runSelfTest() async -> Int32 {
         isMinimized: true
     )
     let jumpListScreen = CGRect(x: 0, y: 0, width: 1200, height: 800)
-    let jumpListSize = TaskbarJumpListMetrics.contentSize(shortcutCount: 0, recentCount: 0)
+    let jumpListSize = TaskbarJumpListMetrics.contentSize(
+        shortcutCount: 0,
+        recentCount: 0,
+        isRunning: false
+    )
     let jumpListShortcuts = (0..<9).map {
         PinnedShortcut(id: "shortcut-\($0)", name: "Shortcut \($0)", target: "/tmp/shortcut-\($0)")
     }
@@ -419,9 +423,14 @@ func runSelfTest() async -> Int32 {
           TaskbarButtonMotion.pressDuration == 0.06,
           TaskbarButtonMotion.releaseDuration == 0.08,
           jumpListSize == CGSize(width: 292, height: 195),
-          TaskbarJumpListMetrics.contentSize(shortcutCount: 1, recentCount: 0) == CGSize(width: 292, height: 260),
-          TaskbarJumpListMetrics.contentSize(shortcutCount: 9, recentCount: 0) == CGSize(width: 292, height: 498),
-          TaskbarJumpListMetrics.contentSize(shortcutCount: 9, recentCount: 7) == CGSize(width: 292, height: 733),
+          TaskbarJumpListMetrics.contentSize(shortcutCount: 0, recentCount: 0, isRunning: true)
+              == CGSize(width: 292, height: 238),
+          TaskbarJumpListMetrics.contentSize(shortcutCount: 1, recentCount: 0, isRunning: false)
+              == CGSize(width: 292, height: 260),
+          TaskbarJumpListMetrics.contentSize(shortcutCount: 9, recentCount: 0, isRunning: false)
+              == CGSize(width: 292, height: 498),
+          TaskbarJumpListMetrics.contentSize(shortcutCount: 9, recentCount: 7, isRunning: false)
+              == CGSize(width: 292, height: 733),
           jumpListModel.displayedShortcuts.count == 8,
           jumpListModel.displayedRecentDocuments.count == 6,
           jumpListModel.closeTitle == "Close all windows",

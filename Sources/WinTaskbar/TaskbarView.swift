@@ -541,7 +541,8 @@ private struct TaskbarAppButton: View {
         )
         let contentSize = TaskbarJumpListMetrics.contentSize(
             shortcutCount: shortcuts.count,
-            recentCount: recent.count
+            recentCount: recent.count,
+            isRunning: item.isRunning
         )
         let rootView = TaskbarJumpListView(
             item: item,
@@ -577,6 +578,10 @@ private struct TaskbarAppButton: View {
             onClose: {
                 taskbarJumpListController.dismiss()
                 for window in windows { windowActivator.close(window: window) }
+            },
+            onQuit: {
+                taskbarJumpListController.dismiss()
+                apps.quit(item)
             }
         )
         .frame(width: contentSize.width, height: contentSize.height)

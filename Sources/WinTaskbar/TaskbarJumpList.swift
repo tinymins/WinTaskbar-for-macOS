@@ -36,7 +36,7 @@ enum TaskbarJumpListMetrics {
     static let dividerBlockHeight: CGFloat = 9
     static let verticalPadding: CGFloat = 8
 
-    static func contentSize(shortcutCount: Int, recentCount: Int) -> CGSize {
+    static func contentSize(shortcutCount: Int, recentCount: Int, isRunning: Bool) -> CGSize {
         let visibleShortcutCount = min(max(0, shortcutCount), TaskbarJumpListModel.maximumShortcutCount)
         let visibleRecentCount = min(max(0, recentCount), TaskbarJumpListModel.maximumRecentCount)
         let pinnedHeight = visibleShortcutCount > 0
@@ -46,10 +46,11 @@ enum TaskbarJumpListMetrics {
             ? sectionHeaderHeight + CGFloat(visibleRecentCount) * rowHeight + dividerBlockHeight
             : 0
         let commandRows: CGFloat = 5
+        let quitHeight = isRunning ? dividerBlockHeight + rowHeight : 0
         return CGSize(
             width: width,
             height: verticalPadding * 2 + recentHeight + pinnedHeight
-                + commandRows * rowHeight + dividerBlockHeight
+                + commandRows * rowHeight + dividerBlockHeight + quitHeight
         )
     }
 }
@@ -277,6 +278,7 @@ struct TaskbarJumpListView: View {
     let onShowInFinder: () -> Void
     let onTogglePin: () -> Void
     let onClose: () -> Void
+    let onQuit: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -329,6 +331,15 @@ struct TaskbarJumpListView: View {
                 isEnabled: model.canClose,
                 action: onClose
             )
+
+            if item.isRunning {
+                sectionDivider
+                TaskbarJumpListRow(
+                    title: "Quit",
+                    systemImage: "power",
+                    action: onQuit
+                )
+            }
         }
         .padding(.vertical, TaskbarJumpListMetrics.verticalPadding)
         .frame(width: TaskbarJumpListMetrics.width)
