@@ -89,34 +89,47 @@ final class DockToggleService: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        isDockHidden = DockExitPolicy.shouldRestoreDock(configuration: Self.currentDockConfiguration())
+        isDockHidden = defaults.bool(forKey: "wintaskbar.dockHidden")
+    }
+
+    func applyConfiguredStateOnLaunch() {
+        guard isDockHidden else { return }
+        applyHiddenDockConfiguration()
     }
 
     func hideDock() {
-        run("/usr/bin/defaults", ["write", "com.apple.dock", "autohide", "-bool", "true"])
-        run("/usr/bin/defaults", ["write", "com.apple.dock", "autohide-delay", "-float", "1000"])
-        run("/usr/bin/defaults", ["write", "com.apple.dock", "autohide-time-modifier", "-float", "0"])
-        restartDock()
+        applyHiddenDockConfiguration()
         isDockHidden = true
         defaults.set(true, forKey: "wintaskbar.dockHidden")
     }
 
     func restoreDock() {
-        run("/usr/bin/defaults", ["delete", "com.apple.dock", "autohide-delay"])
-        run("/usr/bin/defaults", ["delete", "com.apple.dock", "autohide-time-modifier"])
-        run("/usr/bin/defaults", ["write", "com.apple.dock", "autohide", "-bool", "false"])
-        restartDock()
+        applyVisibleDockConfiguration()
         isDockHidden = false
         defaults.set(false, forKey: "wintaskbar.dockHidden")
     }
 
     func restoreDockOnExit() {
         guard DockExitPolicy.shouldRestoreDock(configuration: Self.currentDockConfiguration()) else { return }
-        restoreDock()
+        applyVisibleDockConfiguration()
     }
 
     func syncDock(orientation: String) {
         run("/usr/bin/defaults", ["write", "com.apple.dock", "orientation", "-string", orientation])
+        restartDock()
+    }
+
+    private func applyHiddenDockConfiguration() {
+        run("/usr/bin/defaults", ["write", "com.apple.dock", "autohide", "-bool", "true"])
+        run("/usr/bin/defaults", ["write", "com.apple.dock", "autohide-delay", "-float", "1000"])
+        run("/usr/bin/defaults", ["write", "com.apple.dock", "autohide-time-modifier", "-float", "0"])
+        restartDock()
+    }
+
+    private func applyVisibleDockConfiguration() {
+        run("/usr/bin/defaults", ["delete", "com.apple.dock", "autohide-delay"])
+        run("/usr/bin/defaults", ["delete", "com.apple.dock", "autohide-time-modifier"])
+        run("/usr/bin/defaults", ["write", "com.apple.dock", "autohide", "-bool", "false"])
         restartDock()
     }
 

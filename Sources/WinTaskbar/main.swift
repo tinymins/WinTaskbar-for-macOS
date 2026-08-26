@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         buildApplicationMenu()
+        dockToggleService.applyConfiguredStateOnLaunch()
 
         let taskbar = TaskbarWindowController(
             preferences: preferences,
@@ -214,6 +215,17 @@ func runSelfTest() async -> Int32 {
         autohideTimeModifier: nil
     )) else {
         fputs("SELF-TEST FAILED: Dock exit policy mismatch\n", stderr)
+        return 1
+    }
+
+    defaults.set(true, forKey: "wintaskbar.dockHidden")
+    guard DockToggleService(defaults: defaults).isDockHidden else {
+        fputs("SELF-TEST FAILED: Dock launch preference was not restored\n", stderr)
+        return 1
+    }
+    defaults.set(false, forKey: "wintaskbar.dockHidden")
+    guard !DockToggleService(defaults: defaults).isDockHidden else {
+        fputs("SELF-TEST FAILED: disabled Dock launch preference was ignored\n", stderr)
         return 1
     }
 
