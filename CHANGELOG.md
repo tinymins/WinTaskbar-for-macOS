@@ -2,6 +2,12 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.16] - 2026-08-26
+
+### Fixed
+
+- Match the app jump list's taskbar margin to the Windows-aligned 8pt spacing shared by the Start menu on every taskbar edge.
+
 ## [0.0.15] - 2026-08-26
 
 ### Fixed
