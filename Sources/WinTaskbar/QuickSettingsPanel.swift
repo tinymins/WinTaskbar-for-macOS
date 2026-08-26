@@ -40,6 +40,10 @@ enum QuickSettingsPanelMetrics {
     static let detailContentHeight: CGFloat = 233
     static let detailBackButtonSize: CGFloat = 40
     static let detailBackButtonCornerRadius: CGFloat = 4
+    static let accessibilityRowHeight: CGFloat = 55
+    static let accessibilityIconColumnWidth: CGFloat = 22
+    static let accessibilityStatusColumnWidth: CGFloat = 24
+    static let accessibilityToggleSize = CGSize(width: 40, height: 20)
 }
 
 enum QuickSettingsPageNavigation {
@@ -657,21 +661,33 @@ private struct QuickSettingsPanelView: View {
     }
 
     private var accessibilityPage: some View {
-        detailPage(title: "Accessibility") {
-            DetailActionList(
-                rows: [
-                    DetailActionRowData(symbol: "speaker.wave.2", title: "VoiceOver", detail: "Screen reader settings"),
-                    DetailActionRowData(symbol: "plus.magnifyingglass", title: "Zoom", detail: "Screen magnification settings"),
-                    DetailActionRowData(symbol: "circle.lefthalf.filled", title: "Display", detail: "Visual accessibility settings"),
-                ],
-                action: onOpenAccessibilitySettings
-            )
+        detailPage(
+            title: "Accessibility",
+            footerContent: AnyView(accessibilityFooter)
+        ) {
+            AccessibilitySettingsList(action: onOpenAccessibilitySettings)
         }
+    }
+
+    private var accessibilityFooter: some View {
+        Button(action: onOpenAccessibilitySettings) {
+            HStack {
+                Text("More Accessibility settings")
+                    .font(.system(size: 11))
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .frame(height: QuickSettingsPanelMetrics.footerHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(Color.black.opacity(0.10))
     }
 
     private func detailPage<Content: View>(
         title: String,
         trailing: AnyView? = nil,
+        footerContent: AnyView? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(spacing: 0) {
@@ -706,7 +722,11 @@ private struct QuickSettingsPanelView: View {
             content()
                 .frame(height: QuickSettingsPanelMetrics.detailContentHeight)
             Divider()
-            footer
+            if let footerContent {
+                footerContent
+            } else {
+                footer
+            }
         }
     }
 
@@ -996,6 +1016,171 @@ private struct DetailActionList: View {
             Spacer()
         }
         .padding(10)
+    }
+}
+
+private struct AccessibilitySettingRowData: Identifiable {
+    let id: String
+    let symbol: String
+    let title: String
+    let detail: String
+}
+
+private struct AccessibilitySettingSection: Identifiable {
+    let id: String
+    let title: String
+    let rows: [AccessibilitySettingRowData]
+}
+
+private struct AccessibilitySettingsList: View {
+    let action: () -> Void
+
+    private let sections = [
+        AccessibilitySettingSection(
+            id: "vision",
+            title: "Vision",
+            rows: [
+                AccessibilitySettingRowData(
+                    id: "magnifier",
+                    symbol: "plus.magnifyingglass",
+                    title: "Magnifier",
+                    detail: "See words and images better"
+                ),
+                AccessibilitySettingRowData(
+                    id: "narrator",
+                    symbol: "speaker.wave.2",
+                    title: "Narrator",
+                    detail: "Your built-in screen reader"
+                ),
+                AccessibilitySettingRowData(
+                    id: "color-filters",
+                    symbol: "paintpalette",
+                    title: "Color filters",
+                    detail: "Distinguish among colors easily"
+                ),
+            ]
+        ),
+        AccessibilitySettingSection(
+            id: "hearing",
+            title: "Hearing",
+            rows: [
+                AccessibilitySettingRowData(
+                    id: "live-captions",
+                    symbol: "captions.bubble",
+                    title: "Live captions",
+                    detail: "Real time audio transcription"
+                ),
+                AccessibilitySettingRowData(
+                    id: "mono-audio",
+                    symbol: "speaker.wave.2",
+                    title: "Mono audio",
+                    detail: "Combine left and right audio channels"
+                ),
+            ]
+        ),
+        AccessibilitySettingSection(
+            id: "motor-mobility",
+            title: "Motor and Mobility",
+            rows: [
+                AccessibilitySettingRowData(
+                    id: "voice-access",
+                    symbol: "waveform.and.mic",
+                    title: "Voice access",
+                    detail: "Interact with your PC using voice"
+                ),
+                AccessibilitySettingRowData(
+                    id: "sticky-keys",
+                    symbol: "keyboard",
+                    title: "Sticky keys",
+                    detail: "Use shortcuts one key at a time"
+                ),
+            ]
+        ),
+    ]
+
+    var body: some View {
+        ScrollView(.vertical) {
+            LazyVStack(spacing: 0) {
+                ForEach(sections) { section in
+                    Text(section.title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(height: 34, alignment: .bottom)
+                        .padding(.horizontal, 16)
+                    ForEach(section.rows) { row in
+                        AccessibilitySettingRow(row: row, action: action)
+                    }
+                }
+            }
+            .padding(.bottom, 8)
+        }
+    }
+}
+
+private struct AccessibilitySettingRow: View {
+    let row: AccessibilitySettingRowData
+    let action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 0) {
+                Image(systemName: row.symbol)
+                    .font(.system(size: 13))
+                    .frame(width: QuickSettingsPanelMetrics.accessibilityIconColumnWidth)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.title)
+                        .font(.system(size: 12, weight: .medium))
+                    Text(row.detail)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .padding(.leading, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text("Off")
+                    .font(.system(size: 11))
+                    .frame(
+                        width: QuickSettingsPanelMetrics.accessibilityStatusColumnWidth,
+                        alignment: .trailing
+                    )
+                WindowsToggleIndicator()
+                    .padding(.leading, 8)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: QuickSettingsPanelMetrics.accessibilityRowHeight)
+            .contentShape(Rectangle())
+            .background(
+                isHovering ? Color.primary.opacity(0.06) : .clear,
+                in: RoundedRectangle(cornerRadius: 4)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .accessibilityLabel("\(row.title), Off, \(row.detail)")
+        .help("Open Accessibility settings")
+    }
+}
+
+private struct WindowsToggleIndicator: View {
+    var body: some View {
+        Capsule()
+            .fill(Color.white.opacity(0.04))
+            .overlay {
+                Capsule()
+                    .stroke(Color.white.opacity(0.58), lineWidth: 1)
+            }
+            .overlay(alignment: .leading) {
+                Circle()
+                    .fill(Color.white.opacity(0.78))
+                    .frame(width: 12, height: 12)
+                    .padding(.leading, 4)
+            }
+            .frame(
+                width: QuickSettingsPanelMetrics.accessibilityToggleSize.width,
+                height: QuickSettingsPanelMetrics.accessibilityToggleSize.height
+            )
+            .accessibilityHidden(true)
     }
 }
 
