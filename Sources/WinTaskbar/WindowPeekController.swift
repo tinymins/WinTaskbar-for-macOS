@@ -12,6 +12,41 @@ struct WindowPeekGeometry {
     }
 }
 
+enum WindowPeekHoverDecision: Equatable {
+    case delay
+    case present
+}
+
+struct WindowPeekHoverSession {
+    static let initialDelayNanoseconds: UInt64 = 300_000_000
+
+    private(set) var isActive = false
+    private var pendingWindowID: CGWindowID?
+
+    mutating func hover(windowID: CGWindowID) -> WindowPeekHoverDecision {
+        guard !isActive else { return .present }
+        pendingWindowID = windowID
+        return .delay
+    }
+
+    mutating func activatePending(windowID: CGWindowID) -> Bool {
+        guard !isActive, pendingWindowID == windowID else { return false }
+        pendingWindowID = nil
+        isActive = true
+        return true
+    }
+
+    mutating func cancelPending() {
+        guard !isActive else { return }
+        pendingWindowID = nil
+    }
+
+    mutating func end() {
+        pendingWindowID = nil
+        isActive = false
+    }
+}
+
 private final class WindowPeekPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
@@ -117,6 +152,8 @@ final class WindowPeekController {
     private var panels: [CGDirectDisplayID: WindowPeekPanel] = [:]
     private var desktopImages: [URL: NSImage] = [:]
     private var currentWindowID: CGWindowID?
+    private var hoverSession = WindowPeekHoverSession()
+    private var delayedShowTask: Task<Void, Never>?
     private var delayedHideTask: Task<Void, Never>?
     private var orderOutTask: Task<Void, Never>?
 
@@ -130,6 +167,23 @@ final class WindowPeekController {
         orderOutTask?.cancel()
         orderOutTask = nil
 
+        switch hoverSession.hover(windowID: window.windowID) {
+        case .delay:
+            delayedShowTask?.cancel()
+            delayedShowTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: WindowPeekHoverSession.initialDelayNanoseconds)
+                guard !Task.isCancelled,
+                      self?.hoverSession.activatePending(windowID: window.windowID) == true else { return }
+                self?.present(window: window)
+            }
+        case .present:
+            delayedShowTask?.cancel()
+            delayedShowTask = nil
+            present(window: window)
+        }
+    }
+
+    private func present(window: WindowInfo) {
         guard let image = windowsService.thumbnail(for: window) else {
             hideImmediately()
             return
@@ -151,6 +205,12 @@ final class WindowPeekController {
     }
 
     func scheduleHide() {
+        if !hoverSession.isActive {
+            delayedShowTask?.cancel()
+            delayedShowTask = nil
+            hoverSession.cancelPending()
+            return
+        }
         delayedHideTask?.cancel()
         delayedHideTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 80_000_000)
@@ -160,8 +220,11 @@ final class WindowPeekController {
     }
 
     func hide() {
+        delayedShowTask?.cancel()
+        delayedShowTask = nil
         delayedHideTask?.cancel()
         delayedHideTask = nil
+        hoverSession.end()
         currentWindowID = nil
         orderOutTask?.cancel()
 
@@ -183,10 +246,13 @@ final class WindowPeekController {
     }
 
     func hideImmediately() {
+        delayedShowTask?.cancel()
+        delayedShowTask = nil
         delayedHideTask?.cancel()
         delayedHideTask = nil
         orderOutTask?.cancel()
         orderOutTask = nil
+        hoverSession.end()
         currentWindowID = nil
         panels.values.forEach { panel in
             panel.orderOut(nil)

@@ -510,6 +510,30 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    var peekHoverSession = WindowPeekHoverSession()
+    let firstPeekWindowID: CGWindowID = 101
+    let secondPeekWindowID: CGWindowID = 202
+    guard WindowPeekHoverSession.initialDelayNanoseconds == 300_000_000,
+          peekHoverSession.hover(windowID: firstPeekWindowID) == .delay,
+          !peekHoverSession.activatePending(windowID: secondPeekWindowID),
+          peekHoverSession.activatePending(windowID: firstPeekWindowID),
+          peekHoverSession.isActive,
+          peekHoverSession.hover(windowID: secondPeekWindowID) == .present else {
+        fputs("SELF-TEST FAILED: initial window peek hover session mismatch\n", stderr)
+        return 1
+    }
+    peekHoverSession.end()
+    guard !peekHoverSession.isActive,
+          peekHoverSession.hover(windowID: secondPeekWindowID) == .delay else {
+        fputs("SELF-TEST FAILED: window peek hover session did not reset\n", stderr)
+        return 1
+    }
+    peekHoverSession.cancelPending()
+    guard !peekHoverSession.activatePending(windowID: secondPeekWindowID) else {
+        fputs("SELF-TEST FAILED: cancelled window peek hover activated\n", stderr)
+        return 1
+    }
+
     var optionGesture = OptionKeyGestureState()
     guard !optionGesture.flagsChanged(to: [.option]),
           optionGesture.flagsChanged(to: []) else {
