@@ -2,6 +2,23 @@ import AppKit
 import Carbon
 import Foundation
 
+@MainActor
+private enum AppIconCache {
+    private static let images: NSCache<NSURL, NSImage> = {
+        let cache = NSCache<NSURL, NSImage>()
+        cache.countLimit = 256
+        return cache
+    }()
+
+    static func icon(for url: URL) -> NSImage {
+        let key = url as NSURL
+        if let cached = images.object(forKey: key) { return cached }
+        let image = NSWorkspace.shared.icon(forFile: url.path)
+        images.setObject(image, forKey: key)
+        return image
+    }
+}
+
 enum TaskbarPosition: String, CaseIterable, Identifiable {
     case bottom = "Bottom"
     case top = "Top"
@@ -156,7 +173,7 @@ struct DiscoveredApp: Identifiable, Hashable {
 
     @MainActor
     var icon: NSImage {
-        NSWorkspace.shared.icon(forFile: url.path)
+        AppIconCache.icon(for: url)
     }
 }
 
@@ -173,7 +190,7 @@ struct TaskbarItem: Identifiable, Hashable {
     var id: String { bundleIdentifier }
 
     @MainActor
-    var icon: NSImage { NSWorkspace.shared.icon(forFile: url.path) }
+    var icon: NSImage { AppIconCache.icon(for: url) }
 }
 
 struct WindowInfo: Identifiable, Hashable {
