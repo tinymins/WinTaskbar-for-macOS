@@ -2,6 +2,13 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.8] - 2026-08-26
+
+### Fixed
+
+- Keep the first window preview immediate while requiring a short stable hover before switching an already visible preview to another app.
+- Cancel stale preview switch tasks during fast taskbar pointer movement so only the final hovered app animates into place.
+
 ## [0.0.7] - 2026-08-26
 
 ### Fixed
@@ -41,6 +48,7 @@ All notable changes to WinTaskbar for macOS are documented here.
 - Show window previews immediately when hovering over a taskbar app while retaining a short dismissal delay.
 - Match Windows preview thumbnail proportions and refine preview panel styling.
 
+[0.0.8]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.4...v0.0.5
