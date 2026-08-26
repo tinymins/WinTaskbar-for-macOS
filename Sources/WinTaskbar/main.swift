@@ -936,6 +936,26 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    guard ClockCalendarDismissalPolicy.shouldDismissForFocusLoss(
+        isEditingCalendarEvent: false,
+        isRequestingCalendarAccess: false
+    ),
+    !ClockCalendarDismissalPolicy.shouldDismissForFocusLoss(
+        isEditingCalendarEvent: true,
+        isRequestingCalendarAccess: false
+    ),
+    !ClockCalendarDismissalPolicy.shouldDismissForFocusLoss(
+        isEditingCalendarEvent: false,
+        isRequestingCalendarAccess: true
+    ),
+    !ClockCalendarDismissalPolicy.shouldDismissForFocusLoss(
+        isEditingCalendarEvent: true,
+        isRequestingCalendarAccess: true
+    ) else {
+        fputs("SELF-TEST FAILED: clock calendar focus-loss dismissal policy mismatch\n", stderr)
+        return 1
+    }
+
     let thirdPreviewOwner = WindowPreviewOwnerID(displayID: 1, bundleIdentifier: "com.example.third")
     var previewHoverIntent = WindowPreviewHoverIntent()
     guard WindowPreviewHoverIntent.initialDelayNanoseconds == 400_000_000,

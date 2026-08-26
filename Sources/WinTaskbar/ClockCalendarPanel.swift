@@ -21,6 +21,15 @@ struct ClockCalendarPanelTransitionSequence {
     }
 }
 
+struct ClockCalendarDismissalPolicy {
+    static func shouldDismissForFocusLoss(
+        isEditingCalendarEvent: Bool,
+        isRequestingCalendarAccess: Bool
+    ) -> Bool {
+        !isEditingCalendarEvent && !isRequestingCalendarAccess
+    }
+}
+
 @MainActor
 final class ClockCalendarPanelController: ObservableObject {
     let state = ClockCalendarState()
@@ -225,14 +234,22 @@ final class ClockCalendarPanelController: ObservableObject {
             }
             if event.window !== self.panel {
                 DispatchQueue.main.async { [weak self] in
-                    guard let self, !self.calendarService.isRequestingAccess else { return }
+                    guard let self,
+                          ClockCalendarDismissalPolicy.shouldDismissForFocusLoss(
+                              isEditingCalendarEvent: self.state.isEditingCalendarEvent,
+                              isRequestingCalendarAccess: self.calendarService.isRequestingAccess
+                          ) else { return }
                     self.dismiss()
                 }
             }
             return event
         }
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            guard let self, !self.calendarService.isRequestingAccess else { return }
+            guard let self,
+                  ClockCalendarDismissalPolicy.shouldDismissForFocusLoss(
+                      isEditingCalendarEvent: self.state.isEditingCalendarEvent,
+                      isRequestingCalendarAccess: self.calendarService.isRequestingAccess
+                  ) else { return }
             self.dismiss()
         }
     }
