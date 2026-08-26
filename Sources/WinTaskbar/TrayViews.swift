@@ -129,21 +129,27 @@ struct BatteryTrayView: View {
 
 struct InputSourceTrayView: View {
     @ObservedObject var service: SystemStatusService
+    let position: TaskbarPosition
+    @StateObject private var panelController = InputSourcePanelController()
 
     var body: some View {
-        Menu {
-            ForEach(service.inputSources) { source in
-                Button {
-                    service.selectInputSource(id: source.id)
-                } label: {
-                    if service.inputSource == source.name { Label(source.name, systemImage: "checkmark") }
-                    else { Text(source.name) }
-                }
-            }
+        Button {
+            panelController.toggle(service: service, position: position)
         } label: {
-            Text(String(service.inputSource.prefix(3))).font(.caption2.weight(.medium))
+            Text(currentAbbreviation)
+                .font(.caption2.weight(.medium))
         }
-        .menuStyle(.borderlessButton).fixedSize().help(service.inputSource)
+        .buttonStyle(.plain)
+        .fixedSize()
+        .help(service.inputSource)
+        .accessibilityLabel("Keyboard layout: \(service.inputSource)")
+        .inputSourcePanelAnchor(controller: panelController)
+        .onDisappear { panelController.dismiss() }
+    }
+
+    private var currentAbbreviation: String {
+        service.inputSources.first(where: { $0.id == service.inputSourceID })?.abbreviation
+            ?? String(service.inputSource.prefix(3)).uppercased()
     }
 }
 

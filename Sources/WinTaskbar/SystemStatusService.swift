@@ -15,6 +15,39 @@ struct InputSourceOption: Identifiable, Hashable {
     let id: String
     let name: String
     let abbreviation: String
+    let languageCode: String?
+    let iconURL: URL?
+
+    var displayName: String {
+        guard let languageCode,
+              let localizedName = Locale.autoupdatingCurrent.localizedString(forLanguageCode: languageCode) else {
+            return name
+        }
+        return localizedName
+    }
+
+    var detail: String? {
+        displayName.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame ? nil : name
+    }
+}
+
+enum InputSourcePresentation {
+    static func abbreviation(languageCode: String?, fallbackName: String) -> String {
+        guard let languageCode else { return fallbackAbbreviation(for: fallbackName) }
+        let baseLanguageCode = languageCode
+            .split(whereSeparator: { $0 == "-" || $0 == "_" })
+            .first
+            .map(String.init)
+        guard let baseLanguageCode,
+              let englishName = Locale(identifier: "en").localizedString(forLanguageCode: baseLanguageCode) else {
+            return fallbackAbbreviation(for: fallbackName)
+        }
+        return String(englishName.prefix(3)).uppercased()
+    }
+
+    private static func fallbackAbbreviation(for name: String) -> String {
+        String(name.prefix(3)).uppercased()
+    }
 }
 
 @MainActor
@@ -26,6 +59,7 @@ final class SystemStatusService: ObservableObject {
     @Published private(set) var isMuted = false
     @Published private(set) var wifiSSID: String?
     @Published private(set) var inputSource = "ABC"
+    @Published private(set) var inputSourceID = ""
     @Published private(set) var wifiPoweredOn = false
     @Published private(set) var wifiNetworks: [WiFiNetworkInfo] = []
     @Published private(set) var isScanningWiFi = false
@@ -186,8 +220,10 @@ final class SystemStatusService: ObservableObject {
 
     private func readInputSource() {
         guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
-              let pointer = TISGetInputSourceProperty(source, kTISPropertyLocalizedName) else { return }
-        inputSource = Unmanaged<CFString>.fromOpaque(pointer).takeUnretainedValue() as String
+              let id = stringProperty(source, kTISPropertyInputSourceID),
+              let name = stringProperty(source, kTISPropertyLocalizedName) else { return }
+        inputSourceID = id
+        inputSource = name
     }
 
     private func reloadInputSources() {
@@ -201,8 +237,17 @@ final class SystemStatusService: ObservableObject {
         for source in sources {
             guard let id = stringProperty(source, kTISPropertyInputSourceID),
                   let name = stringProperty(source, kTISPropertyLocalizedName) else { continue }
-            let abbreviation = String(name.prefix(3))
-            options.append(InputSourceOption(id: id, name: name, abbreviation: abbreviation.uppercased()))
+            let languageCode = stringArrayProperty(source, kTISPropertyInputSourceLanguages)?.first
+            options.append(InputSourceOption(
+                id: id,
+                name: name,
+                abbreviation: InputSourcePresentation.abbreviation(
+                    languageCode: languageCode,
+                    fallbackName: name
+                ),
+                languageCode: languageCode,
+                iconURL: urlProperty(source, kTISPropertyIconImageURL)
+            ))
             refs[id] = source
         }
         inputSources = options
@@ -212,5 +257,15 @@ final class SystemStatusService: ObservableObject {
     private func stringProperty(_ source: TISInputSource, _ key: CFString) -> String? {
         guard let pointer = TISGetInputSourceProperty(source, key) else { return nil }
         return Unmanaged<CFTypeRef>.fromOpaque(pointer).takeUnretainedValue() as? String
+    }
+
+    private func stringArrayProperty(_ source: TISInputSource, _ key: CFString) -> [String]? {
+        guard let pointer = TISGetInputSourceProperty(source, key) else { return nil }
+        return Unmanaged<CFTypeRef>.fromOpaque(pointer).takeUnretainedValue() as? [String]
+    }
+
+    private func urlProperty(_ source: TISInputSource, _ key: CFString) -> URL? {
+        guard let pointer = TISGetInputSourceProperty(source, key) else { return nil }
+        return Unmanaged<CFTypeRef>.fromOpaque(pointer).takeUnretainedValue() as? URL
     }
 }

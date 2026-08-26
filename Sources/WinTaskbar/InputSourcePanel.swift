@@ -1,0 +1,251 @@
+import AppKit
+import SwiftUI
+
+enum InputSourcePanelMetrics {
+    static let width: CGFloat = 360
+    static let headerHeight: CGFloat = 52
+    static let rowHeight: CGFloat = 48
+    static let rowSpacing: CGFloat = 2
+    static let listVerticalPadding: CGFloat = 8
+    static let footerHeight: CGFloat = 48
+    static let dividerHeight: CGFloat = 1
+    static let maximumVisibleRows = 5
+
+    static func contentSize(inputSourceCount: Int) -> CGSize {
+        let visibleRows = min(max(inputSourceCount, 1), maximumVisibleRows)
+        let listHeight = CGFloat(visibleRows) * rowHeight
+            + CGFloat(max(visibleRows - 1, 0)) * rowSpacing
+            + listVerticalPadding * 2
+        return CGSize(
+            width: width,
+            height: headerHeight + listHeight + dividerHeight + footerHeight
+        )
+    }
+}
+
+@MainActor
+final class InputSourcePanelController: ObservableObject {
+    private let panelController = TaskbarJumpListController()
+    private weak var anchorView: NSView?
+
+    func attach(anchorView: NSView) {
+        self.anchorView = anchorView
+    }
+
+    func toggle(service: SystemStatusService, position: TaskbarPosition) {
+        if panelController.isVisible {
+            dismiss()
+            return
+        }
+        guard let anchorView else { return }
+        let rootView = InputSourcePanelView(
+            sources: service.inputSources,
+            selectedSourceID: service.inputSourceID,
+            onSelect: { [weak self, weak service] sourceID in
+                service?.selectInputSource(id: sourceID)
+                self?.dismiss()
+            },
+            onOpenSettings: { [weak self] in
+                InputSourceSettings.open()
+                self?.dismiss()
+            }
+        )
+        panelController.show(
+            rootView: AnyView(rootView),
+            contentSize: InputSourcePanelMetrics.contentSize(inputSourceCount: service.inputSources.count),
+            relativeTo: anchorView,
+            position: position
+        )
+    }
+
+    func dismiss() {
+        panelController.dismiss()
+    }
+}
+
+private enum InputSourceSettings {
+    static func open() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.keyboard") else { return }
+        NSWorkspace.shared.open(url)
+    }
+}
+
+private struct InputSourcePanelView: View {
+    let sources: [InputSourceOption]
+    let selectedSourceID: String
+    let onSelect: (String) -> Void
+    let onOpenSettings: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            sourceList
+            Divider()
+            InputSourceSettingsButton(action: onOpenSettings)
+        }
+        .frame(width: InputSourcePanelMetrics.width)
+    }
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            Text("Keyboard layout")
+                .font(.system(size: 13, weight: .semibold))
+            shortcutKey("⌃", width: 21)
+            Text("+")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            shortcutKey("Space", width: 42)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .frame(height: InputSourcePanelMetrics.headerHeight)
+    }
+
+    private var sourceList: some View {
+        ScrollView {
+            LazyVStack(spacing: InputSourcePanelMetrics.rowSpacing) {
+                if sources.isEmpty {
+                    Text("No input sources")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: InputSourcePanelMetrics.rowHeight)
+                } else {
+                    ForEach(sources) { source in
+                        InputSourceRow(
+                            source: source,
+                            isSelected: source.id == selectedSourceID,
+                            action: { onSelect(source.id) }
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, InputSourcePanelMetrics.listVerticalPadding)
+        }
+        .scrollIndicators(.hidden)
+        .frame(height: InputSourcePanelMetrics.contentSize(inputSourceCount: sources.count).height
+            - InputSourcePanelMetrics.headerHeight
+            - InputSourcePanelMetrics.footerHeight
+            - InputSourcePanelMetrics.dividerHeight)
+    }
+
+    private func shortcutKey(_ title: String, width: CGFloat) -> some View {
+        Text(title)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.secondary)
+            .frame(width: width, height: 19)
+            .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 3))
+            .overlay {
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(Color.primary.opacity(0.16), lineWidth: 0.5)
+            }
+    }
+}
+
+private struct InputSourceRow: View {
+    let source: InputSourceOption
+    let isSelected: Bool
+    let action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                sourceMark
+                    .frame(width: 30)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(source.displayName)
+                        .font(.system(size: 13))
+                        .lineLimit(1)
+                    if let detail = source.detail {
+                        Text(detail)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 8)
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: InputSourcePanelMetrics.rowHeight, alignment: .leading)
+            .contentShape(Rectangle())
+            .background(rowBackground, in: RoundedRectangle(cornerRadius: 4))
+            .overlay(alignment: .leading) {
+                if isSelected {
+                    Capsule()
+                        .fill(Color.accentColor)
+                        .frame(width: 3, height: 24)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .accessibilityLabel(source.detail.map { "\(source.displayName), \($0)" } ?? source.displayName)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private var sourceMark: some View {
+        if let iconURL = source.iconURL,
+           let image = NSImage(contentsOf: iconURL) {
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: 22, height: 22)
+        } else {
+            Text(source.abbreviation)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.primary)
+        }
+    }
+
+    private var rowBackground: Color {
+        if isSelected { return Color.primary.opacity(0.10) }
+        if isHovering { return Color.primary.opacity(0.06) }
+        return .clear
+    }
+}
+
+private struct InputSourceSettingsButton: View {
+    let action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text("More keyboard settings")
+                .font(.system(size: 12))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .contentShape(Rectangle())
+                .background(isHovering ? Color.primary.opacity(0.06) : .clear)
+        }
+        .buttonStyle(.plain)
+        .frame(height: InputSourcePanelMetrics.footerHeight)
+        .onHover { isHovering = $0 }
+    }
+}
+
+private struct InputSourcePanelAnchor: NSViewRepresentable {
+    let onAttach: @MainActor (NSView) -> Void
+
+    func makeNSView(context: Context) -> InputSourcePanelAnchorView {
+        let view = InputSourcePanelAnchorView()
+        onAttach(view)
+        return view
+    }
+
+    func updateNSView(_ nsView: InputSourcePanelAnchorView, context: Context) {
+        onAttach(nsView)
+    }
+}
+
+private final class InputSourcePanelAnchorView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+extension View {
+    func inputSourcePanelAnchor(controller: InputSourcePanelController) -> some View {
+        background(InputSourcePanelAnchor(onAttach: controller.attach(anchorView:)))
+    }
+}

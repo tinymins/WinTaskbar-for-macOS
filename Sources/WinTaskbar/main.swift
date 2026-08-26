@@ -201,6 +201,16 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    guard InputSourcePresentation.abbreviation(languageCode: "en-US", fallbackName: "ABC") == "ENG",
+          InputSourcePresentation.abbreviation(languageCode: "zh-Hans", fallbackName: "Pinyin") == "CHI",
+          InputSourcePresentation.abbreviation(languageCode: nil, fallbackName: "ABC") == "ABC",
+          InputSourcePanelMetrics.contentSize(inputSourceCount: 2) == CGSize(width: 360, height: 215),
+          InputSourcePanelMetrics.contentSize(inputSourceCount: 8)
+            == InputSourcePanelMetrics.contentSize(inputSourceCount: 5) else {
+        fputs("SELF-TEST FAILED: input source presentation mismatch\n", stderr)
+        return 1
+    }
+
     guard DockExitPolicy.shouldRestoreDock(configuration: DockConfiguration(
         autohide: true,
         autohideDelay: 1000,
