@@ -60,6 +60,8 @@ struct TaskbarView: View {
     let windowPeekController: WindowPeekController
     @ObservedObject var windowPreviewPanelController: WindowPreviewPanelController
     @ObservedObject var taskbarJumpListController: TaskbarJumpListController
+    @ObservedObject var startButtonContextMenuController: TaskbarJumpListController
+    @ObservedObject var startButtonPowerMenuController: TaskbarJumpListController
     let shortcutEditorController: ShortcutEditorController
     @ObservedObject var recentDocuments: RecentDocumentsService
     let screen: NSScreen
@@ -96,7 +98,7 @@ struct TaskbarView: View {
                         if preferences.showDesktopEnabled { showDesktopStrip(horizontal: true) }
                         if showsStartButtonAtOppositeEnd { startButton }
                     }
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, StartMenuGeometry.screenEdgeInset)
                     .frame(height: max(0, geometry.size.height - 0.5))
                 } else {
                     VStack(spacing: TaskbarItemGeometry.itemSpacing) {
@@ -109,7 +111,7 @@ struct TaskbarView: View {
                         if preferences.showDesktopEnabled { showDesktopStrip(horizontal: false) }
                         if showsStartButtonAtOppositeEnd { startButton }
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, StartMenuGeometry.screenEdgeInset)
                     .frame(width: max(0, geometry.size.width - 0.5))
                 }
             }
@@ -142,6 +144,7 @@ struct TaskbarView: View {
 
     private var startButton: some View {
         Button {
+            dismissStartButtonContextMenus()
             actions.toggleStartMenu(on: screen)
         } label: {
             HStack(spacing: 5) {
@@ -158,41 +161,75 @@ struct TaskbarView: View {
         .buttonStyle(TaskbarButtonStyle())
         .help("Open menu")
         .accessibilityLabel("Open menu")
-        .contextMenu { startButtonContextMenu }
-    }
-
-    @ViewBuilder
-    private var startButtonContextMenu: some View {
-        quickAccessButton(.applications)
-        quickAccessButton(.battery)
-        quickAccessButton(.console)
-        quickAccessButton(.aboutThisMac)
-        quickAccessButton(.systemInformation)
-        quickAccessButton(.networkSettings)
-        quickAccessButton(.diskUtility)
-        quickAccessButton(.loginItems)
-        quickAccessButton(.terminal)
-        Divider()
-        quickAccessButton(.activityMonitor)
-        Button("Force Quit Applications…") { actions.showForceQuitApplications() }
-        quickAccessButton(.systemSettings)
-        Button("WinTaskbar Settings…") { actions.openSettings() }
-        quickAccessButton(.finder)
-        quickAccessButton(.spotlight)
-        Button("Show Desktop") { actions.showDesktop() }
-        Divider()
-        Menu("Power") {
-            Button(PowerAction.lockScreen.rawValue) { actions.performPower(.lockScreen) }
-            Button(PowerAction.sleep.rawValue) { actions.performPower(.sleep) }
-            Button(PowerAction.logOut.rawValue) { actions.performPower(.logOut) }
-            Divider()
-            Button(PowerAction.restart.rawValue) { actions.performPower(.restart) }
-            Button(PowerAction.shutDown.rawValue) { actions.performPower(.shutDown) }
+        .overlay {
+            TaskbarContextClickAnchor { anchorView in
+                showStartButtonContextMenu(relativeTo: anchorView)
+            }
         }
     }
 
-    private func quickAccessButton(_ shortcut: SystemQuickAccess) -> some View {
-        Button(shortcut.title) { actions.open(shortcut) }
+    private func showStartButtonContextMenu(relativeTo anchorView: NSView) {
+        guard let anchorWindow = anchorView.window else { return }
+        actions.closeStartMenu()
+        windowPreviewPanelController.dismissAll()
+        windowPeekController.hideImmediately()
+        taskbarJumpListController.dismiss()
+        startButtonPowerMenuController.dismiss()
+
+        let screen = anchorWindow.screen ?? self.screen
+        let frame = StartMenuGeometry.anchoredFrame(
+            screenFrame: screen.frame,
+            visibleFrame: screen.visibleFrame,
+            position: preferences.position,
+            barHeight: CGFloat(preferences.barHeight),
+            contentSize: StartButtonContextMenuMetrics.rootSize,
+            oppositeEnd: preferences.startButtonAtEnd || preferences.menuButtonPlacement != .standard
+        )
+        let rootView = StartButtonContextMenuView(
+            actions: actions,
+            onDismiss: dismissStartButtonContextMenus,
+            onShowPower: {
+                showStartButtonPowerMenu(
+                    parentFrame: frame,
+                    screenFrame: screen.frame,
+                    appearance: anchorWindow.appearance
+                )
+            }
+        )
+        .frame(width: frame.width, height: frame.height)
+
+        startButtonContextMenuController.show(
+            rootView: AnyView(rootView),
+            frame: frame,
+            appearance: anchorWindow.appearance
+        )
+    }
+
+    private func showStartButtonPowerMenu(
+        parentFrame: CGRect,
+        screenFrame: CGRect,
+        appearance: NSAppearance?
+    ) {
+        let frame = StartButtonPowerMenuGeometry.frame(
+            parentFrame: parentFrame,
+            contentSize: StartButtonContextMenuMetrics.powerSize,
+            screenFrame: screenFrame
+        )
+        let rootView = StartButtonPowerMenuView(
+            actions: actions,
+            onDismiss: dismissStartButtonContextMenus
+        )
+        .frame(width: frame.width, height: frame.height)
+        startButtonPowerMenuController.show(
+            rootView: AnyView(rootView),
+            frame: frame,
+            appearance: appearance
+        )
+    }
+
+    private func dismissStartButtonContextMenus() {
+        startButtonPowerMenuController.dismiss()
+        startButtonContextMenuController.dismiss()
     }
 
     @ViewBuilder
@@ -237,7 +274,10 @@ struct TaskbarView: View {
             shortcutEditorController: shortcutEditorController,
             recentDocuments: recentDocuments,
             isTaskbarReordering: draggedBundleID != nil,
-            isDraggedItem: draggedBundleID == item.bundleIdentifier
+            isDraggedItem: draggedBundleID == item.bundleIdentifier,
+            onHoveringApp: { hovering in
+                if hovering { dismissStartButtonContextMenus() }
+            }
         )
         .background {
             GeometryReader { proxy in
@@ -623,6 +663,7 @@ private struct TaskbarAppButton: View {
     @ObservedObject var recentDocuments: RecentDocumentsService
     let isTaskbarReordering: Bool
     let isDraggedItem: Bool
+    let onHoveringApp: (Bool) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
     @State private var attentionPulse = false
@@ -791,6 +832,7 @@ private struct TaskbarAppButton: View {
     }
 
     private func handlePreviewHover(_ hovering: Bool) {
+        onHoveringApp(hovering)
         if isTaskbarReordering {
             isHovering = false
             windowPreviewPanelController.dismiss(ownerID: previewOwnerID)

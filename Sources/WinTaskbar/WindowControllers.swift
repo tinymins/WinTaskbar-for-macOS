@@ -426,6 +426,8 @@ final class TaskbarWindowController {
     private let windowPeekController: WindowPeekController
     private let windowPreviewPanelController = WindowPreviewPanelController()
     private let taskbarJumpListController = TaskbarJumpListController()
+    private let startButtonContextMenuController = TaskbarJumpListController()
+    private let startButtonPowerMenuController = TaskbarJumpListController()
     private let shortcutEditorController: ShortcutEditorController
     private let recentDocuments: RecentDocumentsService
     private let dockBadges: DockBadgeService
@@ -467,6 +469,8 @@ final class TaskbarWindowController {
         windowPeekController.hideImmediately()
         windowPreviewPanelController.dismissAll()
         taskbarJumpListController.dismiss()
+        startButtonContextMenuController.dismiss()
+        startButtonPowerMenuController.dismiss()
         panels.forEach { $0.orderOut(nil) }
         panels.removeAll()
 
@@ -480,6 +484,8 @@ final class TaskbarWindowController {
 
     func applyLayout() {
         taskbarJumpListController.dismiss()
+        startButtonContextMenuController.dismiss()
+        startButtonPowerMenuController.dismiss()
         let expectedCount = preferences.displayMode == .primary ? min(1, NSScreen.screens.count) : NSScreen.screens.count
         guard panels.count == expectedCount else {
             rebuildPanels()
@@ -517,6 +523,8 @@ final class TaskbarWindowController {
             windowPeekController: windowPeekController,
             windowPreviewPanelController: windowPreviewPanelController,
             taskbarJumpListController: taskbarJumpListController,
+            startButtonContextMenuController: startButtonContextMenuController,
+            startButtonPowerMenuController: startButtonPowerMenuController,
             shortcutEditorController: shortcutEditorController,
             recentDocuments: recentDocuments,
             screen: screen
@@ -686,6 +694,8 @@ final class StartMenuController: NSObject, NSWindowDelegate {
 enum StartMenuGeometry {
     static let width: CGFloat = 400
     static let standardHeight: CGFloat = 480
+    static let screenEdgeInset: CGFloat = 12
+    static let taskbarGap: CGFloat = 8
 
     static func frame(
         screenFrame: NSRect,
@@ -695,36 +705,80 @@ enum StartMenuGeometry {
         heightMode: MenuHeightMode,
         oppositeEnd: Bool
     ) -> NSRect {
-        let x: CGFloat
-        let y: CGFloat
         let height: CGFloat
 
         switch position {
         case .bottom:
-            x = oppositeEnd ? screenFrame.maxX - width : screenFrame.minX
-            y = screenFrame.minY + barHeight
+            let y = screenFrame.minY + barHeight + taskbarGap
             height = heightMode == .full ? max(0, visibleFrame.maxY - y) : standardHeight
         case .top:
-            x = oppositeEnd ? screenFrame.maxX - width : screenFrame.minX
             height = heightMode == .full
-                ? max(0, visibleFrame.maxY - barHeight - visibleFrame.minY)
+                ? max(0, visibleFrame.maxY - barHeight - taskbarGap - visibleFrame.minY)
                 : standardHeight
-            y = visibleFrame.maxY - barHeight - height
         case .left:
-            x = screenFrame.minX + barHeight
             height = heightMode == .full ? visibleFrame.height : standardHeight
-            y = heightMode == .full
-                ? visibleFrame.minY
-                : (oppositeEnd ? screenFrame.minY : screenFrame.maxY - height)
         case .right:
-            x = screenFrame.maxX - barHeight - width
             height = heightMode == .full ? visibleFrame.height : standardHeight
-            y = heightMode == .full
-                ? visibleFrame.minY
-                : (oppositeEnd ? screenFrame.minY : screenFrame.maxY - height)
         }
 
-        return NSRect(x: x, y: y, width: width, height: height)
+        var frame = anchoredFrame(
+            screenFrame: screenFrame,
+            visibleFrame: visibleFrame,
+            position: position,
+            barHeight: barHeight,
+            contentSize: CGSize(width: width, height: height),
+            oppositeEnd: oppositeEnd,
+            edgeInset: heightMode == .full ? 0 : screenEdgeInset
+        )
+        if heightMode == .full, !position.isHorizontal {
+            frame.origin.y = visibleFrame.minY
+        }
+        return frame
+    }
+
+    static func anchoredFrame(
+        screenFrame: NSRect,
+        visibleFrame: NSRect,
+        position: TaskbarPosition,
+        barHeight: CGFloat,
+        contentSize: CGSize,
+        oppositeEnd: Bool,
+        edgeInset: CGFloat = screenEdgeInset
+    ) -> NSRect {
+        let origin: CGPoint
+
+        switch position {
+        case .bottom:
+            origin = CGPoint(
+                x: oppositeEnd
+                    ? screenFrame.maxX - edgeInset - contentSize.width
+                    : screenFrame.minX + edgeInset,
+                y: screenFrame.minY + barHeight + taskbarGap
+            )
+        case .top:
+            origin = CGPoint(
+                x: oppositeEnd
+                    ? screenFrame.maxX - edgeInset - contentSize.width
+                    : screenFrame.minX + edgeInset,
+                y: visibleFrame.maxY - barHeight - taskbarGap - contentSize.height
+            )
+        case .left:
+            origin = CGPoint(
+                x: screenFrame.minX + barHeight + taskbarGap,
+                y: oppositeEnd
+                    ? screenFrame.minY + edgeInset
+                    : screenFrame.maxY - edgeInset - contentSize.height
+            )
+        case .right:
+            origin = CGPoint(
+                x: screenFrame.maxX - barHeight - taskbarGap - contentSize.width,
+                y: oppositeEnd
+                    ? screenFrame.minY + edgeInset
+                    : screenFrame.maxY - edgeInset - contentSize.height
+            )
+        }
+
+        return NSRect(origin: origin, size: contentSize)
     }
 }
 

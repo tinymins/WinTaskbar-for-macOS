@@ -151,9 +151,6 @@ final class TaskbarJumpListController: ObservableObject {
         position: TaskbarPosition
     ) {
         guard let anchorWindow = anchorView.window else { return }
-        let panel = panel ?? makePanel()
-        hostingView.rootView = rootView
-
         let windowRect = anchorView.convert(anchorView.bounds, to: nil)
         let anchorFrame = anchorWindow.convertToScreen(windowRect)
         let screenFrame = anchorWindow.screen?.frame ?? NSScreen.main?.frame ?? anchorFrame
@@ -164,8 +161,14 @@ final class TaskbarJumpListController: ObservableObject {
             screenFrame: screenFrame
         )
 
-        panel.appearance = anchorWindow.appearance
-        panel.setFrame(targetFrame, display: true)
+        show(rootView: rootView, frame: targetFrame, appearance: anchorWindow.appearance)
+    }
+
+    func show(rootView: AnyView, frame: CGRect, appearance: NSAppearance?) {
+        let panel = panel ?? makePanel()
+        hostingView.rootView = rootView
+        panel.appearance = appearance
+        panel.setFrame(frame, display: true)
         panel.makeKeyAndOrderFront(nil)
         installEventMonitors()
     }
@@ -361,10 +364,12 @@ struct TaskbarJumpListView: View {
     }
 }
 
-private struct TaskbarJumpListRow: View {
+struct TaskbarJumpListRow: View {
     let title: String
     var systemImage: String?
     var image: NSImage?
+    var trailingSystemImage: String?
+    var reservesIconSpace = true
     var isEnabled = true
     let action: () -> Void
     @State private var isHovering = false
@@ -372,22 +377,29 @@ private struct TaskbarJumpListRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                Group {
-                    if let image {
-                        Image(nsImage: image)
-                            .resizable()
-                            .scaledToFit()
-                    } else if let systemImage {
-                        Image(systemName: systemImage)
-                            .font(.system(size: 14, weight: .regular))
-                    }
+                if let image {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 18, height: 18)
+                } else if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 14, weight: .regular))
+                        .frame(width: 18, height: 18)
+                } else if reservesIconSpace {
+                    Color.clear.frame(width: 18, height: 18)
                 }
-                .frame(width: 18, height: 18)
 
                 Text(title)
                     .font(.system(size: 13))
                     .lineLimit(1)
                 Spacer(minLength: 8)
+
+                if let trailingSystemImage {
+                    Image(systemName: trailingSystemImage)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
             .foregroundStyle(isEnabled ? Color.primary : Color.secondary)
             .padding(.horizontal, 10)

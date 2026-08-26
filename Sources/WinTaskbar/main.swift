@@ -238,8 +238,35 @@ func runSelfTest() async -> Int32 {
         heightMode: .standard,
         oppositeEnd: false
     )
-    guard rightMenuFrame == NSRect(x: 748, y: 320, width: 400, height: 480) else {
+    guard rightMenuFrame == NSRect(x: 740, y: 308, width: 400, height: 480) else {
         fputs("SELF-TEST FAILED: start menu corner anchoring mismatch\n", stderr)
+        return 1
+    }
+
+    let bottomMenuFrame = StartMenuGeometry.frame(
+        screenFrame: NSRect(x: 0, y: 0, width: 1200, height: 800),
+        visibleFrame: NSRect(x: 0, y: 0, width: 1200, height: 775),
+        position: .bottom,
+        barHeight: 52,
+        heightMode: .standard,
+        oppositeEnd: false
+    )
+    let bottomContextFrame = StartMenuGeometry.anchoredFrame(
+        screenFrame: NSRect(x: 0, y: 0, width: 1200, height: 800),
+        visibleFrame: NSRect(x: 0, y: 0, width: 1200, height: 775),
+        position: .bottom,
+        barHeight: 52,
+        contentSize: StartButtonContextMenuMetrics.rootSize,
+        oppositeEnd: false
+    )
+    guard bottomMenuFrame.origin == CGPoint(x: 12, y: 60),
+          bottomContextFrame.origin == bottomMenuFrame.origin,
+          StartButtonPowerMenuGeometry.frame(
+              parentFrame: bottomContextFrame,
+              contentSize: StartButtonContextMenuMetrics.powerSize,
+              screenFrame: NSRect(x: 0, y: 0, width: 1200, height: 800)
+          ).origin == CGPoint(x: 260, y: 60) else {
+        fputs("SELF-TEST FAILED: start surface spacing mismatch\n", stderr)
         return 1
     }
 
