@@ -24,6 +24,7 @@ struct ClockCalendarPanelTransitionSequence {
 @MainActor
 final class ClockCalendarPanelController: ObservableObject {
     let state = ClockCalendarState()
+    let calendarService: SystemCalendarService
 
     private let backdrop = NSVisualEffectView()
     private let hostingView: NSHostingView<AnyView>
@@ -42,7 +43,12 @@ final class ClockCalendarPanelController: ObservableObject {
     }
 
     init() {
-        hostingView = NSHostingView(rootView: AnyView(ClockCalendarPanelView(state: state)))
+        let calendarService = SystemCalendarService()
+        self.calendarService = calendarService
+        hostingView = NSHostingView(rootView: AnyView(ClockCalendarPanelView(
+            state: state,
+            calendarService: calendarService
+        )))
         expansionObserver = state.$isExpanded.dropFirst().sink { [weak self] isExpanded in
             MainActor.assumeIsolated { self?.resizeForExpansion(isExpanded: isExpanded) }
         }
@@ -60,6 +66,7 @@ final class ClockCalendarPanelController: ObservableObject {
         guard isShowing, let panel, let presentation else { return }
         let transitionRevision = transitionSequence.begin()
         isShowing = false
+        state.isEditingCalendarEvent = false
         removeEventMonitors()
 
         guard animated else {
@@ -87,6 +94,11 @@ final class ClockCalendarPanelController: ObservableObject {
     private func present(screen: NSScreen, position: TaskbarPosition, barHeight: CGFloat, theme: AppTheme) {
         let transitionRevision = transitionSequence.begin()
         state.resetToToday()
+        calendarService.refreshAuthorizationState()
+        Task { [weak self] in
+            guard let self else { return }
+            await self.calendarService.loadEvents(in: self.state.eventQueryInterval)
+        }
         let presentation = Presentation(screen: screen, position: position, barHeight: barHeight)
         self.presentation = presentation
         let panel = panel ?? makePanel()
@@ -194,10 +206,14 @@ final class ClockCalendarPanelController: ObservableObject {
         ) { [weak self] event in
             guard let self else { return event }
             if event.type == .keyDown, event.keyCode == 53 {
+                if self.state.isEditingCalendarEvent { return event }
                 self.dismiss()
                 return nil
             }
-            if event.type == .scrollWheel, event.window === self.panel, self.state.isExpanded {
+            if event.type == .scrollWheel,
+               event.window === self.panel,
+               self.state.isExpanded,
+               !self.state.isEditingCalendarEvent {
                 guard event.scrollingDeltaY != 0 else { return nil }
                 if event.hasPreciseScrollingDeltas {
                     self.state.scrollCalendar(by: event.scrollingDeltaY)

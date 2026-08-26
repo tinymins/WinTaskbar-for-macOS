@@ -260,5 +260,69 @@
 	<string>窗口预览需要屏幕录制权限。</string>
 	<key>Windows</key>
 	<string>Windows</string>
+	<key>All day</key>
+	<string>全天</string>
+	<key>%ld more events</key>
+	<string>另外 %ld 个日程</string>
+	<key>Allow calendar access</key>
+	<string>允许访问日历</string>
+	<key>Apply to</key>
+	<string>应用到</string>
+	<key>Calendar</key>
+	<string>日历</string>
+	<key>Calendar access is required.</key>
+	<string>需要日历访问权限。</string>
+	<key>Calendar access is turned off.</key>
+	<string>日历访问已关闭。</string>
+	<key>Cancel</key>
+	<string>取消</string>
+	<key>Delete</key>
+	<string>删除</string>
+	<key>Delete event</key>
+	<string>删除日程</string>
+	<key>Delete event?</key>
+	<string>删除日程？</string>
+	<key>Edit event</key>
+	<string>编辑日程</string>
+	<key>Ends</key>
+	<string>结束</string>
+	<key>Enter an event title.</key>
+	<string>请输入日程标题。</string>
+	<key>Event title</key>
+	<string>日程标题</string>
+	<key>Location</key>
+	<string>地点</string>
+	<key>New event</key>
+	<string>新建日程</string>
+	<key>No events</key>
+	<string>无日程</string>
+	<key>No writable calendar is available.</key>
+	<string>没有可写入的日历。</string>
+	<key>Notes</key>
+	<string>备注</string>
+	<key>Optional</key>
+	<string>可选</string>
+	<key>Save</key>
+	<string>保存</string>
+	<key>Show events from your Mac calendars.</key>
+	<string>显示 Mac 系统日历中的日程。</string>
+	<key>Starts</key>
+	<string>开始</string>
+	<key>The end time must be after the start time.</key>
+	<string>结束时间必须晚于开始时间。</string>
+	<key>This and future events</key>
+	<string>本次及后续日程</string>
+	<key>This event</key>
+	<string>仅本次日程</string>
+	<key>This event and all future occurrences will be deleted.</key>
+	<string>将删除本次及之后的所有重复日程。</string>
+	<key>This event is no longer available.</key>
+	<string>此日程已不存在。</string>
+	<key>This event will be deleted from your calendar.</key>
+	<string>此日程将从系统日历中删除。</string>
+	<key>Title</key>
+	<string>标题</string>
+	<key>Untitled event</key>
+	<string>无标题日程</string>
 </dict>
 </plist>

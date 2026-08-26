@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>WinTaskbar 用于在任务栏日历中显示、创建、编辑和删除你的系统日程。</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>WinTaskbar 用于在任务栏日历中显示、创建、编辑和删除你的系统日程。</string>
+</dict>
+</plist>

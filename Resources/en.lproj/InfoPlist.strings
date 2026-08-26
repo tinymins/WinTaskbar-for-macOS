@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>WinTaskbar displays your calendar events and lets you create, edit, and delete events from the taskbar calendar.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>WinTaskbar displays your calendar events and lets you create, edit, and delete events from the taskbar calendar.</string>
+</dict>
+</plist>

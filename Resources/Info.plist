@@ -45,6 +45,10 @@
     <string>Used only to display the current Wi-Fi network name in the taskbar.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Used for the power actions selected from the WinTaskbar Start menu.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>WinTaskbar displays your calendar events and lets you create, edit, and delete events from the taskbar calendar.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>WinTaskbar displays your calendar events and lets you create, edit, and delete events from the taskbar calendar.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>

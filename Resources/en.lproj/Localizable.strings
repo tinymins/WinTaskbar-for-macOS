@@ -272,5 +272,69 @@
 	<string>Window previews need Screen Recording permission.</string>
 	<key>Windows</key>
 	<string>Windows</string>
+	<key>All day</key>
+	<string>All day</string>
+	<key>%ld more events</key>
+	<string>%ld more events</string>
+	<key>Allow calendar access</key>
+	<string>Allow calendar access</string>
+	<key>Apply to</key>
+	<string>Apply to</string>
+	<key>Calendar</key>
+	<string>Calendar</string>
+	<key>Calendar access is required.</key>
+	<string>Calendar access is required.</string>
+	<key>Calendar access is turned off.</key>
+	<string>Calendar access is turned off.</string>
+	<key>Cancel</key>
+	<string>Cancel</string>
+	<key>Delete</key>
+	<string>Delete</string>
+	<key>Delete event</key>
+	<string>Delete event</string>
+	<key>Delete event?</key>
+	<string>Delete event?</string>
+	<key>Edit event</key>
+	<string>Edit event</string>
+	<key>Ends</key>
+	<string>Ends</string>
+	<key>Enter an event title.</key>
+	<string>Enter an event title.</string>
+	<key>Event title</key>
+	<string>Event title</string>
+	<key>Location</key>
+	<string>Location</string>
+	<key>New event</key>
+	<string>New event</string>
+	<key>No events</key>
+	<string>No events</string>
+	<key>No writable calendar is available.</key>
+	<string>No writable calendar is available.</string>
+	<key>Notes</key>
+	<string>Notes</string>
+	<key>Optional</key>
+	<string>Optional</string>
+	<key>Save</key>
+	<string>Save</string>
+	<key>Show events from your Mac calendars.</key>
+	<string>Show events from your Mac calendars.</string>
+	<key>Starts</key>
+	<string>Starts</string>
+	<key>The end time must be after the start time.</key>
+	<string>The end time must be after the start time.</string>
+	<key>This and future events</key>
+	<string>This and future events</string>
+	<key>This event</key>
+	<string>This event</string>
+	<key>This event and all future occurrences will be deleted.</key>
+	<string>This event and all future occurrences will be deleted.</string>
+	<key>This event is no longer available.</key>
+	<string>This event is no longer available.</string>
+	<key>This event will be deleted from your calendar.</key>
+	<string>This event will be deleted from your calendar.</string>
+	<key>Title</key>
+	<string>Title</string>
+	<key>Untitled event</key>
+	<string>Untitled event</string>
 </dict>
 </plist>

@@ -804,6 +804,80 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    var chinaCalendar = Calendar(identifier: .gregorian)
+    chinaCalendar.locale = Locale(identifier: "zh_CN")
+    chinaCalendar.timeZone = TimeZone(identifier: "Asia/Shanghai") ?? .current
+    func calendarAnnotation(year: Int = 2026, month: Int, day: Int) -> ClockCalendarAnnotation {
+        let date = chinaCalendar.date(from: DateComponents(year: year, month: month, day: day, hour: 12))!
+        let lunar = ClockCalendarLunarCalendar.lunarDate(for: date, timeZone: chinaCalendar.timeZone)
+        return ClockCalendarAnnotationStore.annotation(for: date, lunarDate: lunar, calendar: chinaCalendar)
+    }
+    let armyDay = calendarAnnotation(month: 8, day: 1)
+    let startOfAutumn = calendarAnnotation(month: 8, day: 7)
+    let qixi = calendarAnnotation(month: 8, day: 19)
+    let newYearMakeupDay = calendarAnnotation(month: 1, day: 4)
+    let laborDayHoliday = calendarAnnotation(month: 5, day: 4)
+    let midnightBoundaryJingzhe = calendarAnnotation(year: 2014, month: 3, day: 6)
+    let midnightBoundaryChunfen = calendarAnnotation(year: 2051, month: 3, day: 20)
+    guard armyDay.secondaryLabel == "建军节",
+          armyDay.secondaryLabelKind == .festival,
+          armyDay.isRestDay,
+          startOfAutumn.secondaryLabel == "立秋",
+          startOfAutumn.secondaryLabelKind == .solarTerm,
+          qixi.secondaryLabel == "七夕节",
+          qixi.secondaryLabelKind == .festival,
+          newYearMakeupDay.workState == .makeupWorkday(name: "元旦"),
+          newYearMakeupDay.isWeekend,
+          !newYearMakeupDay.isRestDay,
+          laborDayHoliday.workState == .holiday(name: "劳动节"),
+          laborDayHoliday.isRestDay,
+          midnightBoundaryJingzhe.secondaryLabel == "惊蛰",
+          midnightBoundaryChunfen.secondaryLabel == "春分" else {
+        fputs("SELF-TEST FAILED: Chinese calendar annotation mismatch\n", stderr)
+        return 1
+    }
+
+    let eventStart = chinaCalendar.date(from: DateComponents(
+        year: 2026, month: 8, day: 26, hour: 23, minute: 30
+    ))!
+    let eventEnd = chinaCalendar.date(from: DateComponents(
+        year: 2026, month: 8, day: 27, hour: 0, minute: 30
+    ))!
+    let groupedEvent = SystemCalendarEvent(
+        identity: SystemCalendarEventIdentity(
+            eventIdentifier: "event",
+            calendarItemIdentifier: "item",
+            occurrenceStartDate: eventStart
+        ),
+        title: "Overnight",
+        startDate: eventStart,
+        endDate: eventEnd,
+        isAllDay: false,
+        location: nil,
+        notes: nil,
+        calendarID: "calendar",
+        calendarTitle: "Test",
+        calendarColor: .accent,
+        isEditable: true,
+        isRecurring: false
+    )
+    let groupedInterval = DateInterval(
+        start: chinaCalendar.startOfDay(for: eventStart),
+        end: chinaCalendar.date(byAdding: .day, value: 2, to: chinaCalendar.startOfDay(for: eventStart))!
+    )
+    let groupedEvents = SystemCalendarEventGrouping.group(
+        [groupedEvent],
+        in: groupedInterval,
+        calendar: chinaCalendar
+    )
+    let firstEventDay = ClockCalendarDateKey(year: 2026, month: 8, day: 26)
+    let secondEventDay = ClockCalendarDateKey(year: 2026, month: 8, day: 27)
+    guard groupedEvents[firstEventDay]?.first?.title == "Overnight",
+          groupedEvents[secondEventDay]?.first?.title == "Overnight" else {
+        fputs("SELF-TEST FAILED: system calendar event day grouping mismatch\n", stderr)
+        return 1
+    }
+
     var calendarTransitionSequence = ClockCalendarPanelTransitionSequence()
     let firstCalendarPresentation = calendarTransitionSequence.begin()
     let calendarDismissal = calendarTransitionSequence.begin()
