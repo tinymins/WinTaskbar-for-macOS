@@ -28,6 +28,7 @@ enum QuickSettingsPanelMetrics {
     static let contentSize = CGSize(width: 360, height: 335)
     static let settingsGridHeight: CGFloat = 213
     static let tileSize = CGSize(width: 96, height: 47)
+    static let splitSegmentWidth: CGFloat = (tileSize.width - 1) / 2
     static let tileLabelHeight: CGFloat = 15
     static let volumeHeight: CGFloat = 72
     static let footerHeight: CGFloat = 48
@@ -172,21 +173,24 @@ private struct QuickSettingsPanelView: View {
                     symbol: service.wifiPoweredOn ? "wifi" : "wifi.slash",
                     isActive: service.wifiPoweredOn,
                     primaryAction: { service.setWiFiPower(!service.wifiPoweredOn) },
-                    detailAction: showWiFiPage
+                    detailAction: showWiFiPage,
+                    showsInlineChevron: false
                 )
                 QuickSettingTile(
                     label: "Not connected",
                     symbol: "bluetooth",
                     isActive: true,
                     primaryAction: onOpenBluetoothSettings,
-                    detailAction: { page = .bluetooth }
+                    detailAction: { page = .bluetooth },
+                    showsInlineChevron: false
                 )
                 QuickSettingTile(
                     label: "Airplane mode",
                     symbol: "airplane",
                     isActive: false,
                     primaryAction: {},
-                    detailAction: nil
+                    detailAction: nil,
+                    showsInlineChevron: false
                 )
             }
             HStack(spacing: 12) {
@@ -194,22 +198,25 @@ private struct QuickSettingsPanelView: View {
                     label: "Accessibility",
                     symbol: "figure.arms.open",
                     isActive: false,
-                    primaryAction: onOpenAccessibilitySettings,
-                    detailAction: { page = .accessibility }
+                    primaryAction: { page = .accessibility },
+                    detailAction: nil,
+                    showsInlineChevron: true
                 )
                 QuickSettingTile(
                     label: "Energy saver",
                     symbol: "leaf",
                     isActive: service.isLowPowerModeEnabled,
                     primaryAction: onOpenBatterySettings,
-                    detailAction: nil
+                    detailAction: nil,
+                    showsInlineChevron: false
                 )
                 QuickSettingTile(
                     label: "Live captions",
                     symbol: "captions.bubble",
                     isActive: false,
                     primaryAction: onOpenAccessibilitySettings,
-                    detailAction: nil
+                    detailAction: nil,
+                    showsInlineChevron: false
                 )
             }
         }
@@ -554,18 +561,27 @@ private struct QuickSettingTile: View {
     let isActive: Bool
     let primaryAction: () -> Void
     let detailAction: (() -> Void)?
-    @State private var isHovering = false
+    let showsInlineChevron: Bool
+    @State private var isPrimaryHovering = false
+    @State private var isDetailHovering = false
 
     var body: some View {
         VStack(spacing: 8) {
             HStack(spacing: 0) {
                 Button(action: primaryAction) {
-                    tileIcon
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    primaryContent
+                        .frame(
+                            width: detailAction == nil
+                                ? QuickSettingsPanelMetrics.tileSize.width
+                                : QuickSettingsPanelMetrics.splitSegmentWidth,
+                            height: QuickSettingsPanelMetrics.tileSize.height
+                        )
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(label) toggle")
+                .background(segmentBackground(isHovering: isPrimaryHovering))
+                .onHover { isPrimaryHovering = $0 }
+                .accessibilityLabel(primaryAccessibilityLabel)
                 if let detailAction {
                     Divider()
                         .overlay(isActive ? Color.white.opacity(0.22) : Color.primary.opacity(0.12))
@@ -573,10 +589,15 @@ private struct QuickSettingTile: View {
                     Button(action: detailAction) {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10, weight: .semibold))
-                            .frame(width: 31, height: QuickSettingsPanelMetrics.tileSize.height)
+                            .frame(
+                                width: QuickSettingsPanelMetrics.splitSegmentWidth,
+                                height: QuickSettingsPanelMetrics.tileSize.height
+                            )
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .background(segmentBackground(isHovering: isDetailHovering))
+                    .onHover { isDetailHovering = $0 }
                     .accessibilityLabel("\(label) details")
                 }
             }
@@ -584,6 +605,7 @@ private struct QuickSettingTile: View {
             .frame(width: QuickSettingsPanelMetrics.tileSize.width,
                    height: QuickSettingsPanelMetrics.tileSize.height)
             .background(tileBackground, in: RoundedRectangle(cornerRadius: 5))
+            .clipShape(RoundedRectangle(cornerRadius: 5))
             .overlay {
                 RoundedRectangle(cornerRadius: 5)
                     .stroke(Color.primary.opacity(isActive ? 0 : 0.12), lineWidth: 0.5)
@@ -595,12 +617,36 @@ private struct QuickSettingTile: View {
                        height: QuickSettingsPanelMetrics.tileLabelHeight)
         }
         .contentShape(Rectangle())
-        .onHover { isHovering = $0 }
     }
 
     private var tileBackground: Color {
-        if isActive { return Color(red: 0.25, green: 0.74, blue: 0.95).opacity(isHovering ? 0.86 : 1) }
-        return Color.primary.opacity(isHovering ? 0.10 : 0.06)
+        if isActive { return Color(red: 0.25, green: 0.74, blue: 0.95) }
+        return Color.primary.opacity(0.06)
+    }
+
+    private func segmentBackground(isHovering: Bool) -> Color {
+        guard isHovering else { return .clear }
+        if isActive { return Color(red: 0.65, green: 0.91, blue: 0.99) }
+        return Color.primary.opacity(0.10)
+    }
+
+    private var primaryAccessibilityLabel: String {
+        if showsInlineChevron { return "\(label) details" }
+        if detailAction != nil { return "\(label) toggle" }
+        return label
+    }
+
+    @ViewBuilder
+    private var primaryContent: some View {
+        if showsInlineChevron {
+            HStack(spacing: 8) {
+                tileIcon
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+            }
+        } else {
+            tileIcon
+        }
     }
 
     @ViewBuilder
