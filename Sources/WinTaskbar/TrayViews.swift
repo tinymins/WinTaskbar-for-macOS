@@ -149,24 +149,29 @@ struct InputSourceTrayView: View {
 
 struct ClockTrayView: View {
     @ObservedObject var service: SystemStatusService
-    let horizontal: Bool
-    @State private var showPopover = false
-    @State private var selectedDate = Date()
+    let position: TaskbarPosition
+    let barHeight: CGFloat
+    let theme: AppTheme
+    let screen: NSScreen
+    @StateObject private var panelController = ClockCalendarPanelController()
 
     var body: some View {
-        Button { showPopover.toggle() } label: {
+        Button {
+            panelController.toggle(
+                screen: screen,
+                position: position,
+                barHeight: barHeight,
+                theme: theme
+            )
+        } label: {
             VStack(alignment: .trailing, spacing: 0) {
                 Text(service.now, format: .dateTime.hour().minute())
-                if horizontal { Text(service.now, format: .dateTime.day().month(.abbreviated)) }
+                if position.isHorizontal { Text(service.now, format: .dateTime.day().month(.abbreviated)) }
             }.font(.caption2.monospacedDigit())
         }
         .buttonStyle(.plain)
-        .popover(isPresented: $showPopover) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(service.now, format: .dateTime.weekday(.wide).month(.wide).day().year()).font(.headline)
-                DatePicker("Calendar", selection: $selectedDate, displayedComponents: .date)
-                    .datePickerStyle(.graphical).labelsHidden()
-            }.padding(12).frame(width: 300)
-        }
+        .help("Clock and calendar")
+        .accessibilityLabel("Clock and calendar")
+        .onDisappear { panelController.dismiss(animated: false) }
     }
 }

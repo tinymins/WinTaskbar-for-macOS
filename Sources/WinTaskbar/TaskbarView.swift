@@ -466,7 +466,13 @@ struct TaskbarView: View {
             InputSourceTrayView(service: status)
         }
         if preferences.trayClockEnabled {
-            ClockTrayView(service: status, horizontal: preferences.position.isHorizontal)
+            ClockTrayView(
+                service: status,
+                position: preferences.position,
+                barHeight: CGFloat(preferences.barHeight),
+                theme: preferences.theme,
+                screen: screen
+            )
         }
     }
 

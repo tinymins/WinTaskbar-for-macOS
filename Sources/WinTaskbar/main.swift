@@ -691,6 +691,26 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.locale = Locale(identifier: "en_US")
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    calendar.firstWeekday = 1
+    let february2024 = calendar.date(from: DateComponents(year: 2024, month: 2, day: 15))!
+    let calendarDays = ClockCalendarGrid.days(displayedMonth: february2024, calendar: calendar)
+    guard calendarDays.count == 42,
+          calendarDays.filter(\.isInDisplayedMonth).count == 29,
+          calendarDays.first?.day == 28,
+          calendarDays.first?.isInDisplayedMonth == false,
+          calendarDays[4].day == 1,
+          calendarDays[4].isInDisplayedMonth,
+          calendarDays.last?.day == 9,
+          ClockCalendarGrid.weekdaySymbols(calendar: calendar) == ["S", "M", "T", "W", "T", "F", "S"],
+          ClockCalendarMetrics.headerHeight + 1 + ClockCalendarMetrics.calendarHeight + 1
+              + ClockCalendarMetrics.focusHeight == ClockCalendarMetrics.expandedHeight else {
+        fputs("SELF-TEST FAILED: clock calendar grid mismatch\n", stderr)
+        return 1
+    }
+
     let thirdPreviewOwner = WindowPreviewOwnerID(displayID: 1, bundleIdentifier: "com.example.third")
     var previewHoverIntent = WindowPreviewHoverIntent()
     guard WindowPreviewHoverIntent.initialDelayNanoseconds == 400_000_000,
