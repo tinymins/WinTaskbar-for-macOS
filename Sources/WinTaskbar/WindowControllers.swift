@@ -185,6 +185,10 @@ struct WindowPreviewPanelUpdateSequence {
     }
 }
 
+enum WindowPreviewHostingPolicy {
+    static let sizingOptions: NSHostingSizingOptions = []
+}
+
 struct WindowPreviewPanelMotion {
     static let duration: TimeInterval = 0.28
     static let firstControlPoint = CGPoint(x: 0.8, y: 0)
@@ -223,6 +227,7 @@ final class WindowPreviewPanelController: ObservableObject {
         backdrop.layer?.borderWidth = 0.5
         backdrop.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
 
+        hostingView.sizingOptions = WindowPreviewHostingPolicy.sizingOptions
         hostingView.translatesAutoresizingMaskIntoConstraints = false
         backdrop.addSubview(hostingView)
         NSLayoutConstraint.activate([

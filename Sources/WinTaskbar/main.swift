@@ -482,6 +482,7 @@ func runSelfTest() async -> Int32 {
           ),
           !previewUpdateSequence.isCurrent(stalePreviewUpdate),
           previewUpdateSequence.isCurrent(currentPreviewUpdate),
+          WindowPreviewHostingPolicy.sizingOptions.isEmpty,
           WindowPreviewPanelMotion.duration == 0.28,
           WindowPreviewPanelMotion.firstControlPoint == CGPoint(x: 0.8, y: 0),
           WindowPreviewPanelMotion.secondControlPoint == CGPoint(x: 0.2, y: 1),
