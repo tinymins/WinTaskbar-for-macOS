@@ -18,6 +18,42 @@ struct ClockCalendarDay: Equatable, Identifiable {
     var id: Date { date }
 }
 
+struct ClockCalendarLunarDate: Equatable {
+    let month: Int
+    let day: Int
+    let isLeapMonth: Bool
+
+    var compactLabel: String {
+        guard day == 1 else { return Self.dayNames[day - 1] }
+        return "\(isLeapMonth ? "闰" : "")\(Self.monthNames[month - 1])月"
+    }
+
+    var fullLabel: String {
+        "农历\(isLeapMonth ? "闰" : "")\(Self.monthNames[month - 1])月\(Self.dayNames[day - 1])"
+    }
+
+    private static let monthNames = ["正", "二", "三", "四", "五", "六", "七", "八", "九", "十", "冬", "腊"]
+    private static let dayNames = [
+        "初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
+        "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
+        "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"
+    ]
+}
+
+enum ClockCalendarLunarCalendar {
+    static func lunarDate(for date: Date, timeZone: TimeZone = .autoupdatingCurrent) -> ClockCalendarLunarDate {
+        var calendar = Calendar(identifier: .chinese)
+        calendar.locale = Locale(identifier: "zh_CN")
+        calendar.timeZone = timeZone
+        let components = calendar.dateComponents([.month, .day], from: date)
+        return ClockCalendarLunarDate(
+            month: components.month ?? 1,
+            day: components.day ?? 1,
+            isLeapMonth: components.isLeapMonth ?? false
+        )
+    }
+}
+
 enum ClockCalendarGrid {
     static func days(displayedMonth: Date, calendar: Calendar) -> [ClockCalendarDay] {
         guard let monthInterval = calendar.dateInterval(of: .month, for: displayedMonth) else { return [] }
@@ -313,8 +349,13 @@ private struct ClockCalendarDayButton: View {
 
     var body: some View {
         Button { state.select(day.date) } label: {
-            Text("\(day.day)")
-                .font(.system(size: 14))
+            VStack(spacing: -1) {
+                Text("\(day.day)")
+                    .font(.system(size: 14))
+                Text(lunarDate.compactLabel)
+                    .font(.system(size: 9))
+                    .opacity(0.78)
+            }
                 .foregroundStyle(foregroundColor)
                 .frame(width: 40, height: 40)
                 .background(background)
@@ -323,7 +364,11 @@ private struct ClockCalendarDayButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .accessibilityLabel(day.date.formatted(date: .complete, time: .omitted))
+        .accessibilityLabel("\(day.date.formatted(date: .complete, time: .omitted)), \(lunarDate.fullLabel)")
+    }
+
+    private var lunarDate: ClockCalendarLunarDate {
+        ClockCalendarLunarCalendar.lunarDate(for: day.date)
     }
 
     private var isToday: Bool {

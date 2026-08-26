@@ -704,6 +704,24 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    let shanghaiTimeZone = TimeZone(identifier: "Asia/Shanghai")!
+    let lunarNewYear = ClockCalendarLunarCalendar.lunarDate(
+        for: calendar.date(from: DateComponents(year: 2024, month: 2, day: 10))!,
+        timeZone: shanghaiTimeZone
+    )
+    let leapMonth = ClockCalendarLunarCalendar.lunarDate(
+        for: calendar.date(from: DateComponents(year: 2023, month: 3, day: 22))!,
+        timeZone: shanghaiTimeZone
+    )
+    guard lunarNewYear == ClockCalendarLunarDate(month: 1, day: 1, isLeapMonth: false),
+          lunarNewYear.compactLabel == "正月",
+          lunarNewYear.fullLabel == "农历正月初一",
+          leapMonth == ClockCalendarLunarDate(month: 2, day: 1, isLeapMonth: true),
+          leapMonth.compactLabel == "闰二月" else {
+        fputs("SELF-TEST FAILED: Chinese lunar calendar conversion mismatch\n", stderr)
+        return 1
+    }
+
     var calendarTransitionSequence = ClockCalendarPanelTransitionSequence()
     let firstCalendarPresentation = calendarTransitionSequence.begin()
     let calendarDismissal = calendarTransitionSequence.begin()
