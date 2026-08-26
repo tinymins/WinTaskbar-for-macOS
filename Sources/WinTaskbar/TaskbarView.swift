@@ -13,6 +13,7 @@ struct TaskbarView: View {
     let windowPeekController: WindowPeekController
     @ObservedObject var windowPreviewPanelController: WindowPreviewPanelController
     @ObservedObject var taskbarJumpListController: TaskbarJumpListController
+    let shortcutEditorController: ShortcutEditorController
     let screen: NSScreen
 
     var body: some View {
@@ -157,7 +158,8 @@ struct TaskbarView: View {
             windowsService: windowsService,
             windowPeekController: windowPeekController,
             windowPreviewPanelController: windowPreviewPanelController,
-            taskbarJumpListController: taskbarJumpListController
+            taskbarJumpListController: taskbarJumpListController,
+            shortcutEditorController: shortcutEditorController
         )
         .draggable(item.bundleIdentifier)
         .dropDestination(for: String.self) { bundleIDs, _ in
@@ -434,9 +436,9 @@ private struct TaskbarAppButton: View {
     let windowPeekController: WindowPeekController
     @ObservedObject var windowPreviewPanelController: WindowPreviewPanelController
     @ObservedObject var taskbarJumpListController: TaskbarJumpListController
+    let shortcutEditorController: ShortcutEditorController
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
-    @State private var showShortcutEditor = false
     @State private var attentionPulse = false
     @State private var attentionTask: Task<Void, Never>?
 
@@ -515,14 +517,6 @@ private struct TaskbarAppButton: View {
                 }
             }
         }
-        .sheet(isPresented: $showShortcutEditor) {
-            ShortcutEditorView(
-                bundleID: item.bundleIdentifier,
-                appName: item.name,
-                preferences: preferences,
-                isPresented: $showShortcutEditor
-            )
-        }
     }
 
     private func showJumpList(relativeTo anchorView: NSView) {
@@ -552,7 +546,10 @@ private struct TaskbarAppButton: View {
             },
             onManageShortcuts: {
                 taskbarJumpListController.dismiss()
-                showShortcutEditor = true
+                shortcutEditorController.present(
+                    bundleID: item.bundleIdentifier,
+                    appName: item.name
+                )
             },
             onShowInFinder: {
                 taskbarJumpListController.dismiss()
@@ -757,54 +754,6 @@ private struct TaskbarAppButton: View {
         case .left: .leading
         case .right: .trailing
         }
-    }
-}
-
-private struct ShortcutEditorView: View {
-    let bundleID: String
-    let appName: String
-    @ObservedObject var preferences: PreferencesStore
-    @Binding var isPresented: Bool
-    @State private var newName = ""
-    @State private var newTarget = ""
-
-    private var shortcuts: [PinnedShortcut] { preferences.pinnedShortcuts[bundleID] ?? [] }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("\(appName) Shortcuts").font(.title2.bold())
-            List {
-                ForEach(shortcuts) { shortcut in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(shortcut.name)
-                            Text(shortcut.target).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                        Spacer()
-                        Button("Remove") { remove(shortcut) }
-                    }
-                }
-            }
-            HStack {
-                TextField("Name", text: $newName)
-                TextField("File path or URL", text: $newTarget)
-                Button("Add", action: add).disabled(newName.isEmpty || newTarget.isEmpty)
-            }
-            HStack { Spacer(); Button("Done") { isPresented = false }.keyboardShortcut(.defaultAction) }
-        }
-        .padding(20).frame(width: 520, height: 360)
-    }
-
-    private func add() {
-        var values = shortcuts
-        values.append(PinnedShortcut(name: newName, target: newTarget))
-        preferences.pinnedShortcuts[bundleID] = values
-        newName = ""
-        newTarget = ""
-    }
-
-    private func remove(_ shortcut: PinnedShortcut) {
-        preferences.pinnedShortcuts[bundleID] = shortcuts.filter { $0.id != shortcut.id }
     }
 }
 

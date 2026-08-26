@@ -441,6 +441,11 @@ func runSelfTest() async -> Int32 {
           ).minX == 8,
           TaskbarJumpListInteractionPolicy.shouldDismissMenuOnAppHover(hovering: true),
           !TaskbarJumpListInteractionPolicy.shouldDismissMenuOnAppHover(hovering: false),
+          ShortcutEditorMetrics.contentSize(shortcutCount: 0) == CGSize(width: 540, height: 206),
+          ShortcutEditorMetrics.contentSize(shortcutCount: 1) == CGSize(width: 540, height: 360),
+          ShortcutEditorValidation.canAdd(name: "Project", target: "/tmp/project"),
+          !ShortcutEditorValidation.canAdd(name: "   ", target: "/tmp/project"),
+          !ShortcutEditorValidation.canAdd(name: "Project", target: "\n"),
           TaskbarAppClickPolicy.action(
               windows: [],
               isApplicationActive: true,

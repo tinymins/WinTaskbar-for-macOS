@@ -426,6 +426,7 @@ final class TaskbarWindowController {
     private let windowPeekController: WindowPeekController
     private let windowPreviewPanelController = WindowPreviewPanelController()
     private let taskbarJumpListController = TaskbarJumpListController()
+    private let shortcutEditorController: ShortcutEditorController
     private let dockBadges: DockBadgeService
     private var panels: [TaskbarPanel] = []
     private var cancellable: AnyCancellable?
@@ -445,6 +446,7 @@ final class TaskbarWindowController {
         self.actions = actions
         self.windowActivator = windowActivator
         self.windowsService = windowsService
+        shortcutEditorController = ShortcutEditorController(preferences: preferences)
         windowPeekController = WindowPeekController(windowsService: windowsService)
         self.dockBadges = dockBadges
         cancellable = preferences.objectWillChange.sink { [weak self] _ in
@@ -512,6 +514,7 @@ final class TaskbarWindowController {
             windowPeekController: windowPeekController,
             windowPreviewPanelController: windowPreviewPanelController,
             taskbarJumpListController: taskbarJumpListController,
+            shortcutEditorController: shortcutEditorController,
             screen: screen
         ))
         applyAppearance(to: panel)
