@@ -532,6 +532,7 @@ struct ClockCalendarPanelView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .padding(.horizontal, 16)
+        .padding(.top, 4)
     }
 
     @ViewBuilder
