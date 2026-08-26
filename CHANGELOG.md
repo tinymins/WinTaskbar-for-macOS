@@ -2,6 +2,13 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.5] - 2026-08-26
+
+### Fixed
+
+- Reapply the saved system Dock hiding preference whenever WinTaskbar launches.
+- Restore the system Dock on exit without clearing the preference used by the next launch.
+
 ## [0.0.4] - 2026-08-26
 
 ### Added
@@ -20,5 +27,6 @@ All notable changes to WinTaskbar for macOS are documented here.
 - Show window previews immediately when hovering over a taskbar app while retaining a short dismissal delay.
 - Match Windows preview thumbnail proportions and refine preview panel styling.
 
+[0.0.5]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.2...v0.0.3
