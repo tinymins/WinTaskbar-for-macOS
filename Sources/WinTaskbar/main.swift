@@ -379,6 +379,9 @@ func runSelfTest() async -> Int32 {
               displayedOwnerID: firstPreviewOwner,
               targetOwnerID: secondPreviewOwner
           ),
+          WindowPreviewPanelMotion.duration == 0.22,
+          WindowPreviewPanelMotion.firstControlPoint == CGPoint(x: 0.8, y: 0),
+          WindowPreviewPanelMotion.secondControlPoint == CGPoint(x: 0.2, y: 1),
           WindowPreviewHoverPolicy.action(
               hovering: true,
               previewsEnabled: true,
