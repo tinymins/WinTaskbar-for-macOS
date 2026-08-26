@@ -162,8 +162,6 @@ final class ClockCalendarPanelController: ObservableObject {
         backdrop.layer?.cornerRadius = 8
         backdrop.layer?.cornerCurve = .continuous
         backdrop.layer?.masksToBounds = true
-        backdrop.layer?.borderWidth = 0.5
-        backdrop.layer?.borderColor = NSColor.white.withAlphaComponent(0.06).cgColor
 
         hostingView.frame = backdrop.bounds
         hostingView.autoresizingMask = [.width, .height]
