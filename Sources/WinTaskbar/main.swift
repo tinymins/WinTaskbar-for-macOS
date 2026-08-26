@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let actions = AppActions()
     private let windowsService = WindowsService()
     private lazy var windowActivator = WindowActivationService(windowsService: windowsService)
+    private let recentDocuments = RecentDocumentsService()
     private let dockBadges = DockBadgeService()
     private let powerService = PowerService()
     private let showDesktopService = ShowDesktopService()
@@ -31,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         buildApplicationMenu()
         dockToggleService.applyConfiguredStateOnLaunch()
+        recentDocuments.start()
 
         let taskbar = TaskbarWindowController(
             preferences: preferences,
@@ -39,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             actions: actions,
             windowActivator: windowActivator,
             windowsService: windowsService,
+            recentDocuments: recentDocuments,
             dockBadges: dockBadges
         )
         let startMenu = StartMenuController(
@@ -358,15 +361,30 @@ func runSelfTest() async -> Int32 {
         isMinimized: true
     )
     let jumpListScreen = CGRect(x: 0, y: 0, width: 1200, height: 800)
-    let jumpListSize = TaskbarJumpListMetrics.contentSize(shortcutCount: 0)
+    let jumpListSize = TaskbarJumpListMetrics.contentSize(shortcutCount: 0, recentCount: 0)
     let jumpListShortcuts = (0..<9).map {
         PinnedShortcut(id: "shortcut-\($0)", name: "Shortcut \($0)", target: "/tmp/shortcut-\($0)")
     }
+    let jumpListRecent = (0..<7).map {
+        RecentDocument(
+            url: URL(fileURLWithPath: "/tmp/recent-\($0)", isDirectory: true),
+            label: "Recent \($0)"
+        )
+    }
     let jumpListModel = TaskbarJumpListModel(
         shortcuts: jumpListShortcuts,
+        recentDocuments: jumpListRecent,
         isPinned: true,
         windowCount: 2
     )
+    let recentHistory = RecentDocumentsHistory.recording(
+        bundleID: "test.app",
+        folder: "file:///tmp/new/",
+        in: ["test.app": ["file:///tmp/old/", "file:///tmp/new/"]],
+        limit: 10
+    )
+    defaults.set(["test.app": ["file:///tmp/project/"]], forKey: "winbar.recentProjects")
+    let recentDocuments = RecentDocumentsService(defaults: defaults)
     var previewSelection = WindowPreviewSelection()
     previewSelection.activate(firstPreviewOwner)
     previewSelection.activate(secondPreviewOwner)
@@ -401,14 +419,21 @@ func runSelfTest() async -> Int32 {
           TaskbarButtonMotion.pressDuration == 0.06,
           TaskbarButtonMotion.releaseDuration == 0.08,
           jumpListSize == CGSize(width: 292, height: 195),
-          TaskbarJumpListMetrics.contentSize(shortcutCount: 1) == CGSize(width: 292, height: 260),
-          TaskbarJumpListMetrics.contentSize(shortcutCount: 9) == CGSize(width: 292, height: 498),
+          TaskbarJumpListMetrics.contentSize(shortcutCount: 1, recentCount: 0) == CGSize(width: 292, height: 260),
+          TaskbarJumpListMetrics.contentSize(shortcutCount: 9, recentCount: 0) == CGSize(width: 292, height: 498),
+          TaskbarJumpListMetrics.contentSize(shortcutCount: 9, recentCount: 7) == CGSize(width: 292, height: 733),
           jumpListModel.displayedShortcuts.count == 8,
+          jumpListModel.displayedRecentDocuments.count == 6,
           jumpListModel.closeTitle == "Close all windows",
           jumpListModel.canClose,
-          TaskbarJumpListModel(shortcuts: [], isPinned: false, windowCount: 0).closeTitle == "Close",
-          !TaskbarJumpListModel(shortcuts: [], isPinned: false, windowCount: 0).canClose,
-          TaskbarJumpListModel(shortcuts: [], isPinned: false, windowCount: 1).closeTitle == "Close window",
+          TaskbarJumpListModel(shortcuts: [], recentDocuments: [], isPinned: false, windowCount: 0).closeTitle == "Close",
+          !TaskbarJumpListModel(shortcuts: [], recentDocuments: [], isPinned: false, windowCount: 0).canClose,
+          TaskbarJumpListModel(shortcuts: [], recentDocuments: [], isPinned: false, windowCount: 1).closeTitle == "Close window",
+          recentHistory["test.app"] == ["file:///tmp/new/", "file:///tmp/old/"],
+          recentDocuments.recentDocuments(forBundleID: "test.app").map(\.label) == ["project"],
+          RecentDocumentsService.documentURL(from: "file:///tmp/project/")
+              == URL(string: "file:///tmp/project/"),
+          RecentDocumentsService.documentURL(from: "https://example.com/project/")?.isFileURL == true,
           TaskbarJumpListGeometry.frame(
               anchorFrame: CGRect(x: 500, y: 0, width: 40, height: 48),
               contentSize: jumpListSize,

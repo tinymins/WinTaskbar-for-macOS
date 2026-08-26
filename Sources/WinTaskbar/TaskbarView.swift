@@ -14,6 +14,7 @@ struct TaskbarView: View {
     @ObservedObject var windowPreviewPanelController: WindowPreviewPanelController
     @ObservedObject var taskbarJumpListController: TaskbarJumpListController
     let shortcutEditorController: ShortcutEditorController
+    @ObservedObject var recentDocuments: RecentDocumentsService
     let screen: NSScreen
 
     var body: some View {
@@ -159,7 +160,8 @@ struct TaskbarView: View {
             windowPeekController: windowPeekController,
             windowPreviewPanelController: windowPreviewPanelController,
             taskbarJumpListController: taskbarJumpListController,
-            shortcutEditorController: shortcutEditorController
+            shortcutEditorController: shortcutEditorController,
+            recentDocuments: recentDocuments
         )
         .draggable(item.bundleIdentifier)
         .dropDestination(for: String.self) { bundleIDs, _ in
@@ -437,6 +439,7 @@ private struct TaskbarAppButton: View {
     @ObservedObject var windowPreviewPanelController: WindowPreviewPanelController
     @ObservedObject var taskbarJumpListController: TaskbarJumpListController
     let shortcutEditorController: ShortcutEditorController
+    @ObservedObject var recentDocuments: RecentDocumentsService
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
     @State private var attentionPulse = false
@@ -527,12 +530,19 @@ private struct TaskbarAppButton: View {
         let shortcuts = preferences.showShortcutsInMenu
             ? preferences.pinnedShortcuts[item.bundleIdentifier] ?? []
             : []
+        let recent = preferences.showRecentInMenu
+            ? recentDocuments.recentDocuments(forBundleID: item.bundleIdentifier)
+            : []
         let model = TaskbarJumpListModel(
             shortcuts: shortcuts,
+            recentDocuments: recent,
             isPinned: item.isPinned,
             windowCount: windows.count
         )
-        let contentSize = TaskbarJumpListMetrics.contentSize(shortcutCount: shortcuts.count)
+        let contentSize = TaskbarJumpListMetrics.contentSize(
+            shortcutCount: shortcuts.count,
+            recentCount: recent.count
+        )
         let rootView = TaskbarJumpListView(
             item: item,
             model: model,
@@ -543,6 +553,10 @@ private struct TaskbarAppButton: View {
             onOpenShortcut: { shortcut in
                 taskbarJumpListController.dismiss()
                 if let url = shortcut.url { NSWorkspace.shared.open(url) }
+            },
+            onOpenRecent: { document in
+                taskbarJumpListController.dismiss()
+                recentDocuments.open(document, with: item)
             },
             onManageShortcuts: {
                 taskbarJumpListController.dismiss()

@@ -252,3 +252,142 @@ struct WindowPreviewWindowPolicy {
         }
     }
 }
+
+enum ProjectFolder {
+    private static let markers: Set<String> = [
+        ".git", ".svn", "package.json", "Package.swift", "Cargo.toml", "go.mod", "pyproject.toml",
+        "pom.xml", "build.gradle", "tsconfig.json",
+    ]
+
+    static func resolve(forFile url: URL) -> URL {
+        let startingFolder = url.hasDirectoryPath ? url : url.deletingLastPathComponent()
+        return root(forFile: startingFolder) ?? startingFolder
+    }
+
+    static func root(forFile url: URL) -> URL? {
+        var folder = url.standardizedFileURL
+        let fileManager = FileManager.default
+        while folder.path != "/" {
+            if markers.contains(where: {
+                fileManager.fileExists(atPath: folder.appendingPathComponent($0).path)
+            }) {
+                return folder
+            }
+            let parent = folder.deletingLastPathComponent()
+            guard parent != folder else { break }
+            folder = parent
+        }
+        return nil
+    }
+}
+
+struct RecentDocumentsHistory {
+    static func recording(
+        bundleID: String,
+        folder: String,
+        in store: [String: [String]],
+        limit: Int
+    ) -> [String: [String]] {
+        var result = store
+        var values = result[bundleID] ?? []
+        values.removeAll { $0 == folder }
+        values.insert(folder, at: 0)
+        result[bundleID] = Array(values.prefix(limit))
+        return result
+    }
+}
+
+@MainActor
+final class RecentDocumentsService: ObservableObject {
+    private static let storageKey = "winbar.recentProjects"
+    private let defaults: UserDefaults
+    private let maxPerApp = 10
+    @Published private var store: [String: [String]]
+    nonisolated(unsafe) private var observer: NSObjectProtocol?
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        store = defaults.dictionary(forKey: Self.storageKey) as? [String: [String]] ?? [:]
+    }
+
+    deinit {
+        if let observer {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        }
+    }
+
+    func start() {
+        guard observer == nil else { return }
+        observer = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                    as? NSRunningApplication,
+                  let bundleID = application.bundleIdentifier,
+                  application.processIdentifier != ProcessInfo.processInfo.processIdentifier,
+                  let documentURL = Self.focusedDocumentURL(pid: application.processIdentifier) else { return }
+            let folder = ProjectFolder.resolve(forFile: documentURL).absoluteString
+            Task { @MainActor [weak self] in
+                self?.record(bundleID: bundleID, folder: folder)
+            }
+        }
+    }
+
+    func recentDocuments(forBundleID bundleID: String, limit: Int = 10) -> [RecentDocument] {
+        (store[bundleID] ?? []).prefix(limit).compactMap { raw in
+            guard let url = URL(string: raw) else { return nil }
+            let label = url.lastPathComponent.isEmpty ? url.absoluteString : url.lastPathComponent
+            return RecentDocument(url: url, label: label)
+        }
+    }
+
+    func open(_ document: RecentDocument, with item: TaskbarItem) {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.open([document.url], withApplicationAt: item.url, configuration: configuration)
+    }
+
+    nonisolated static func documentURL(from rawValue: String) -> URL? {
+        guard !rawValue.isEmpty else { return nil }
+        if rawValue.hasPrefix("file:") {
+            guard let url = URL(string: rawValue), url.isFileURL else { return nil }
+            return url
+        }
+        let url = URL(fileURLWithPath: rawValue)
+        return url.isFileURL ? url : nil
+    }
+
+    private nonisolated static func focusedDocumentURL(pid: pid_t) -> URL? {
+        let application = AXUIElementCreateApplication(pid)
+        var focusedRaw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            application,
+            kAXFocusedWindowAttribute as CFString,
+            &focusedRaw
+        ) == .success,
+        let focusedRaw,
+        CFGetTypeID(focusedRaw) == AXUIElementGetTypeID() else { return nil }
+
+        let focusedWindow = focusedRaw as! AXUIElement
+        var documentRaw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            focusedWindow,
+            kAXDocumentAttribute as CFString,
+            &documentRaw
+        ) == .success,
+        let document = documentRaw as? String else { return nil }
+        return documentURL(from: document)
+    }
+
+    private func record(bundleID: String, folder: String) {
+        store = RecentDocumentsHistory.recording(
+            bundleID: bundleID,
+            folder: folder,
+            in: store,
+            limit: maxPerApp
+        )
+        defaults.set(store, forKey: Self.storageKey)
+    }
+}

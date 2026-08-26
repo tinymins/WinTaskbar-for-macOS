@@ -3,13 +3,19 @@ import SwiftUI
 
 struct TaskbarJumpListModel: Equatable {
     static let maximumShortcutCount = 8
+    static let maximumRecentCount = 6
 
     let shortcuts: [PinnedShortcut]
+    let recentDocuments: [RecentDocument]
     let isPinned: Bool
     let windowCount: Int
 
     var displayedShortcuts: [PinnedShortcut] {
         Array(shortcuts.prefix(Self.maximumShortcutCount))
+    }
+
+    var displayedRecentDocuments: [RecentDocument] {
+        Array(recentDocuments.prefix(Self.maximumRecentCount))
     }
 
     var closeTitle: String {
@@ -30,15 +36,20 @@ enum TaskbarJumpListMetrics {
     static let dividerBlockHeight: CGFloat = 9
     static let verticalPadding: CGFloat = 8
 
-    static func contentSize(shortcutCount: Int) -> CGSize {
+    static func contentSize(shortcutCount: Int, recentCount: Int) -> CGSize {
         let visibleShortcutCount = min(max(0, shortcutCount), TaskbarJumpListModel.maximumShortcutCount)
+        let visibleRecentCount = min(max(0, recentCount), TaskbarJumpListModel.maximumRecentCount)
         let pinnedHeight = visibleShortcutCount > 0
             ? sectionHeaderHeight + CGFloat(visibleShortcutCount) * rowHeight + dividerBlockHeight
+            : 0
+        let recentHeight = visibleRecentCount > 0
+            ? sectionHeaderHeight + CGFloat(visibleRecentCount) * rowHeight + dividerBlockHeight
             : 0
         let commandRows: CGFloat = 5
         return CGSize(
             width: width,
-            height: verticalPadding * 2 + pinnedHeight + commandRows * rowHeight + dividerBlockHeight
+            height: verticalPadding * 2 + recentHeight + pinnedHeight
+                + commandRows * rowHeight + dividerBlockHeight
         )
     }
 }
@@ -261,6 +272,7 @@ struct TaskbarJumpListView: View {
     let model: TaskbarJumpListModel
     let onOpenApp: () -> Void
     let onOpenShortcut: (PinnedShortcut) -> Void
+    let onOpenRecent: (RecentDocument) -> Void
     let onManageShortcuts: () -> Void
     let onShowInFinder: () -> Void
     let onTogglePin: () -> Void
@@ -268,6 +280,18 @@ struct TaskbarJumpListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if !model.displayedRecentDocuments.isEmpty {
+                sectionTitle("Recent")
+                ForEach(model.displayedRecentDocuments) { document in
+                    TaskbarJumpListRow(
+                        title: document.label,
+                        systemImage: document.url.isFileURL ? "folder" : "link",
+                        action: { onOpenRecent(document) }
+                    )
+                }
+                sectionDivider
+            }
+
             if !model.displayedShortcuts.isEmpty {
                 sectionTitle("Pinned")
                 ForEach(model.displayedShortcuts) { shortcut in

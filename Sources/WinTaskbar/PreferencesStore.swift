@@ -41,6 +41,7 @@ final class PreferencesStore: ObservableObject {
     @Published var showDesktopEnabled: Bool { didSet { defaults.set(showDesktopEnabled, forKey: "wintaskbar.feature.showDesktop") } }
     @Published var globalHotkeysEnabled: Bool { didSet { defaults.set(globalHotkeysEnabled, forKey: "wintaskbar.feature.globalHotkeys") } }
     @Published var hotkeyShortcuts: [HotkeyShortcut] { didSet { Self.store(hotkeyShortcuts, key: "wintaskbar.hotkeyShortcuts", defaults: defaults) } }
+    @Published var showRecentInMenu: Bool { didSet { defaults.set(showRecentInMenu, forKey: "wintaskbar.showRecentInMenu") } }
     @Published var showShortcutsInMenu: Bool { didSet { defaults.set(showShortcutsInMenu, forKey: "wintaskbar.showShortcutsInMenu") } }
     @Published var groupStartMenuByCategory: Bool { didSet { defaults.set(groupStartMenuByCategory, forKey: "wintaskbar.groupStartMenuByCategory") } }
     @Published var pinnedBundleIDs: [String] { didSet { defaults.set(pinnedBundleIDs, forKey: "wintaskbar.pinnedBundleIDs") } }
@@ -93,6 +94,7 @@ final class PreferencesStore: ObservableObject {
         globalHotkeysEnabled = defaults.object(forKey: "wintaskbar.feature.globalHotkeys") as? Bool ?? true
         hotkeyShortcuts = Self.load([HotkeyShortcut].self, key: "wintaskbar.hotkeyShortcuts", defaults: defaults)
             ?? Self.defaultHotkeyShortcuts
+        showRecentInMenu = defaults.object(forKey: "wintaskbar.showRecentInMenu") as? Bool ?? true
         showShortcutsInMenu = defaults.object(forKey: "wintaskbar.showShortcutsInMenu") as? Bool ?? true
         groupStartMenuByCategory = defaults.object(forKey: "wintaskbar.groupStartMenuByCategory") as? Bool ?? false
         pinnedBundleIDs = defaults.stringArray(forKey: "wintaskbar.pinnedBundleIDs")
@@ -151,6 +153,7 @@ final class PreferencesStore: ObservableObject {
         showDesktopEnabled = true
         globalHotkeysEnabled = true
         hotkeyShortcuts = Self.defaultHotkeyShortcuts
+        showRecentInMenu = true
         showShortcutsInMenu = true
         groupStartMenuByCategory = false
         pinnedBundleIDs = ["com.apple.finder"]

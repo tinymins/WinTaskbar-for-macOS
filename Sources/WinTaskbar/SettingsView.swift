@@ -168,6 +168,7 @@ struct SettingsView: View {
                 Toggle("Global Hotkeys", isOn: $preferences.globalHotkeysEnabled)
             }
             SettingsSection("Taskbar menu") {
+                Toggle("Recent items", isOn: $preferences.showRecentInMenu)
                 Toggle("Shortcuts", isOn: $preferences.showShortcutsInMenu)
             }
             SettingsSection("System Tray") {
