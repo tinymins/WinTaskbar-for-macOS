@@ -121,7 +121,6 @@ struct TaskbarView: View {
                         Spacer(minLength: 8)
                         if showsStartButtonBeforeTray { startButton }
                         tray
-                        if preferences.showDesktopEnabled { showDesktopStrip(horizontal: true) }
                         if showsStartButtonAtOppositeEnd { startButton }
                     }
                     .padding(.horizontal, StartMenuGeometry.screenEdgeInset)
@@ -134,7 +133,6 @@ struct TaskbarView: View {
                         Spacer(minLength: 8)
                         if showsStartButtonBeforeTray { startButton }
                         tray
-                        if preferences.showDesktopEnabled { showDesktopStrip(horizontal: false) }
                         if showsStartButtonAtOppositeEnd { startButton }
                     }
                     .padding(.vertical, StartMenuGeometry.screenEdgeInset)
@@ -149,6 +147,11 @@ struct TaskbarView: View {
             .overlay(alignment: .topLeading) {
                 TaskbarDragPreviewLayer(state: dragPreviewState) { preview in
                     dragPreview(for: preview.item, icon: preview.icon)
+                }
+            }
+            .overlay(alignment: horizontal ? .trailing : .bottom) {
+                if preferences.showDesktopEnabled {
+                    showDesktopStrip(horizontal: horizontal)
                 }
             }
             .dropDestination(for: URL.self) { urls, _ in
@@ -482,11 +485,18 @@ struct TaskbarView: View {
     }
 
     private func showDesktopStrip(horizontal: Bool) -> some View {
-        Button(action: actions.showDesktop) {
-            Rectangle().fill(Color.primary.opacity(0.18))
-                .frame(width: horizontal ? 4 : itemGeometry.cellSize, height: horizontal ? itemGeometry.cellSize : 4)
+        WindowsTrayIconButton(
+            title: "Show desktop",
+            accessibilityLabel: "Show Desktop",
+            visualStyle: .showDesktop(horizontal: horizontal),
+            primaryAction: actions.showDesktop
+        ) {
+            Color.clear
         }
-        .buttonStyle(.plain).help("Show Desktop")
+        .frame(
+            width: horizontal ? WindowsTrayIconMetrics.showDesktopHitThickness : WindowsTrayIconMetrics.controlHeight,
+            height: horizontal ? WindowsTrayIconMetrics.controlHeight : WindowsTrayIconMetrics.showDesktopHitThickness
+        )
     }
 
     private var panelBackground: some View {

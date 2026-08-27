@@ -11,6 +11,15 @@ enum WindowsTrayIconMetrics {
     static let horizontalContentPadding: CGFloat = 7
     static let tooltipGap: CGFloat = 4
     static let clockTooltipGap: CGFloat = 10
+    static let showDesktopHitThickness: CGFloat = 8
+    static let showDesktopVisibleThickness: CGFloat = 1
+    static let showDesktopIndicatorLength: CGFloat = 32
+    static let showDesktopIndicatorEdgeInset: CGFloat = 4
+}
+
+enum WindowsTrayIconAppearance {
+    case standard
+    case showDesktop(horizontal: Bool)
 }
 
 @MainActor
@@ -47,6 +56,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     let title: String
     let accessibilityLabel: String
     let tooltipGap: CGFloat
+    let visualStyle: WindowsTrayIconAppearance
     let primaryAction: () -> Void
     let contextAction: (() -> Void)?
     private let content: Content
@@ -55,6 +65,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         title: String,
         accessibilityLabel: String? = nil,
         tooltipGap: CGFloat = WindowsTrayIconMetrics.tooltipGap,
+        visualStyle: WindowsTrayIconAppearance = .standard,
         primaryAction: @escaping () -> Void,
         contextAction: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
@@ -62,6 +73,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         self.title = title
         self.accessibilityLabel = accessibilityLabel ?? title
         self.tooltipGap = tooltipGap
+        self.visualStyle = visualStyle
         self.primaryAction = primaryAction
         self.contextAction = contextAction
         self.content = content()
@@ -85,6 +97,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         ))
         control.hoverTitle = title
         control.tooltipGap = tooltipGap
+        control.visualStyle = visualStyle
         control.onLeftActivate = primaryAction
         control.onRightActivate = contextAction
         control.setAccessibilityElement(true)
@@ -97,6 +110,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
 final class WindowsTrayIconControl: NSControl {
     var hoverTitle = ""
     var tooltipGap = WindowsTrayIconMetrics.tooltipGap
+    var visualStyle = WindowsTrayIconAppearance.standard
     var onLeftActivate: (() -> Void)?
     var onRightActivate: (() -> Void)?
 
@@ -181,9 +195,30 @@ final class WindowsTrayIconControl: NSControl {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        if isHovered || isPressed {
+        guard isHovered || isPressed else { return }
+        switch visualStyle {
+        case .standard:
             NSColor.labelColor.withAlphaComponent(isPressed ? 0.16 : 0.10).setFill()
             NSBezierPath(roundedRect: bounds, xRadius: 4, yRadius: 4).fill()
+        case let .showDesktop(horizontal):
+            NSColor.labelColor.withAlphaComponent(isPressed ? 0.45 : 0.24).setFill()
+            let thickness = WindowsTrayIconMetrics.showDesktopVisibleThickness
+            let length = WindowsTrayIconMetrics.showDesktopIndicatorLength
+            let edgeInset = WindowsTrayIconMetrics.showDesktopIndicatorEdgeInset
+            let indicator = horizontal
+                ? CGRect(
+                    x: bounds.maxX - edgeInset - thickness,
+                    y: bounds.midY - length / 2,
+                    width: thickness,
+                    height: length
+                )
+                : CGRect(
+                    x: bounds.midX - length / 2,
+                    y: bounds.maxY - edgeInset - thickness,
+                    width: length,
+                    height: thickness
+                )
+            NSBezierPath(rect: indicator).fill()
         }
     }
 
