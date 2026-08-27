@@ -11,6 +11,93 @@ struct ExternalStatusItem: Identifiable {
     let image: NSImage
 }
 
+enum ExternalStatusItemVisibility {
+    case visible
+    case hidden
+}
+
+struct ExternalStatusItemLayout: Equatable {
+    private(set) var orderedIDs: [String]
+    private(set) var hiddenIDs: Set<String>
+
+    init(orderedIDs: [String] = [], hiddenIDs: Set<String> = []) {
+        var seen = Set<String>()
+        self.orderedIDs = orderedIDs.filter { seen.insert($0).inserted }
+        self.hiddenIDs = hiddenIDs
+    }
+
+    mutating func reconcile(discoveredIDs: [String]) {
+        var known = Set(orderedIDs)
+        for itemID in discoveredIDs where known.insert(itemID).inserted {
+            orderedIDs.append(itemID)
+        }
+    }
+
+    mutating func setHidden(_ hidden: Bool, itemID: String) {
+        if hidden { hiddenIDs.insert(itemID) }
+        else { hiddenIDs.remove(itemID) }
+    }
+
+    mutating func move(
+        itemID: String,
+        relativeTo destinationID: String,
+        after: Bool,
+        hidden: Bool
+    ) {
+        guard itemID != destinationID,
+              let sourceIndex = orderedIDs.firstIndex(of: itemID),
+              let destinationIndex = orderedIDs.firstIndex(of: destinationID) else {
+            setHidden(hidden, itemID: itemID)
+            return
+        }
+
+        let value = orderedIDs.remove(at: sourceIndex)
+        let adjustedDestination = sourceIndex < destinationIndex ? destinationIndex - 1 : destinationIndex
+        orderedIDs.insert(value, at: after ? adjustedDestination + 1 : adjustedDestination)
+        setHidden(hidden, itemID: itemID)
+    }
+
+    func ordered(_ items: [ExternalStatusItem]) -> [ExternalStatusItem] {
+        let rank = Dictionary(uniqueKeysWithValues: orderedIDs.enumerated().map { ($1, $0) })
+        return items.sorted {
+            (rank[$0.id] ?? Int.max, $0.id) < (rank[$1.id] ?? Int.max, $1.id)
+        }
+    }
+}
+
+struct ExternalStatusItemIdentity {
+    static func make(
+        ownerIdentifier: String,
+        accessibilityIdentifier: String?,
+        childIndex: Int
+    ) -> String {
+        let itemIdentifier = accessibilityIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ownerIdentifier + "|" + ((itemIdentifier?.isEmpty == false ? itemIdentifier : nil) ?? "item-\(childIndex)")
+    }
+}
+
+final class ExternalStatusItemLayoutStore {
+    private static let orderKey = "wintaskbar.externalStatusItems.order"
+    private static let hiddenKey = "wintaskbar.externalStatusItems.hidden"
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults) {
+        self.defaults = defaults
+    }
+
+    func load() -> ExternalStatusItemLayout {
+        ExternalStatusItemLayout(
+            orderedIDs: defaults.stringArray(forKey: Self.orderKey) ?? [],
+            hiddenIDs: Set(defaults.stringArray(forKey: Self.hiddenKey) ?? [])
+        )
+    }
+
+    func save(_ layout: ExternalStatusItemLayout) {
+        defaults.set(layout.orderedIDs, forKey: Self.orderKey)
+        defaults.set(layout.hiddenIDs.sorted(), forKey: Self.hiddenKey)
+    }
+}
+
 private struct StatusItemWindow {
     let id: CGWindowID
     let frame: CGRect
@@ -50,12 +137,17 @@ enum ExternalStatusItemPolicy {
 @MainActor
 final class ExternalStatusItemService: NSObject, ObservableObject {
     @Published private(set) var items: [ExternalStatusItem] = []
+    @Published private(set) var layout: ExternalStatusItemLayout
 
     private var elements: [String: AXUIElement] = [:]
+    private let layoutStore: ExternalStatusItemLayoutStore
     private var timer: Timer?
     private var presentedMenu: NSMenu?
 
-    override init() {
+    init(defaults: UserDefaults = .standard) {
+        let layoutStore = ExternalStatusItemLayoutStore(defaults: defaults)
+        self.layoutStore = layoutStore
+        layout = layoutStore.load()
         super.init()
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
@@ -65,9 +157,12 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         }
     }
 
-    func items(on screen: NSScreen) -> [ExternalStatusItem] {
+    func items(
+        on screen: NSScreen,
+        visibility: ExternalStatusItemVisibility = .visible
+    ) -> [ExternalStatusItem] {
         guard let primaryScreen = NSScreen.screens.first else { return items }
-        return items.filter { item in
+        let screenItems = items.filter { item in
             let sourceFrame = item.sourceFrame
             let cocoaFrame = CGRect(
                 x: sourceFrame.minX,
@@ -77,6 +172,50 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
             )
             return cocoaFrame.intersects(screen.frame)
         }
+        return layout.ordered(screenItems).filter { item in
+            let isHidden = layout.hiddenIDs.contains(item.id)
+            return visibility == .hidden ? isHidden : !isHidden
+        }
+    }
+
+    func allItems(on screen: NSScreen) -> [ExternalStatusItem] {
+        items(on: screen, visibility: .visible) + items(on: screen, visibility: .hidden)
+    }
+
+    func isHidden(_ itemID: String) -> Bool {
+        layout.hiddenIDs.contains(itemID)
+    }
+
+    func setHidden(_ hidden: Bool, itemID: String) {
+        updateLayout { $0.setHidden(hidden, itemID: itemID) }
+    }
+
+    func toggleHidden(itemID: String) {
+        setHidden(!isHidden(itemID), itemID: itemID)
+    }
+
+    func move(
+        itemID: String,
+        relativeTo destinationID: String,
+        after: Bool,
+        visibility: ExternalStatusItemVisibility
+    ) {
+        updateLayout {
+            $0.move(
+                itemID: itemID,
+                relativeTo: destinationID,
+                after: after,
+                hidden: visibility == .hidden
+            )
+        }
+    }
+
+    private func updateLayout(_ mutation: (inout ExternalStatusItemLayout) -> Void) {
+        var nextLayout = layout
+        mutation(&nextLayout)
+        guard nextLayout != layout else { return }
+        layout = nextLayout
+        layoutStore.save(nextLayout)
     }
 
     func performPrimaryAction(_ item: ExternalStatusItem) {
@@ -292,9 +431,13 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
                   let children: [AXUIElement] = attribute(extrasMenuBar, kAXChildrenAttribute) else { continue }
 
             let ownerName = application.localizedName ?? application.bundleIdentifier ?? "App"
+            let ownerIdentifier = application.bundleIdentifier
+                ?? application.bundleURL?.path
+                ?? ownerName
             let fallbackImage = application.bundleURL.map { NSWorkspace.shared.icon(forFile: $0.path) }
 
-            for child in children {
+            var identifierOccurrences: [String: Int] = [:]
+            for (childIndex, child) in children.enumerated() {
                 guard let frame = frame(of: child),
                       ExternalStatusItemPolicy.shouldInclude(
                           processIdentifier: application.processIdentifier,
@@ -305,10 +448,14 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
                       ),
                       let image = capturedImage(frame: frame, windows: statusItemWindows) ?? fallbackImage else { continue }
 
-                let itemID = identifier(
-                    processIdentifier: application.processIdentifier,
-                    frame: frame
+                let baseItemID = ExternalStatusItemIdentity.make(
+                    ownerIdentifier: ownerIdentifier,
+                    accessibilityIdentifier: attribute(child, kAXIdentifierAttribute),
+                    childIndex: childIndex
                 )
+                let occurrence = identifierOccurrences[baseItemID, default: 0]
+                identifierOccurrences[baseItemID] = occurrence + 1
+                let itemID = occurrence == 0 ? baseItemID : "\(baseItemID)#\(occurrence)"
                 let label = firstNonemptyString(
                     attribute(child, kAXHelpAttribute),
                     attribute(child, kAXDescriptionAttribute),
@@ -326,11 +473,18 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
             }
         }
 
-        items = nextItems.sorted { lhs, rhs in
+        let sourceOrderedItems = nextItems.sorted { lhs, rhs in
             if lhs.sourceFrame.minY != rhs.sourceFrame.minY {
                 return lhs.sourceFrame.minY < rhs.sourceFrame.minY
             }
             return lhs.sourceFrame.minX < rhs.sourceFrame.minX
+        }
+        items = sourceOrderedItems
+        var nextLayout = layout
+        nextLayout.reconcile(discoveredIDs: sourceOrderedItems.map(\.id))
+        if nextLayout != layout {
+            layout = nextLayout
+            layoutStore.save(nextLayout)
         }
         elements = nextElements
     }
@@ -431,16 +585,6 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         ))
     }
 
-    private func identifier(processIdentifier: pid_t, frame: CGRect) -> String {
-        [
-            String(processIdentifier),
-            String(Int(frame.minX.rounded())),
-            String(Int(frame.minY.rounded())),
-            String(Int(frame.width.rounded())),
-            String(Int(frame.height.rounded()))
-        ].joined(separator: ":")
-    }
-
     private func frame(of element: AXUIElement) -> CGRect? {
         guard let positionValue: AXValue = attribute(element, kAXPositionAttribute),
               let sizeValue: AXValue = attribute(element, kAXSizeAttribute) else { return nil }
@@ -479,33 +623,28 @@ struct ExternalStatusItemsView: View {
     @ObservedObject var service: ExternalStatusItemService
     let screen: NSScreen
     let horizontal: Bool
+    var visibility = ExternalStatusItemVisibility.visible
+    var onActivate: (() -> Void)?
 
     var body: some View {
-        let items = service.items(on: screen)
+        let items = service.items(on: screen, visibility: visibility)
         Group {
-            if horizontal {
-                HStack(spacing: 0) { buttons(items) }
-            } else {
-                VStack(spacing: 0) { buttons(items) }
-            }
+            if horizontal { HStack(spacing: 0) { buttons(items) } }
+            else { VStack(spacing: 0) { buttons(items) } }
         }
     }
 
     @ViewBuilder
     private func buttons(_ items: [ExternalStatusItem]) -> some View {
         ForEach(items) { item in
-            WindowsTrayIconButton(
-                title: item.accessibilityLabel,
-                primaryAction: { service.performPrimaryAction(item) },
-                contextAction: { service.presentContextMenu(item) }
-            ) {
-                Image(nsImage: item.image)
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: Self.contentWidth(for: item.image), height: WindowsTrayIconMetrics.iconSize)
-            }
-            .frame(width: Self.controlWidth(for: item.image), height: WindowsTrayIconMetrics.controlHeight)
+            ExternalStatusItemButton(
+                item: item,
+                service: service,
+                visibility: visibility,
+                horizontal: horizontal,
+                controlWidth: Self.controlWidth(for: item.image),
+                onActivate: onActivate
+            )
         }
     }
 
@@ -514,9 +653,268 @@ struct ExternalStatusItemsView: View {
         return contentWidth(for: image) + 2 * WindowsTrayIconMetrics.horizontalContentPadding
     }
 
-    private static func contentWidth(for image: NSImage) -> CGFloat {
+    static func contentWidth(for image: NSImage) -> CGFloat {
         guard image.size.height > 0 else { return WindowsTrayIconMetrics.iconSize }
         let imageWidth = WindowsTrayIconMetrics.iconSize * image.size.width / image.size.height
         return min(max(imageWidth, WindowsTrayIconMetrics.iconSize), 40)
+    }
+}
+
+enum ExternalStatusOverflowMetrics {
+    static let columnCount = 5
+    static let cellSize: CGFloat = 40
+    static let panelPadding: CGFloat = 4
+
+    static func contentSize(itemCount: Int) -> CGSize {
+        let rowCount = max(1, Int(ceil(Double(itemCount) / Double(columnCount))))
+        return CGSize(
+            width: CGFloat(columnCount) * cellSize + 2 * panelPadding,
+            height: CGFloat(rowCount) * cellSize + 2 * panelPadding
+        )
+    }
+}
+
+@MainActor
+final class ExternalStatusOverflowPanelController: ObservableObject {
+    private let panelController = TaskbarJumpListController()
+    private var layoutCancellable: AnyCancellable?
+
+    var isVisible: Bool { panelController.isVisible }
+
+    func toggle(
+        service: ExternalStatusItemService,
+        screen: NSScreen,
+        position: TaskbarPosition,
+        relativeTo anchorView: NSView
+    ) {
+        if isVisible {
+            dismiss()
+            return
+        }
+
+        let itemCount = service.items(on: screen, visibility: .hidden).count
+        guard itemCount > 0 else { return }
+        let contentSize = ExternalStatusOverflowMetrics.contentSize(itemCount: itemCount)
+        let rootView = ExternalStatusOverflowPanelView(
+            service: service,
+            screen: screen,
+            onActivate: { [weak self] in self?.dismiss() }
+        )
+        panelController.show(
+            rootView: AnyView(rootView),
+            contentSize: contentSize,
+            relativeTo: anchorView,
+            position: position,
+            preservesOnTrayItemMouseDown: true
+        )
+        layoutCancellable = service.$layout.dropFirst().sink { [weak self, weak service, weak anchorView] _ in
+            DispatchQueue.main.async {
+                guard let self, let service, let anchorView, self.isVisible else { return }
+                let nextCount = service.items(on: screen, visibility: .hidden).count
+                guard nextCount > 0 else {
+                    self.dismiss()
+                    return
+                }
+                self.panelController.updateFrame(
+                    contentSize: ExternalStatusOverflowMetrics.contentSize(itemCount: nextCount),
+                    relativeTo: anchorView,
+                    position: position
+                )
+            }
+        }
+    }
+
+    func dismiss() {
+        layoutCancellable?.cancel()
+        layoutCancellable = nil
+        panelController.dismiss()
+    }
+
+    func setKeepsVisibleForSettings(_ keepsVisible: Bool) {
+        panelController.setKeepsVisibleForSettings(keepsVisible)
+    }
+}
+
+@MainActor
+struct ExternalStatusOverflowButton: View {
+    @ObservedObject var service: ExternalStatusItemService
+    @ObservedObject var panelController: ExternalStatusOverflowPanelController
+    let screen: NSScreen
+    let position: TaskbarPosition
+
+    var body: some View {
+        WindowsTrayIconButton(
+            title: "Show hidden icons",
+            anchoredPrimaryAction: { anchorView in
+                panelController.toggle(
+                    service: service,
+                    screen: screen,
+                    position: position,
+                    relativeTo: anchorView
+                )
+            },
+            dropAxis: position.isHorizontal ? .horizontal : .vertical,
+            dropAction: { itemID, _ in
+                service.toggleHidden(itemID: itemID)
+                if service.items(on: screen, visibility: .hidden).isEmpty {
+                    panelController.dismiss()
+                }
+            }
+        ) {
+            Image(systemName: chevronName)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: WindowsTrayIconMetrics.iconSize, height: WindowsTrayIconMetrics.iconSize)
+        }
+        .frame(width: WindowsTrayIconMetrics.squareControlWidth, height: WindowsTrayIconMetrics.controlHeight)
+    }
+
+    private var chevronName: String {
+        switch position {
+        case .bottom: "chevron.up"
+        case .top: "chevron.down"
+        case .left: "chevron.right"
+        case .right: "chevron.left"
+        }
+    }
+}
+
+@MainActor
+private struct ExternalStatusOverflowPanelView: View {
+    @ObservedObject var service: ExternalStatusItemService
+    let screen: NSScreen
+    let onActivate: () -> Void
+
+    var body: some View {
+        let items = service.items(on: screen, visibility: .hidden)
+        ZStack {
+            ExternalStatusItemDropDestination { itemID in
+                service.setHidden(true, itemID: itemID)
+            }
+            LazyVGrid(
+                columns: Array(
+                    repeating: GridItem(.fixed(ExternalStatusOverflowMetrics.cellSize), spacing: 0),
+                    count: ExternalStatusOverflowMetrics.columnCount
+                ),
+                alignment: .leading,
+                spacing: 0
+            ) {
+                ForEach(items) { item in
+                    ExternalStatusItemButton(
+                        item: item,
+                        service: service,
+                        visibility: .hidden,
+                        horizontal: true,
+                        controlWidth: ExternalStatusOverflowMetrics.cellSize,
+                        onActivate: onActivate
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(ExternalStatusOverflowMetrics.panelPadding)
+        }
+    }
+}
+
+@MainActor
+private struct ExternalStatusItemButton: View {
+    let item: ExternalStatusItem
+    @ObservedObject var service: ExternalStatusItemService
+    let visibility: ExternalStatusItemVisibility
+    let horizontal: Bool
+    let controlWidth: CGFloat
+    let onActivate: (() -> Void)?
+
+    var body: some View {
+        WindowsTrayIconButton(
+            title: item.accessibilityLabel,
+            primaryAction: {
+                service.performPrimaryAction(item)
+                onActivate?()
+            },
+            contextAction: { service.presentContextMenu(item) },
+            dragIdentifier: item.id,
+            dropAxis: horizontal ? .horizontal : .vertical,
+            dropAction: { sourceID, after in
+                service.move(
+                    itemID: sourceID,
+                    relativeTo: item.id,
+                    after: after,
+                    visibility: visibility
+                )
+            }
+        ) {
+            Image(nsImage: item.image)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .frame(
+                    width: ExternalStatusItemsView.contentWidth(for: item.image),
+                    height: WindowsTrayIconMetrics.iconSize
+                )
+        }
+        .frame(width: controlWidth, height: WindowsTrayIconMetrics.controlHeight)
+    }
+}
+
+@MainActor
+private struct ExternalStatusItemDropDestination: NSViewRepresentable {
+    let onDrop: (String) -> Void
+
+    func makeNSView(context: Context) -> ExternalStatusItemDropView {
+        let view = ExternalStatusItemDropView()
+        view.onDrop = onDrop
+        return view
+    }
+
+    func updateNSView(_ view: ExternalStatusItemDropView, context: Context) {
+        view.onDrop = onDrop
+    }
+}
+
+@MainActor
+private final class ExternalStatusItemDropView: NSView {
+    var onDrop: ((String) -> Void)?
+    private var isTargeted = false
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        registerForDraggedTypes([WindowsTrayIconControl.trayItemPasteboardType])
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard draggedIdentifier(from: sender) != nil else { return [] }
+        isTargeted = true
+        needsDisplay = true
+        return .move
+    }
+
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        isTargeted = false
+        needsDisplay = true
+    }
+
+    override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        draggedIdentifier(from: sender) != nil
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        guard let itemID = draggedIdentifier(from: sender) else { return false }
+        onDrop?(itemID)
+        isTargeted = false
+        needsDisplay = true
+        return true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard isTargeted else { return }
+        NSColor.labelColor.withAlphaComponent(0.08).setFill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 7, yRadius: 7).fill()
+    }
+
+    private func draggedIdentifier(from sender: any NSDraggingInfo) -> String? {
+        sender.draggingPasteboard.string(forType: WindowsTrayIconControl.trayItemPasteboardType)
     }
 }

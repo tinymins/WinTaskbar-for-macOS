@@ -332,6 +332,14 @@ func runSelfTest() async -> Int32 {
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
     let preferences = PreferencesStore(defaults: defaults)
+    var trayLayout = ExternalStatusItemLayout(orderedIDs: ["one", "two"])
+    trayLayout.reconcile(discoveredIDs: ["two", "three", "three"])
+    trayLayout.setHidden(true, itemID: "two")
+    trayLayout.move(itemID: "three", relativeTo: "one", after: false, hidden: true)
+    trayLayout.move(itemID: "two", relativeTo: "one", after: true, hidden: false)
+    let trayLayoutStore = ExternalStatusItemLayoutStore(defaults: defaults)
+    trayLayoutStore.save(trayLayout)
+    let restoredTrayLayout = trayLayoutStore.load()
     guard SettingsPage.allCases.map(\.rawValue) == [
         "General",
         "Appearance",
@@ -381,6 +389,28 @@ func runSelfTest() async -> Int32 {
               frame: CGRect(x: 100, y: 2, width: 24, height: 24),
               ownProcessIdentifier: 202
           ),
+          trayLayout.orderedIDs == ["three", "one", "two"],
+          trayLayout.hiddenIDs == ["three"],
+          restoredTrayLayout == trayLayout,
+          ExternalStatusItemIdentity.make(
+              ownerIdentifier: "com.example.StatusApp",
+              accessibilityIdentifier: "status-item",
+              childIndex: 0
+          ) == ExternalStatusItemIdentity.make(
+              ownerIdentifier: "com.example.StatusApp",
+              accessibilityIdentifier: "status-item",
+              childIndex: 4
+          ),
+          ExternalStatusItemIdentity.make(
+              ownerIdentifier: "com.example.StatusApp",
+              accessibilityIdentifier: nil,
+              childIndex: 0
+          ) != ExternalStatusItemIdentity.make(
+              ownerIdentifier: "com.example.StatusApp",
+              accessibilityIdentifier: nil,
+              childIndex: 1
+          ),
+          ExternalStatusOverflowMetrics.contentSize(itemCount: 11) == CGSize(width: 208, height: 128),
           ExternalStatusItemsView.controlWidth(for: NSImage(size: NSSize(width: 18, height: 18))) == 32,
           ClockTrayView.controlWidth(time: "14:35:55", date: "8/27/2026") < 80,
           WindowsTrayIconMetrics.clockRowHeight == 18,

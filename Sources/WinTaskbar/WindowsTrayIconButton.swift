@@ -24,6 +24,11 @@ enum WindowsTrayIconAppearance {
     case showDesktop(horizontal: Bool)
 }
 
+enum WindowsTrayIconDropAxis {
+    case horizontal
+    case vertical
+}
+
 @MainActor
 enum WindowsTrayTooltipMetrics {
     static let font = NSFont.systemFont(ofSize: 11, weight: .regular)
@@ -59,8 +64,11 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     let accessibilityLabel: String
     let tooltipGap: CGFloat
     let visualStyle: WindowsTrayIconAppearance
-    let primaryAction: () -> Void
+    let primaryAction: (WindowsTrayIconControl) -> Void
     let contextAction: (() -> Void)?
+    let dragIdentifier: String?
+    let dropAxis: WindowsTrayIconDropAxis
+    let dropAction: ((String, Bool) -> Void)?
     private let content: Content
 
     init(
@@ -70,14 +78,44 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         visualStyle: WindowsTrayIconAppearance = .standard,
         primaryAction: @escaping () -> Void,
         contextAction: (() -> Void)? = nil,
+        dragIdentifier: String? = nil,
+        dropAxis: WindowsTrayIconDropAxis = .horizontal,
+        dropAction: ((String, Bool) -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.accessibilityLabel = accessibilityLabel ?? title
         self.tooltipGap = tooltipGap
         self.visualStyle = visualStyle
-        self.primaryAction = primaryAction
+        self.primaryAction = { _ in primaryAction() }
         self.contextAction = contextAction
+        self.dragIdentifier = dragIdentifier
+        self.dropAxis = dropAxis
+        self.dropAction = dropAction
+        self.content = content()
+    }
+
+    init(
+        title: String,
+        accessibilityLabel: String? = nil,
+        tooltipGap: CGFloat = WindowsTrayIconMetrics.tooltipGap,
+        visualStyle: WindowsTrayIconAppearance = .standard,
+        anchoredPrimaryAction: @escaping (WindowsTrayIconControl) -> Void,
+        contextAction: (() -> Void)? = nil,
+        dragIdentifier: String? = nil,
+        dropAxis: WindowsTrayIconDropAxis = .horizontal,
+        dropAction: ((String, Bool) -> Void)? = nil,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.accessibilityLabel = accessibilityLabel ?? title
+        self.tooltipGap = tooltipGap
+        self.visualStyle = visualStyle
+        self.primaryAction = anchoredPrimaryAction
+        self.contextAction = contextAction
+        self.dragIdentifier = dragIdentifier
+        self.dropAxis = dropAxis
+        self.dropAction = dropAction
         self.content = content()
     }
 
@@ -100,8 +138,14 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         control.hoverTitle = title
         control.tooltipGap = tooltipGap
         control.visualStyle = visualStyle
-        control.onLeftActivate = primaryAction
+        control.onLeftActivate = { [weak control] in
+            guard let control else { return }
+            primaryAction(control)
+        }
         control.onRightActivate = contextAction
+        control.dragIdentifier = dragIdentifier
+        control.dropAxis = dropAxis
+        control.onDrop = dropAction
         control.setAccessibilityElement(true)
         control.setAccessibilityRole(.button)
         control.setAccessibilityLabel(accessibilityLabel)
@@ -109,17 +153,32 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
 }
 
 @MainActor
-final class WindowsTrayIconControl: NSControl {
+final class WindowsTrayIconControl: NSControl, NSDraggingSource {
+    static let trayItemPasteboardType = NSPasteboard.PasteboardType(
+        "io.github.tinymins.WinTaskbar.external-status-item"
+    )
+
     var hoverTitle = ""
     var tooltipGap = WindowsTrayIconMetrics.tooltipGap
     var visualStyle = WindowsTrayIconAppearance.standard
     var onLeftActivate: (() -> Void)?
     var onRightActivate: (() -> Void)?
+    var dragIdentifier: String?
+    var dropAxis = WindowsTrayIconDropAxis.horizontal
+    var onDrop: ((String, Bool) -> Void)? {
+        didSet {
+            unregisterDraggedTypes()
+            if onDrop != nil { registerForDraggedTypes([Self.trayItemPasteboardType]) }
+        }
+    }
 
     private var hostingView: NSHostingView<AnyView>?
     private var trackingAreaReference: NSTrackingArea?
     private var isHovered = false
     private var isPressed = false
+    private var isDropTarget = false
+    private var mouseDownLocation: CGPoint?
+    private var didBeginDrag = false
 
     override var isFlipped: Bool { true }
 
@@ -175,19 +234,41 @@ final class WindowsTrayIconControl: NSControl {
     }
 
     override func mouseDown(with event: NSEvent) {
-        guard onLeftActivate != nil else { return }
+        guard onLeftActivate != nil || dragIdentifier != nil else { return }
         WindowsTrayTooltipController.shared.hide(owner: self)
+        mouseDownLocation = convert(event.locationInWindow, from: nil)
+        didBeginDrag = false
         isPressed = true
         needsDisplay = true
         displayIfNeeded()
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if !didBeginDrag,
+           let dragIdentifier,
+           let mouseDownLocation {
+            let currentLocation = convert(event.locationInWindow, from: nil)
+            let distance = hypot(
+                currentLocation.x - mouseDownLocation.x,
+                currentLocation.y - mouseDownLocation.y
+            )
+            if distance >= 4 {
+                beginTrayItemDrag(identifier: dragIdentifier, event: event)
+                return
+            }
+        }
         isPressed = bounds.contains(convert(event.locationInWindow, from: nil))
         needsDisplay = true
     }
 
     override func mouseUp(with event: NSEvent) {
+        mouseDownLocation = nil
+        if didBeginDrag {
+            didBeginDrag = false
+            isPressed = false
+            needsDisplay = true
+            return
+        }
         let shouldActivate = isPressed && bounds.contains(convert(event.locationInWindow, from: nil))
         isPressed = false
         needsDisplay = true
@@ -214,10 +295,10 @@ final class WindowsTrayIconControl: NSControl {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        guard isHovered || isPressed else { return }
+        guard isHovered || isPressed || isDropTarget else { return }
         switch visualStyle {
         case .standard:
-            let opacity = isPressed
+            let opacity = isPressed || isDropTarget
                 ? WindowsTrayIconMetrics.pressedFillOpacity
                 : WindowsTrayIconMetrics.hoverFillOpacity
             NSColor.labelColor.withAlphaComponent(opacity).setFill()
@@ -248,6 +329,81 @@ final class WindowsTrayIconControl: NSControl {
         guard let action else { return }
         WindowsTrayTooltipController.shared.hide(owner: self)
         action()
+    }
+
+    private func beginTrayItemDrag(identifier: String, event: NSEvent) {
+        let pasteboardItem = NSPasteboardItem()
+        pasteboardItem.setString(identifier, forType: Self.trayItemPasteboardType)
+        let draggingItem = NSDraggingItem(pasteboardWriter: pasteboardItem)
+        draggingItem.setDraggingFrame(bounds, contents: dragImage())
+
+        didBeginDrag = true
+        isPressed = false
+        needsDisplay = true
+        beginDraggingSession(with: [draggingItem], event: event, source: self)
+    }
+
+    private func dragImage() -> NSImage {
+        guard let representation = bitmapImageRepForCachingDisplay(in: bounds) else {
+            return NSImage(size: bounds.size)
+        }
+        cacheDisplay(in: bounds, to: representation)
+        let image = NSImage(size: bounds.size)
+        image.addRepresentation(representation)
+        return image
+    }
+
+    func draggingSession(
+        _ session: NSDraggingSession,
+        sourceOperationMaskFor context: NSDraggingContext
+    ) -> NSDragOperation {
+        .move
+    }
+
+    func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        didBeginDrag = false
+        mouseDownLocation = nil
+        isPressed = false
+        needsDisplay = true
+    }
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard draggedIdentifier(from: sender) != nil, onDrop != nil else { return [] }
+        isDropTarget = true
+        needsDisplay = true
+        return .move
+    }
+
+    override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        draggedIdentifier(from: sender) != nil && onDrop != nil ? .move : []
+    }
+
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        isDropTarget = false
+        needsDisplay = true
+    }
+
+    override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        draggedIdentifier(from: sender) != nil && onDrop != nil
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        guard let identifier = draggedIdentifier(from: sender), let onDrop else { return false }
+        let location = convert(sender.draggingLocation, from: nil)
+        let after = dropAxis == .horizontal ? location.x >= bounds.midX : location.y >= bounds.midY
+        onDrop(identifier, after)
+        isDropTarget = false
+        needsDisplay = true
+        return true
+    }
+
+    override func concludeDragOperation(_ sender: (any NSDraggingInfo)?) {
+        isDropTarget = false
+        needsDisplay = true
+    }
+
+    private func draggedIdentifier(from sender: any NSDraggingInfo) -> String? {
+        sender.draggingPasteboard.string(forType: Self.trayItemPasteboardType)
     }
 }
 

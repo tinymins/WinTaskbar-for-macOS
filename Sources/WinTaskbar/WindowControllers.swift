@@ -560,6 +560,7 @@ final class TaskbarWindowController {
     private let quickSettingsPanelController = QuickSettingsPanelController()
     private let inputSourcePanelController = InputSourcePanelController()
     private let clockCalendarPanelController = ClockCalendarPanelController()
+    private let externalStatusOverflowPanelController = ExternalStatusOverflowPanelController()
     private let snapLayoutsPanelController = TaskbarJumpListController()
     private let clipboardHistoryPanelController = TaskbarJumpListController()
     private let shortcutEditorController: ShortcutEditorController
@@ -624,6 +625,7 @@ final class TaskbarWindowController {
         quickSettingsPanelController.dismiss()
         inputSourcePanelController.dismiss()
         clockCalendarPanelController.dismiss(animated: false)
+        externalStatusOverflowPanelController.dismiss()
         snapLayoutsPanelController.dismiss()
         clipboardHistoryPanelController.dismiss()
     }
@@ -636,6 +638,7 @@ final class TaskbarWindowController {
         quickSettingsPanelController.setKeepsVisibleForSettings(enabled)
         inputSourcePanelController.setKeepsVisibleForSettings(enabled)
         clockCalendarPanelController.setKeepsVisibleForSettings(enabled)
+        externalStatusOverflowPanelController.setKeepsVisibleForSettings(enabled)
         snapLayoutsPanelController.setKeepsVisibleForSettings(enabled)
         clipboardHistoryPanelController.setKeepsVisibleForSettings(enabled)
     }
@@ -839,6 +842,7 @@ final class TaskbarWindowController {
             quickSettingsPanelController: quickSettingsPanelController,
             inputSourcePanelController: inputSourcePanelController,
             clockCalendarPanelController: clockCalendarPanelController,
+            externalStatusOverflowPanelController: externalStatusOverflowPanelController,
             shortcutEditorController: shortcutEditorController,
             recentDocuments: recentDocuments,
             screen: screen

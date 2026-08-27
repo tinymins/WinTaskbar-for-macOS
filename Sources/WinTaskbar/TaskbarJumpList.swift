@@ -128,6 +128,7 @@ final class TaskbarJumpListController: ObservableObject {
     private var localEventMonitor: Any?
     private var globalEventMonitor: Any?
     private var keepsVisibleForSettings = false
+    private var preservesOnTrayItemMouseDown = false
 
     var isVisible: Bool { panel?.isVisible == true }
 
@@ -155,7 +156,8 @@ final class TaskbarJumpListController: ObservableObject {
         rootView: AnyView,
         contentSize: CGSize,
         relativeTo anchorView: NSView,
-        position: TaskbarPosition
+        position: TaskbarPosition,
+        preservesOnTrayItemMouseDown: Bool = false
     ) {
         guard let anchorWindow = anchorView.window else { return }
         let windowRect = anchorView.convert(anchorView.bounds, to: nil)
@@ -168,11 +170,22 @@ final class TaskbarJumpListController: ObservableObject {
             screenFrame: screenFrame
         )
 
-        show(rootView: rootView, frame: targetFrame, appearance: anchorWindow.appearance)
+        show(
+            rootView: rootView,
+            frame: targetFrame,
+            appearance: anchorWindow.appearance,
+            preservesOnTrayItemMouseDown: preservesOnTrayItemMouseDown
+        )
     }
 
-    func show(rootView: AnyView, frame: CGRect, appearance: NSAppearance?) {
+    func show(
+        rootView: AnyView,
+        frame: CGRect,
+        appearance: NSAppearance?,
+        preservesOnTrayItemMouseDown: Bool = false
+    ) {
         let panel = panel ?? makePanel()
+        self.preservesOnTrayItemMouseDown = preservesOnTrayItemMouseDown
         hostingView.rootView = rootView
         panel.appearance = appearance
         panel.setFrame(frame, display: true)
@@ -182,7 +195,28 @@ final class TaskbarJumpListController: ObservableObject {
 
     func dismiss() {
         panel?.orderOut(nil)
+        preservesOnTrayItemMouseDown = false
         removeEventMonitors()
+    }
+
+    func updateFrame(
+        contentSize: CGSize,
+        relativeTo anchorView: NSView,
+        position: TaskbarPosition
+    ) {
+        guard let panel, panel.isVisible, let anchorWindow = anchorView.window else { return }
+        let windowRect = anchorView.convert(anchorView.bounds, to: nil)
+        let anchorFrame = anchorWindow.convertToScreen(windowRect)
+        let screenFrame = anchorWindow.screen?.frame ?? NSScreen.main?.frame ?? anchorFrame
+        panel.setFrame(
+            TaskbarJumpListGeometry.frame(
+                anchorFrame: anchorFrame,
+                contentSize: contentSize,
+                position: position,
+                screenFrame: screenFrame
+            ),
+            display: true
+        )
     }
 
     func setKeepsVisibleForSettings(_ keepsVisible: Bool) {
@@ -224,6 +258,7 @@ final class TaskbarJumpListController: ObservableObject {
                ),
                let panel,
                !panel.frame.contains(NSEvent.mouseLocation) {
+                if preservesOnTrayItemMouseDown, isTrayItemMouseDown(event) { return event }
                 dismiss()
             }
             return event
@@ -250,6 +285,14 @@ final class TaskbarJumpListController: ObservableObject {
             NSEvent.removeMonitor(globalEventMonitor)
             self.globalEventMonitor = nil
         }
+    }
+
+    private func isTrayItemMouseDown(_ event: NSEvent) -> Bool {
+        guard let window = event.window,
+              let contentView = window.contentView else { return false }
+        let point = contentView.convert(event.locationInWindow, from: nil)
+        guard let control = contentView.hitTest(point) as? WindowsTrayIconControl else { return false }
+        return control.dragIdentifier != nil || control.onDrop != nil
     }
 }
 

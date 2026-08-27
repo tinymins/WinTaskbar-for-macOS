@@ -89,6 +89,7 @@ struct TaskbarView: View {
     @ObservedObject var quickSettingsPanelController: QuickSettingsPanelController
     @ObservedObject var inputSourcePanelController: InputSourcePanelController
     @ObservedObject var clockCalendarPanelController: ClockCalendarPanelController
+    @ObservedObject var externalStatusOverflowPanelController: ExternalStatusOverflowPanelController
     let shortcutEditorController: ShortcutEditorController
     @ObservedObject var recentDocuments: RecentDocumentsService
     let screen: NSScreen
@@ -401,10 +402,19 @@ struct TaskbarView: View {
 
     @ViewBuilder
     private var trayContents: some View {
+        if !externalStatusItems.allItems(on: screen).isEmpty {
+            ExternalStatusOverflowButton(
+                service: externalStatusItems,
+                panelController: externalStatusOverflowPanelController,
+                screen: screen,
+                position: preferences.position
+            )
+        }
         ExternalStatusItemsView(
             service: externalStatusItems,
             screen: screen,
-            horizontal: preferences.position.isHorizontal
+            horizontal: preferences.position.isHorizontal,
+            onActivate: { externalStatusOverflowPanelController.dismiss() }
         )
         if preferences.trayWifiEnabled {
             WiFiTrayView(
@@ -463,10 +473,16 @@ struct TaskbarView: View {
 
     private func visibleCapacity(length: CGFloat) -> Int {
         let itemLength = itemGeometry.cellSize + TaskbarItemGeometry.itemSpacing
-        let externalStatusItemLength = externalStatusItems.items(on: screen).reduce(CGFloat.zero) {
+        let visibleExternalItems = externalStatusItems.items(on: screen)
+        let externalStatusItemLength = visibleExternalItems.reduce(CGFloat.zero) {
             $0 + ExternalStatusItemsView.controlWidth(for: $1.image)
         }
-        let reserved: CGFloat = (preferences.position.isHorizontal ? 250 : 240) + externalStatusItemLength
+        let overflowButtonLength = externalStatusItems.allItems(on: screen).isEmpty
+            ? 0
+            : WindowsTrayIconMetrics.squareControlWidth
+        let reserved: CGFloat = (preferences.position.isHorizontal ? 250 : 240)
+            + externalStatusItemLength
+            + overflowButtonLength
         return max(1, Int((length - reserved) / max(itemLength, 1)))
     }
 
