@@ -50,6 +50,201 @@ enum WindowPlacementGeometry {
     }
 }
 
+enum WindowArrangement {
+    case cascade
+    case stacked
+    case sideBySide
+}
+
+enum WindowArrangementGeometry {
+    static func frames(for arrangement: WindowArrangement, count: Int, in available: CGRect) -> [CGRect] {
+        guard count > 0 else { return [] }
+        switch arrangement {
+        case .stacked:
+            return partition(available, count: count, vertically: true)
+        case .sideBySide:
+            return partition(available, count: count, vertically: false)
+        case .cascade:
+            let offset = min(CGFloat(28), min(available.width, available.height) / CGFloat(count + 5))
+            let width = max(
+                WindowFittingGeometry.minimumWindowSize.width,
+                available.width - offset * CGFloat(max(count - 1, 0))
+            )
+            let height = max(
+                WindowFittingGeometry.minimumWindowSize.height,
+                available.height - offset * CGFloat(max(count - 1, 0))
+            )
+            return (0..<count).map { index in
+                CGRect(
+                    x: available.minX + offset * CGFloat(index),
+                    y: available.maxY - height - offset * CGFloat(index),
+                    width: width,
+                    height: height
+                )
+            }
+        }
+    }
+
+    private static func partition(_ available: CGRect, count: Int, vertically: Bool) -> [CGRect] {
+        (0..<count).map { index in
+            if vertically {
+                let start = (available.height * CGFloat(index) / CGFloat(count)).rounded(.down)
+                let end = (available.height * CGFloat(index + 1) / CGFloat(count)).rounded(.down)
+                return CGRect(
+                    x: available.minX,
+                    y: available.maxY - end,
+                    width: available.width,
+                    height: end - start
+                )
+            }
+            let start = (available.width * CGFloat(index) / CGFloat(count)).rounded(.down)
+            let end = (available.width * CGFloat(index + 1) / CGFloat(count)).rounded(.down)
+            return CGRect(
+                x: available.minX + start,
+                y: available.minY,
+                width: end - start,
+                height: available.height
+            )
+        }
+    }
+}
+
+@MainActor
+final class WindowArrangementService {
+    private let preferences: PreferencesStore
+    private var minimizedWindows: [AXUIElement] = []
+
+    init(preferences: PreferencesStore) {
+        self.preferences = preferences
+    }
+
+    func arrange(_ arrangement: WindowArrangement, on screen: NSScreen) {
+        guard ensureAccessibility() else { return }
+        let primaryHeight = NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame.height
+            ?? NSScreen.main?.frame.height
+            ?? screen.frame.height
+        let windows = candidateWindows(on: screen, primaryHeight: primaryHeight)
+        let available = WindowFittingGeometry.freeRect(
+            on: WindowFittingScreenBox(frame: screen.frame, visibleFrame: screen.visibleFrame),
+            position: preferences.position,
+            barHeight: preferences.autoHideTaskbar ? 0 : CGFloat(preferences.barHeight)
+        )
+        for (window, frame) in zip(
+            windows,
+            WindowArrangementGeometry.frames(for: arrangement, count: windows.count, in: available)
+        ) {
+            setFrame(frame, for: window, primaryHeight: primaryHeight)
+        }
+    }
+
+    func minimizeAll(on screen: NSScreen) {
+        guard minimizedWindows.isEmpty, ensureAccessibility() else { return }
+        let primaryHeight = NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame.height
+            ?? NSScreen.main?.frame.height
+            ?? screen.frame.height
+        for window in candidateWindows(on: screen, primaryHeight: primaryHeight) {
+            if AXUIElementSetAttributeValue(
+                window,
+                kAXMinimizedAttribute as CFString,
+                true as CFBoolean
+            ) == .success {
+                minimizedWindows.append(window)
+            }
+        }
+    }
+
+    func restoreMinimized() {
+        minimizedWindows.forEach {
+            _ = AXUIElementSetAttributeValue(
+                $0,
+                kAXMinimizedAttribute as CFString,
+                false as CFBoolean
+            )
+        }
+        minimizedWindows.removeAll()
+    }
+
+    private func ensureAccessibility() -> Bool {
+        guard !AXIsProcessTrusted() else { return true }
+        return AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+    }
+
+    private func candidateWindows(on screen: NSScreen, primaryHeight: CGFloat) -> [AXUIElement] {
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        return NSWorkspace.shared.runningApplications
+            .filter {
+                $0.activationPolicy == .regular
+                    && !$0.isTerminated
+                    && $0.processIdentifier != ownPID
+            }
+            .flatMap { application -> [AXUIElement] in
+                let element = AXUIElementCreateApplication(application.processIdentifier)
+                return windows(of: element).filter { window in
+                    guard string(window, attribute: kAXSubroleAttribute as CFString) == kAXStandardWindowSubrole,
+                          !bool(window, attribute: kAXMinimizedAttribute as CFString),
+                          let frame = cocoaFrame(of: window, primaryHeight: primaryHeight) else { return false }
+                    return screen.frame.contains(CGPoint(x: frame.midX, y: frame.midY))
+                }
+            }
+    }
+
+    private func setFrame(_ frame: CGRect, for window: AXUIElement, primaryHeight: CGFloat) {
+        var position = WindowFittingGeometry.axPosition(cocoaFrame: frame, primaryHeight: primaryHeight)
+        var size = frame.size
+        guard let positionValue = AXValueCreate(.cgPoint, &position),
+              let sizeValue = AXValueCreate(.cgSize, &size) else { return }
+        _ = AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, positionValue)
+        _ = AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, sizeValue)
+        _ = AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, positionValue)
+    }
+
+    private func cocoaFrame(of window: AXUIElement, primaryHeight: CGFloat) -> CGRect? {
+        guard let position = point(window, attribute: kAXPositionAttribute as CFString),
+              let size = size(window, attribute: kAXSizeAttribute as CFString) else { return nil }
+        return WindowFittingGeometry.cocoaFrame(
+            axPosition: position,
+            size: size,
+            primaryHeight: primaryHeight
+        )
+    }
+
+    private func windows(of application: AXUIElement) -> [AXUIElement] {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &raw) == .success else {
+            return []
+        }
+        return raw as? [AXUIElement] ?? []
+    }
+
+    private func string(_ element: AXUIElement, attribute: CFString) -> String? {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &raw) == .success else { return nil }
+        return raw as? String
+    }
+
+    private func bool(_ element: AXUIElement, attribute: CFString) -> Bool {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &raw) == .success else { return false }
+        return raw as? Bool ?? false
+    }
+
+    private func point(_ element: AXUIElement, attribute: CFString) -> CGPoint? {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &raw) == .success,
+              let value = raw as! AXValue? else { return nil }
+        var result = CGPoint.zero
+        return AXValueGetValue(value, .cgPoint, &result) ? result : nil
+    }
+
+    private func size(_ element: AXUIElement, attribute: CFString) -> CGSize? {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &raw) == .success,
+              let value = raw as! AXValue? else { return nil }
+        var result = CGSize.zero
+        return AXValueGetValue(value, .cgSize, &result) ? result : nil
+    }
+}
+
 @MainActor
 final class ActiveWindowShortcutService {
     private struct WindowKey: Hashable {

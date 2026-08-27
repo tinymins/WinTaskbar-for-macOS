@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let clipboardHistoryService = ClipboardHistoryService()
     private let runWindowController = RunWindowController()
     private lazy var windowFittingService = WindowFittingService(preferences: preferences)
+    private lazy var windowArrangementService = WindowArrangementService(preferences: preferences)
     private let dockToggleService = DockToggleService.shared
     private let loginItemService = LoginItemService.shared
     private let permissionsService = PermissionsService.shared
@@ -78,6 +79,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         actions.showDesktopHandler = { [weak self] in self?.showDesktopService.toggle() }
         actions.powerHandler = { [weak self] action in self?.confirmAndPerform(action) }
+        actions.showRunDialogHandler = { [weak self] in self?.runWindowController.show() }
+        actions.arrangeWindowsHandler = { [weak self, weak taskbar] arrangement, requestedScreen in
+            guard let self, let screen = requestedScreen ?? taskbar?.activeScreen else { return }
+            self.windowArrangementService.arrange(arrangement, on: screen)
+        }
+        actions.minimizeAllWindowsHandler = { [weak self, weak taskbar] requestedScreen in
+            guard let self, let screen = requestedScreen ?? taskbar?.activeScreen else { return }
+            self.windowArrangementService.minimizeAll(on: screen)
+        }
+        actions.restoreAllWindowsHandler = { [weak self] in
+            self?.windowArrangementService.restoreMinimized()
+        }
 
         globalHotkeysService.onInvoke = { [weak self] configuration in
             self?.performGlobalShortcut(configuration)
@@ -1223,7 +1236,13 @@ func runSelfTest() async -> Int32 {
           TaskbarContextMenuSection.allCases.map(\.title) == [
               "Terminal", "Go To", "Apps", "Windows"
           ],
-          TaskbarContextMenuSection.allCases.filter(\.usesWindowEntries) == [.windows],
+          TaskbarContextMenuSection.goTo.submenuTitles(terminals: []) == [
+              "Folder", "Go to Folder…", "Connect to Server…", "Run…", "Settings"
+          ],
+          TaskbarContextMenuSection.windows.submenuDividerCount == 1,
+          TaskbarContextNestedSection.folders.titles.count == 15,
+          TaskbarContextNestedSection.folders.dividerCount == 2,
+          TaskbarContextNestedSection.settings.titles.count == 8,
           TaskbarContextMenuGeometry.rootFrame(
               clickPoint: CGPoint(x: 700, y: 24),
               taskbarFrame: CGRect(x: 0, y: 0, width: 1200, height: 48),
@@ -1255,15 +1274,48 @@ func runSelfTest() async -> Int32 {
           TaskbarContextMenuGeometry.submenuFrame(
               parentFrame: CGRect(x: 618, y: 56, width: 164, height: 268),
               rowIndex: 0,
-              contentSize: TaskbarContextMenuMetrics.submenuSize(rowCount: 2),
+              contentSize: TaskbarContextMenuMetrics.submenuSize(titles: ["Terminal", "Console"]),
               screenFrame: jumpListScreen
           ) == CGRect(x: 787, y: 269, width: 164, height: 70),
           TaskbarContextMenuGeometry.submenuFrame(
               parentFrame: CGRect(x: 1028, y: 56, width: 164, height: 268),
               rowIndex: 0,
-              contentSize: TaskbarContextMenuMetrics.submenuSize(rowCount: 2),
+              contentSize: TaskbarContextMenuMetrics.submenuSize(titles: ["Terminal", "Console"]),
               screenFrame: jumpListScreen
           ) == CGRect(x: 859, y: 269, width: 164, height: 70),
+          TaskbarContextMenuMetrics.submenuSize(
+              titles: ["Connect to Server…"],
+              hasTrailingChevron: true
+          ).width > 164,
+          TaskbarContextMenuMetrics.submenuSize(
+              titles: [String(repeating: "W", count: 80)]
+          ).width == 220,
+          TaskbarSubmenuPointerIntent.isMovingTowardSubmenu(
+              previous: CGPoint(x: 740, y: 250),
+              current: CGPoint(x: 760, y: 245),
+              submenuFrame: CGRect(x: 787, y: 150, width: 180, height: 300)
+          ),
+          !TaskbarSubmenuPointerIntent.isMovingTowardSubmenu(
+              previous: CGPoint(x: 760, y: 245),
+              current: CGPoint(x: 740, y: 240),
+              submenuFrame: CGRect(x: 787, y: 150, width: 180, height: 300)
+          ),
+          WindowArrangementGeometry.frames(
+              for: .sideBySide,
+              count: 2,
+              in: CGRect(x: 0, y: 48, width: 1200, height: 752)
+          ) == [
+              CGRect(x: 0, y: 48, width: 600, height: 752),
+              CGRect(x: 600, y: 48, width: 600, height: 752),
+          ],
+          WindowArrangementGeometry.frames(
+              for: .stacked,
+              count: 2,
+              in: CGRect(x: 0, y: 48, width: 1200, height: 752)
+          ) == [
+              CGRect(x: 0, y: 424, width: 1200, height: 376),
+              CGRect(x: 0, y: 48, width: 1200, height: 376),
+          ],
           TaskbarJumpListInteractionPolicy.shouldDismissMenuOnAppHover(hovering: true),
           !TaskbarJumpListInteractionPolicy.shouldDismissMenuOnAppHover(hovering: false),
           ShortcutEditorMetrics.contentSize(shortcutCount: 0) == CGSize(width: 540, height: 206),

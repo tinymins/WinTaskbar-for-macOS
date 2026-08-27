@@ -606,6 +606,7 @@ final class TaskbarWindowController {
     private let startButtonPowerMenuController = TaskbarJumpListController()
     private let taskbarContextMenuController = TaskbarJumpListController()
     private let taskbarContextSubmenuController = TaskbarJumpListController()
+    private let taskbarContextNestedMenuController = TaskbarJumpListController()
     private let quickSettingsPanelController = QuickSettingsPanelController()
     private let inputSourcePanelController = InputSourcePanelController()
     private let clockCalendarPanelController = ClockCalendarPanelController()
@@ -624,7 +625,13 @@ final class TaskbarWindowController {
     private var keepsTransientSurfacesVisibleForSettings = false
     private var isStartMenuPresented = false
     private var activeTaskbarContextSection: TaskbarContextMenuSection?
-    private var taskbarContextWindowEntriesCache: [TaskbarWindowMenuEntry]?
+    private var activeTaskbarContextNestedSection: TaskbarContextNestedSection?
+    private var taskbarTerminalEntries: [TaskbarTerminalMenuEntry] = []
+    private var taskbarContextScreen: NSScreen?
+    private var taskbarContextNestedFrame: CGRect?
+    private var previousPointerLocation: CGPoint?
+    private var currentPointerLocation: CGPoint?
+    private var nestedMenuIntentTask: Task<Void, Never>?
     private var localPointerMonitor: Any?
     private var globalPointerMonitor: Any?
     private var menuTrackingObservers: [NSObjectProtocol] = []
@@ -671,11 +678,27 @@ final class TaskbarWindowController {
         }
         taskbarContextMenuController.onDismiss = { [weak self] in
             self?.taskbarContextSubmenuController.dismiss()
+            self?.dismissTaskbarContextNestedMenu()
             self?.activeTaskbarContextSection = nil
-            self?.taskbarContextWindowEntriesCache = nil
+            self?.taskbarTerminalEntries = []
+            self?.taskbarContextScreen = nil
         }
         taskbarContextMenuController.preservesOutsideMouseDown = { [weak self] in
             self?.taskbarContextSubmenuController.containsMouseLocation == true
+                || self?.taskbarContextNestedMenuController.containsMouseLocation == true
+        }
+        taskbarContextSubmenuController.onDismiss = { [weak self] in
+            self?.dismissTaskbarContextNestedMenu()
+            self?.activeTaskbarContextSection = nil
+        }
+        taskbarContextSubmenuController.preservesOutsideMouseDown = { [weak self] in
+            self?.taskbarContextNestedMenuController.containsMouseLocation == true
+        }
+        taskbarContextNestedMenuController.onDismiss = { [weak self] in
+            self?.nestedMenuIntentTask?.cancel()
+            self?.nestedMenuIntentTask = nil
+            self?.activeTaskbarContextNestedSection = nil
+            self?.taskbarContextNestedFrame = nil
         }
         installPointerMonitors()
         installMenuTrackingObservers()
@@ -693,6 +716,7 @@ final class TaskbarWindowController {
         startButtonPowerMenuController.dismiss()
         taskbarContextMenuController.dismiss()
         taskbarContextSubmenuController.dismiss()
+        taskbarContextNestedMenuController.dismiss()
         quickSettingsPanelController.dismiss()
         inputSourcePanelController.dismiss()
         clockCalendarPanelController.dismiss(animated: false)
@@ -708,6 +732,7 @@ final class TaskbarWindowController {
         startButtonPowerMenuController.setKeepsVisibleForSettings(enabled)
         taskbarContextMenuController.setKeepsVisibleForSettings(enabled)
         taskbarContextSubmenuController.setKeepsVisibleForSettings(enabled)
+        taskbarContextNestedMenuController.setKeepsVisibleForSettings(enabled)
         quickSettingsPanelController.setKeepsVisibleForSettings(enabled)
         inputSourcePanelController.setKeepsVisibleForSettings(enabled)
         clockCalendarPanelController.setKeepsVisibleForSettings(enabled)
@@ -734,7 +759,8 @@ final class TaskbarWindowController {
         }
 
         let screen = taskbarWindow.screen ?? activeScreen
-        taskbarContextWindowEntriesCache = nil
+        taskbarContextScreen = screen
+        taskbarTerminalEntries = TaskbarTerminalCatalog.installed()
         actions.closeStartMenu()
         dismissTransientSurfaces()
         revealTaskbar(on: screen)
@@ -928,6 +954,7 @@ final class TaskbarWindowController {
             startButtonPowerMenuController.dismiss()
             taskbarContextMenuController.dismiss()
             taskbarContextSubmenuController.dismiss()
+            taskbarContextNestedMenuController.dismiss()
         }
         let expectedCount = preferences.displayMode == .primary ? min(1, NSScreen.screens.count) : NSScreen.screens.count
         guard panels.count == expectedCount else {
@@ -1022,11 +1049,27 @@ final class TaskbarWindowController {
             .rightMouseUp,
         ]
         localPointerMonitor = NSEvent.addLocalMonitorForEvents(matching: events) { [weak self] event in
-            DispatchQueue.main.async { self?.updateAutoHideState() }
+            MainActor.assumeIsolated {
+                self?.recordPointerLocation()
+                self?.updateAutoHideState()
+            }
             return event
         }
         globalPointerMonitor = NSEvent.addGlobalMonitorForEvents(matching: events) { [weak self] _ in
-            Task { @MainActor in self?.updateAutoHideState() }
+            Task { @MainActor in
+                self?.recordPointerLocation()
+                self?.updateAutoHideState()
+            }
+        }
+    }
+
+    private func recordPointerLocation() {
+        previousPointerLocation = currentPointerLocation
+        currentPointerLocation = NSEvent.mouseLocation
+        if let taskbarContextNestedFrame,
+           taskbarContextNestedFrame.insetBy(dx: -2, dy: -2).contains(NSEvent.mouseLocation) {
+            nestedMenuIntentTask?.cancel()
+            nestedMenuIntentTask = nil
         }
     }
 
@@ -1175,6 +1218,7 @@ final class TaskbarWindowController {
             || startButtonPowerMenuController.isVisible
             || taskbarContextMenuController.isVisible
             || taskbarContextSubmenuController.isVisible
+            || taskbarContextNestedMenuController.isVisible
             || quickSettingsPanelController.isVisible
             || inputSourcePanelController.isVisible
             || clockCalendarPanelController.isVisible
@@ -1218,28 +1262,14 @@ final class TaskbarWindowController {
         guard activeTaskbarContextSection != section || !taskbarContextSubmenuController.isVisible else {
             return
         }
+        dismissTaskbarContextNestedMenu()
         activeTaskbarContextSection = section
-        let windows: [TaskbarWindowMenuEntry]
-        if section.usesWindowEntries {
-            if let taskbarContextWindowEntriesCache {
-                windows = taskbarContextWindowEntriesCache
-            } else {
-                let entries = taskbarWindowMenuEntries
-                taskbarContextWindowEntriesCache = entries
-                windows = entries
-            }
-        } else {
-            windows = []
-        }
-        let rowCount: Int
-        switch section {
-        case .terminal: rowCount = 2
-        case .goTo: rowCount = 6
-        case .apps: rowCount = 5
-        case .windows:
-            rowCount = min(max(windows.count, 1), TaskbarContextMenuMetrics.maximumWindowRows)
-        }
-        let size = TaskbarContextMenuMetrics.submenuSize(rowCount: rowCount)
+        let titles = section.submenuTitles(terminals: taskbarTerminalEntries)
+        let size = TaskbarContextMenuMetrics.submenuSize(
+            titles: titles,
+            dividerCount: section.submenuDividerCount,
+            hasTrailingChevron: section.hasNestedSubmenu
+        )
         let frame = TaskbarContextMenuGeometry.submenuFrame(
             parentFrame: parentFrame,
             rowIndex: section.rowIndex,
@@ -1248,10 +1278,20 @@ final class TaskbarWindowController {
         )
         let submenu = TaskbarContextSubmenuView(
             section: section,
-            windows: windows,
+            terminals: taskbarTerminalEntries,
             actions: actions,
-            onOpenWindow: { [weak self] window in
-                self?.windowActivator.raise(window: window)
+            onShowNested: { [weak self] nestedSection in
+                self?.showTaskbarContextNestedMenu(
+                    nestedSection,
+                    parentFrame: frame,
+                    screenFrame: screenFrame
+                )
+            },
+            onDismissNested: { [weak self] in
+                self?.requestTaskbarContextNestedMenuDismissal()
+            },
+            onWindowCommand: { [weak self] command in
+                self?.performTaskbarContextWindowCommand(command)
             },
             onDismiss: { [weak self] in
                 self?.dismissTaskbarContextMenus()
@@ -1268,6 +1308,76 @@ final class TaskbarWindowController {
         )
     }
 
+    private func showTaskbarContextNestedMenu(
+        _ section: TaskbarContextNestedSection,
+        parentFrame: CGRect,
+        screenFrame: CGRect
+    ) {
+        nestedMenuIntentTask?.cancel()
+        nestedMenuIntentTask = nil
+        guard activeTaskbarContextNestedSection != section
+                || !taskbarContextNestedMenuController.isVisible else { return }
+        activeTaskbarContextNestedSection = section
+        let size = TaskbarContextMenuMetrics.submenuSize(
+            titles: section.titles,
+            dividerCount: section.dividerCount
+        )
+        let frame = TaskbarContextMenuGeometry.submenuFrame(
+            parentFrame: parentFrame,
+            rowIndex: section.rowIndex,
+            contentSize: size,
+            screenFrame: screenFrame
+        )
+        taskbarContextNestedFrame = frame
+        let view = TaskbarContextNestedMenuView(
+            section: section,
+            actions: actions,
+            onDismiss: { [weak self] in self?.dismissTaskbarContextMenus() }
+        )
+        .frame(width: size.width, height: size.height)
+        taskbarContextNestedMenuController.show(
+            rootView: AnyView(view),
+            frame: frame,
+            appearance: appearance,
+            cornerRadius: TaskbarContextMenuMetrics.cornerRadius,
+            showsBorder: false,
+            makesKey: false
+        )
+    }
+
+    private func requestTaskbarContextNestedMenuDismissal() {
+        guard taskbarContextNestedMenuController.isVisible,
+              let taskbarContextNestedFrame else { return }
+        nestedMenuIntentTask?.cancel()
+        if let previousPointerLocation,
+           let currentPointerLocation,
+           TaskbarSubmenuPointerIntent.isMovingTowardSubmenu(
+               previous: previousPointerLocation,
+               current: currentPointerLocation,
+               submenuFrame: taskbarContextNestedFrame
+           ) {
+            nestedMenuIntentTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 180_000_000)
+                guard !Task.isCancelled else { return }
+                self?.dismissTaskbarContextNestedMenu()
+            }
+        } else {
+            dismissTaskbarContextNestedMenu()
+        }
+    }
+
+    private func performTaskbarContextWindowCommand(_ command: TaskbarWindowMenuCommand) {
+        let screen = taskbarContextScreen
+        dismissTaskbarContextMenus()
+        switch command {
+        case .cascade: actions.arrangeWindows(.cascade, on: screen)
+        case .stacked: actions.arrangeWindows(.stacked, on: screen)
+        case .sideBySide: actions.arrangeWindows(.sideBySide, on: screen)
+        case .minimizeAll: actions.minimizeAllWindows(on: screen)
+        case .restoreAll: actions.restoreAllWindows()
+        }
+    }
+
     private func performTaskbarContextCommand(_ command: TaskbarContextMenuCommand) {
         dismissTaskbarContextMenus()
         switch command {
@@ -1281,28 +1391,24 @@ final class TaskbarWindowController {
     private func dismissTaskbarContextMenus() {
         taskbarContextMenuController.dismiss()
         taskbarContextSubmenuController.dismiss()
+        dismissTaskbarContextNestedMenu()
         activeTaskbarContextSection = nil
-        taskbarContextWindowEntriesCache = nil
+        taskbarTerminalEntries = []
+        taskbarContextScreen = nil
     }
 
     private func dismissTaskbarContextSubmenu() {
         taskbarContextSubmenuController.dismiss()
+        dismissTaskbarContextNestedMenu()
         activeTaskbarContextSection = nil
     }
 
-    private var taskbarWindowMenuEntries: [TaskbarWindowMenuEntry] {
-        let items = apps.taskbarItems(
-            pinnedBundleIDs: preferences.pinnedBundleIDs,
-            badges: [:],
-            showFinder: preferences.showFinder
-        )
-        let windowsByPID = windowsService.windows(forPIDs: items.compactMap(\.processIdentifier))
-        return items.flatMap { item -> [TaskbarWindowMenuEntry] in
-            guard let pid = item.processIdentifier else { return [] }
-            return (windowsByPID[pid] ?? []).map {
-                TaskbarWindowMenuEntry(window: $0, appName: item.name, icon: item.icon)
-            }
-        }
+    private func dismissTaskbarContextNestedMenu() {
+        nestedMenuIntentTask?.cancel()
+        nestedMenuIntentTask = nil
+        taskbarContextNestedMenuController.dismiss()
+        activeTaskbarContextNestedSection = nil
+        taskbarContextNestedFrame = nil
     }
 
     private func dismissStartButtonContextMenus() {
