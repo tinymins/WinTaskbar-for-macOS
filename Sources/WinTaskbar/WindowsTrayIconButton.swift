@@ -228,7 +228,6 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     private var trackingAreaReference: NSTrackingArea?
     private var isHovered = false
     private var isPressed = false
-    private var isDropTarget = false
     private var mouseDownLocation: CGPoint?
     private var didBeginDrag = false
     private var isDragging = false
@@ -349,10 +348,12 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        guard !isDragging, isHovered || isPressed || isDropTarget else { return }
+        guard WindowsTrayDragSessionState.shared.draggedItemID == nil,
+              !isDragging,
+              isHovered || isPressed else { return }
         switch visualStyle {
         case .standard:
-            let opacity = isPressed || isDropTarget
+            let opacity = isPressed
                 ? WindowsTrayIconMetrics.pressedFillOpacity
                 : WindowsTrayIconMetrics.hoverFillOpacity
             NSColor.labelColor.withAlphaComponent(opacity).setFill()
@@ -443,7 +444,6 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
         guard acceptsDrop(from: sender) else { return [] }
-        isDropTarget = true
         needsDisplay = true
         updateDropHover(from: sender)
         showDropTipIfNeeded()
@@ -457,7 +457,6 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     }
 
     override func draggingExited(_ sender: (any NSDraggingInfo)?) {
-        isDropTarget = false
         lastDropHover = nil
         needsDisplay = true
         WindowsTrayDropTipController.shared.hide(owner: self)
@@ -474,7 +473,6 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
         let location = draggedItemCenterLocation(from: sender)
         let after = dropAxis == .horizontal ? location.x >= bounds.midX : location.y >= bounds.midY
         onDrop(identifier, after)
-        isDropTarget = false
         lastDropHover = nil
         needsDisplay = true
         WindowsTrayDropTipController.shared.hide(owner: self)
@@ -482,7 +480,6 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     }
 
     override func concludeDragOperation(_ sender: (any NSDraggingInfo)?) {
-        isDropTarget = false
         lastDropHover = nil
         needsDisplay = true
         WindowsTrayDropTipController.shared.hide(owner: self)
