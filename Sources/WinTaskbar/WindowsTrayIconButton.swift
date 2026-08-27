@@ -15,6 +15,8 @@ enum WindowsTrayIconMetrics {
     static let showDesktopVisibleThickness: CGFloat = 1
     static let showDesktopIndicatorLength: CGFloat = 20
     static let showDesktopIndicatorEdgeInset: CGFloat = 4
+    static let hoverFillOpacity: CGFloat = 0.10
+    static let pressedFillOpacity: CGFloat = 0.22
 }
 
 enum WindowsTrayIconAppearance {
@@ -173,16 +175,33 @@ final class WindowsTrayIconControl: NSControl {
     }
 
     override func mouseDown(with event: NSEvent) {
-        activate(onLeftActivate)
+        guard onLeftActivate != nil else { return }
+        WindowsTrayTooltipController.shared.hide(owner: self)
+        isPressed = true
+        needsDisplay = true
+        displayIfNeeded()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        isPressed = bounds.contains(convert(event.locationInWindow, from: nil))
+        needsDisplay = true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let shouldActivate = isPressed && bounds.contains(convert(event.locationInWindow, from: nil))
+        isPressed = false
+        needsDisplay = true
+        displayIfNeeded()
+        if shouldActivate { perform(onLeftActivate) }
     }
 
     override func rightMouseDown(with event: NSEvent) {
         guard let onRightActivate else { return }
-        activate(onRightActivate)
+        perform(onRightActivate)
     }
 
     override func accessibilityPerformPress() -> Bool {
-        activate(onLeftActivate)
+        perform(onLeftActivate)
         return onLeftActivate != nil
     }
 
@@ -198,7 +217,10 @@ final class WindowsTrayIconControl: NSControl {
         guard isHovered || isPressed else { return }
         switch visualStyle {
         case .standard:
-            NSColor.labelColor.withAlphaComponent(isPressed ? 0.16 : 0.10).setFill()
+            let opacity = isPressed
+                ? WindowsTrayIconMetrics.pressedFillOpacity
+                : WindowsTrayIconMetrics.hoverFillOpacity
+            NSColor.labelColor.withAlphaComponent(opacity).setFill()
             NSBezierPath(roundedRect: bounds, xRadius: 4, yRadius: 4).fill()
         case let .showDesktop(horizontal):
             NSColor.labelColor.withAlphaComponent(isPressed ? 0.45 : 0.24).setFill()
@@ -222,15 +244,10 @@ final class WindowsTrayIconControl: NSControl {
         }
     }
 
-    private func activate(_ action: (() -> Void)?) {
+    private func perform(_ action: (() -> Void)?) {
         guard let action else { return }
         WindowsTrayTooltipController.shared.hide(owner: self)
-        isPressed = true
-        needsDisplay = true
-        displayIfNeeded()
         action()
-        isPressed = false
-        needsDisplay = true
     }
 }
 

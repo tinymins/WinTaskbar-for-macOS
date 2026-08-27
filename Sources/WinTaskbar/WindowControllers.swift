@@ -268,7 +268,11 @@ final class WindowPreviewPanelController: ObservableObject {
         }
     }
 
-    private func activateImmediately(ownerID: WindowPreviewOwnerID) {
+    func activateImmediately(ownerID: WindowPreviewOwnerID) {
+        cancelDismissal()
+        activationTask?.cancel()
+        activationTask = nil
+        hoverIntent.reset()
         var updatedSelection = selection
         updatedSelection.activate(ownerID)
         selection = updatedSelection

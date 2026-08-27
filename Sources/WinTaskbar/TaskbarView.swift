@@ -722,6 +722,19 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
         Button {
             guard !isTaskbarReordering() else { return }
             dockBadges.acknowledge(item.bundleIdentifier)
+            if let pid = item.processIdentifier {
+                let windows = windowsService.windows(forPID: pid)
+                if TaskbarAppPrimaryClickPolicy.showsPreviewsImmediately(
+                    windowCount: windows.count,
+                    previewsEnabled: preferences.windowPreviewsEnabled
+                ) {
+                    previewWindows = windows
+                    taskbarJumpListController.dismiss()
+                    windowPeekController.hideImmediately()
+                    windowPreviewPanelController.activateImmediately(ownerID: previewOwnerID)
+                    return
+                }
+            }
             DispatchQueue.main.async {
                 windowActivator.activateOrMinimize(item)
             }

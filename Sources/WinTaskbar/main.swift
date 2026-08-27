@@ -386,6 +386,7 @@ func runSelfTest() async -> Int32 {
           WindowsTrayIconMetrics.clockRowHeight == 18,
           WindowsTrayIconMetrics.showDesktopVisibleThickness < WindowsTrayIconMetrics.showDesktopHitThickness,
           WindowsTrayIconMetrics.showDesktopIndicatorLength < WindowsTrayIconMetrics.controlHeight,
+          WindowsTrayIconMetrics.pressedFillOpacity > WindowsTrayIconMetrics.hoverFillOpacity,
           WindowsTrayTooltipMetrics.size(for: "QQ音乐").height == 32,
           WindowsTrayTooltipMetrics.size(for: "Thursday, August 27, 2026\n\nThu 14:35:49 (Local time)").height > 32,
           preferences.menuButtonPlacement == .standard,
@@ -872,6 +873,13 @@ func runSelfTest() async -> Int32 {
     let previewSize = CGSize(width: 340, height: 130)
     let firstPreviewOwner = WindowPreviewOwnerID(displayID: 1, bundleIdentifier: "com.example.first")
     let secondPreviewOwner = WindowPreviewOwnerID(displayID: 1, bundleIdentifier: "com.example.second")
+    let immediatePreviewController = WindowPreviewPanelController()
+    immediatePreviewController.activateImmediately(ownerID: firstPreviewOwner)
+    guard immediatePreviewController.activeOwnerID == firstPreviewOwner else {
+        fputs("SELF-TEST FAILED: immediate window preview activation mismatch\n", stderr)
+        return 1
+    }
+    immediatePreviewController.dismissAll()
     let landscapePreviewWindow = WindowInfo(
         windowID: 1,
         title: "Landscape",
@@ -1069,6 +1077,9 @@ func runSelfTest() async -> Int32 {
               isApplicationActive: true,
               isSingleWindowFocused: true
           ) == .doNothing,
+          TaskbarAppPrimaryClickPolicy.showsPreviewsImmediately(windowCount: 2, previewsEnabled: true),
+          !TaskbarAppPrimaryClickPolicy.showsPreviewsImmediately(windowCount: 1, previewsEnabled: true),
+          !TaskbarAppPrimaryClickPolicy.showsPreviewsImmediately(windowCount: 2, previewsEnabled: false),
           TaskbarAppClickPolicy.action(
               windows: [minimizedPreviewWindow],
               isApplicationActive: false,

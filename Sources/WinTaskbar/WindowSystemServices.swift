@@ -26,6 +26,12 @@ struct TaskbarAppClickPolicy {
     }
 }
 
+struct TaskbarAppPrimaryClickPolicy {
+    static func showsPreviewsImmediately(windowCount: Int, previewsEnabled: Bool) -> Bool {
+        previewsEnabled && windowCount > 1
+    }
+}
+
 @MainActor
 final class WindowActivationService {
     private let windowsService: WindowsService
