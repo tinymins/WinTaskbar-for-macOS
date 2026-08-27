@@ -157,6 +157,11 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     static let trayItemPasteboardType = NSPasteboard.PasteboardType(
         "io.github.tinymins.WinTaskbar.external-status-item"
     )
+    static let trackingAreaOptions: NSTrackingArea.Options = [
+        .activeAlways,
+        .mouseEnteredAndExited,
+        .inVisibleRect,
+    ]
 
     var hoverTitle = ""
     var tooltipGap = WindowsTrayIconMetrics.tooltipGap
@@ -203,15 +208,15 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     }
 
     override func updateTrackingAreas() {
+        super.updateTrackingAreas()
         if let trackingAreaReference { removeTrackingArea(trackingAreaReference) }
         let area = NSTrackingArea(
-            rect: bounds,
-            options: [.activeAlways, .mouseEnteredAndExited],
+            rect: .zero,
+            options: Self.trackingAreaOptions,
             owner: self
         )
         addTrackingArea(area)
         trackingAreaReference = area
-        super.updateTrackingAreas()
     }
 
     override func mouseEntered(with event: NSEvent) {

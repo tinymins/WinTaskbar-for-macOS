@@ -417,6 +417,7 @@ func runSelfTest() async -> Int32 {
           WindowsTrayIconMetrics.showDesktopVisibleThickness < WindowsTrayIconMetrics.showDesktopHitThickness,
           WindowsTrayIconMetrics.showDesktopIndicatorLength < WindowsTrayIconMetrics.controlHeight,
           WindowsTrayIconMetrics.pressedFillOpacity > WindowsTrayIconMetrics.hoverFillOpacity,
+          WindowsTrayIconControl.trackingAreaOptions.contains(.inVisibleRect),
           WindowsTrayTooltipMetrics.size(for: "QQ音乐").height == 32,
           WindowsTrayTooltipMetrics.size(for: "Thursday, August 27, 2026\n\nThu 14:35:49 (Local time)").height > 32,
           preferences.menuButtonPlacement == .standard,
