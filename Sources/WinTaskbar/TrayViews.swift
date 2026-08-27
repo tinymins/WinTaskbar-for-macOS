@@ -162,7 +162,7 @@ struct InputSourceTrayView: View {
             primaryAction: togglePanel
         ) {
             Text(currentAbbreviation)
-                .font(.caption2.weight(.medium))
+                .font(.system(size: 15, weight: .medium))
         }
         .frame(width: WindowsTrayIconMetrics.squareControlWidth, height: WindowsTrayIconMetrics.controlHeight)
         .onDisappear { panelController.dismiss() }
@@ -196,49 +196,77 @@ struct ClockTrayView: View {
     let screen: NSScreen
 
     var body: some View {
-        Button {
-            panelController.toggle(
-                screen: screen,
-                position: position,
-                barHeight: barHeight,
-                theme: theme
-            )
-        } label: {
-            VStack(alignment: .trailing, spacing: 0) {
-                Text(ClockTrayPresentation.time(
-                    service.now,
-                    showsSeconds: showsSeconds,
-                    configuration: formatConfiguration
-                ))
-                if position.isHorizontal {
-                    Text(ClockTrayPresentation.date(
-                        service.now,
-                        configuration: formatConfiguration
-                    ))
-                }
-            }.font(.caption2.monospacedDigit())
+        let time = ClockTrayPresentation.time(
+            service.now,
+            showsSeconds: showsSeconds,
+            configuration: formatConfiguration
+        )
+        let date = position.isHorizontal ? ClockTrayPresentation.date(
+            service.now,
+            configuration: formatConfiguration
+        ) : nil
+        WindowsTrayIconButton(
+            title: clockTooltip,
+            accessibilityLabel: "Clock and calendar",
+            tooltipGap: WindowsTrayIconMetrics.clockTooltipGap,
+            primaryAction: togglePanel
+        ) {
+            VStack(alignment: .center, spacing: 0) {
+                Text(time)
+                if let date { Text(date) }
+            }
+            .font(.caption2.monospacedDigit())
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.horizontal, WindowsTrayIconMetrics.horizontalContentPadding)
         }
-        .buttonStyle(.plain)
-        .help(clockHelp)
-        .accessibilityLabel("Clock and calendar")
+        .frame(
+            width: Self.controlWidth(time: time, date: date),
+            height: WindowsTrayIconMetrics.controlHeight
+        )
         .onDisappear { panelController.dismiss(animated: false) }
     }
 
-    private var clockHelp: String {
+    static func controlWidth(time: String, date: String?) -> CGFloat {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+        let strings = [time, date].compactMap { $0 }
+        let textWidth = strings.map {
+            ($0 as NSString).size(withAttributes: [.font: font]).width
+        }.max() ?? 0
+        return max(
+            WindowsTrayIconMetrics.clockMinimumControlWidth,
+            ceil(textWidth) + 2 * WindowsTrayIconMetrics.horizontalContentPadding
+        )
+    }
+
+    private func togglePanel() {
+        panelController.toggle(
+            screen: screen,
+            position: position,
+            barHeight: barHeight,
+            theme: theme
+        )
+    }
+
+    private var clockTooltip: String {
         let clockLines = additionalClocks.filter(\.isEnabled).compactMap { clock -> String? in
             guard let timeZone = TimeZone(identifier: clock.timeZoneIdentifier) else { return nil }
             let time = DateTimeFormatter.string(
                 from: service.now,
-                pattern: formatConfiguration.shortTimePattern,
+                pattern: "EEE \(formatConfiguration.longTimePattern)",
                 configuration: formatConfiguration,
                 timeZone: timeZone
             )
-            let relativeDay = AdditionalClockPresentation.relativeDay(
-                for: service.now,
-                targetTimeZone: timeZone
-            )
-            return "\(clock.displayName)  \([time, relativeDay?.localizedLabel].compactMap { $0 }.joined(separator: " "))"
+            return "\(time) (\(clock.displayName))"
         }
-        return (["Clock and calendar"] + clockLines).joined(separator: "\n")
+        let longDate = DateTimeFormatter.longDateString(
+            from: service.now,
+            configuration: formatConfiguration
+        )
+        let localTime = DateTimeFormatter.string(
+            from: service.now,
+            pattern: "EEE \(formatConfiguration.longTimePattern)",
+            configuration: formatConfiguration
+        )
+        return ([longDate, "", "\(localTime) (Local time)"] + clockLines).joined(separator: "\n")
     }
 }
