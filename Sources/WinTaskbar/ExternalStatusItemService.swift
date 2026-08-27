@@ -6,7 +6,6 @@ import SwiftUI
 struct ExternalStatusItem: Identifiable {
     let id: String
     let processIdentifier: pid_t
-    let ownerName: String
     let accessibilityLabel: String
     let sourceFrame: CGRect
     let image: NSImage
@@ -318,7 +317,6 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
                 nextItems.append(ExternalStatusItem(
                     id: itemID,
                     processIdentifier: application.processIdentifier,
-                    ownerName: ownerName,
                     accessibilityLabel: label,
                     sourceFrame: frame,
                     image: image
@@ -498,7 +496,6 @@ struct ExternalStatusItemsView: View {
             ExternalStatusItemButton(
                 image: item.image,
                 label: item.accessibilityLabel,
-                help: "\(item.ownerName): \(item.accessibilityLabel)",
                 primaryAction: { service.performPrimaryAction(item) },
                 contextAction: { service.presentContextMenu(item) }
             )
@@ -517,7 +514,6 @@ struct ExternalStatusItemsView: View {
 private struct ExternalStatusItemButton: NSViewRepresentable {
     let image: NSImage
     let label: String
-    let help: String
     let primaryAction: () -> Void
     let contextAction: () -> Void
 
@@ -533,7 +529,7 @@ private struct ExternalStatusItemButton: NSViewRepresentable {
 
     private func update(_ control: ExternalStatusItemControl) {
         control.image = image
-        control.toolTip = help
+        control.hoverTitle = label
         control.onLeftActivate = primaryAction
         control.onRightActivate = contextAction
         control.setAccessibilityElement(true)
@@ -545,6 +541,7 @@ private struct ExternalStatusItemButton: NSViewRepresentable {
 @MainActor
 private final class ExternalStatusItemControl: NSControl {
     var image: NSImage? { didSet { needsDisplay = true } }
+    var hoverTitle = ""
     var onLeftActivate: (() -> Void)?
     var onRightActivate: (() -> Void)?
     private var trackingAreaReference: NSTrackingArea?
@@ -568,11 +565,15 @@ private final class ExternalStatusItemControl: NSControl {
     override func mouseEntered(with event: NSEvent) {
         isHovered = true
         needsDisplay = true
+        guard let window else { return }
+        let anchor = window.convertToScreen(convert(bounds, to: nil))
+        ExternalStatusItemTooltipController.shared.schedule(title: hoverTitle, anchor: anchor, owner: self)
     }
 
     override func mouseExited(with event: NSEvent) {
         isHovered = false
         needsDisplay = true
+        ExternalStatusItemTooltipController.shared.hide(owner: self)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -611,6 +612,7 @@ private final class ExternalStatusItemControl: NSControl {
     }
 
     private func activate(_ action: (() -> Void)?) {
+        ExternalStatusItemTooltipController.shared.hide(owner: self)
         isPressed = true
         needsDisplay = true
         displayIfNeeded()
@@ -628,6 +630,120 @@ private final class ExternalStatusItemControl: NSControl {
             y: bounds.midY - targetSize.height / 2,
             width: targetSize.width,
             height: targetSize.height
+        )
+    }
+}
+
+@MainActor
+private final class ExternalStatusItemTooltipController {
+    static let shared = ExternalStatusItemTooltipController()
+
+    private let panel: ExternalStatusItemTooltipPanel
+    private let tooltipView = ExternalStatusItemTooltipView()
+    private var pendingWorkItem: DispatchWorkItem?
+    private weak var owner: ExternalStatusItemControl?
+
+    private init() {
+        panel = ExternalStatusItemTooltipPanel(
+            contentRect: .zero,
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = true
+        panel.ignoresMouseEvents = true
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 2)
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+
+        panel.contentView = tooltipView
+    }
+
+    func schedule(title: String, anchor: CGRect, owner: ExternalStatusItemControl) {
+        pendingWorkItem?.cancel()
+        panel.orderOut(nil)
+        self.owner = owner
+
+        let workItem = DispatchWorkItem { [weak self, weak owner] in
+            guard let self, let owner, self.owner === owner, owner.window != nil else { return }
+            self.show(title: title, anchor: anchor)
+        }
+        pendingWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(400), execute: workItem)
+    }
+
+    func hide(owner: ExternalStatusItemControl) {
+        guard self.owner === owner else { return }
+        pendingWorkItem?.cancel()
+        pendingWorkItem = nil
+        self.owner = nil
+        panel.orderOut(nil)
+    }
+
+    private func show(title: String, anchor: CGRect) {
+        tooltipView.title = title
+        let textWidth = ceil((title as NSString).size(withAttributes: [.font: tooltipView.font]).width)
+        let size = CGSize(width: min(max(textWidth + 20, 44), 280), height: 32)
+        guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) }) ?? NSScreen.main else { return }
+        panel.setFrame(Self.frame(size: size, anchor: anchor, screen: screen.frame), display: true)
+        panel.orderFrontRegardless()
+    }
+
+    static func frame(size: CGSize, anchor: CGRect, screen: CGRect) -> CGRect {
+        let distances = [
+            (side: 0, distance: abs(anchor.minY - screen.minY)),
+            (side: 1, distance: abs(screen.maxY - anchor.maxY)),
+            (side: 2, distance: abs(anchor.minX - screen.minX)),
+            (side: 3, distance: abs(screen.maxX - anchor.maxX))
+        ]
+        let side = distances.min(by: { $0.distance < $1.distance })?.side ?? 0
+        var origin: CGPoint
+        switch side {
+        case 1:
+            origin = CGPoint(x: anchor.midX - size.width / 2, y: anchor.minY - size.height - 4)
+        case 2:
+            origin = CGPoint(x: anchor.maxX + 4, y: anchor.midY - size.height / 2)
+        case 3:
+            origin = CGPoint(x: anchor.minX - size.width - 4, y: anchor.midY - size.height / 2)
+        default:
+            origin = CGPoint(x: anchor.midX - size.width / 2, y: anchor.maxY + 4)
+        }
+        origin.x = min(max(origin.x, screen.minX + 6), screen.maxX - size.width - 6)
+        origin.y = min(max(origin.y, screen.minY + 6), screen.maxY - size.height - 6)
+        return CGRect(origin: origin, size: size)
+    }
+}
+
+private final class ExternalStatusItemTooltipPanel: NSPanel {
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+}
+
+private final class ExternalStatusItemTooltipView: NSView {
+    let font = NSFont.systemFont(ofSize: 11, weight: .regular)
+    var title = "" { didSet { needsDisplay = true } }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor(srgbRed: 31 / 255, green: 42 / 255, blue: 52 / 255, alpha: 0.98).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3).fill()
+        NSColor(srgbRed: 58 / 255, green: 68 / 255, blue: 77 / 255, alpha: 1).setStroke()
+        let border = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 3, yRadius: 3)
+        border.lineWidth = 1
+        border.stroke()
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        paragraph.lineBreakMode = .byTruncatingTail
+        (title as NSString).draw(
+            in: bounds.insetBy(dx: 10, dy: 8),
+            withAttributes: [
+                .font: font,
+                .foregroundColor: NSColor(srgbRed: 246 / 255, green: 247 / 255, blue: 247 / 255, alpha: 1),
+                .paragraphStyle: paragraph
+            ]
         )
     }
 }
