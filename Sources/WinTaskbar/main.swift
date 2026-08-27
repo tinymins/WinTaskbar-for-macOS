@@ -263,7 +263,10 @@ func runSelfTest() async -> Int32 {
           })?.isEnabled == true,
           preferences.globalShortcutConfigurations.first(where: {
               $0.id == GlobalShortcutCatalog.quickLinkMenuID
-          })?.action == .toggleQuickLinkMenu else {
+          })?.action == .toggleQuickLinkMenu,
+          preferences.globalShortcutConfigurations.first(where: {
+              $0.id == GlobalShortcutCatalog.quickLinkMenuID
+          })?.isEnabled == true else {
         fputs("SELF-TEST FAILED: default values mismatch\n", stderr)
         return 1
     }

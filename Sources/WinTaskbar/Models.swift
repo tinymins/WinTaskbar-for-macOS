@@ -296,7 +296,7 @@ enum GlobalShortcutCatalog {
                 id: quickLinkMenuID,
                 title: "Quick Link Menu",
                 windowsLabel: "Win+X",
-                enabled: false,
+                enabled: true,
                 shortcut: HotkeyShortcut(keyCode: 7, modifiers: 0, keyLabel: "X"),
                 usesWindowsKey: true,
                 action: .toggleQuickLinkMenu
