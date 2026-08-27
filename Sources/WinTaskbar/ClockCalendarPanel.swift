@@ -43,6 +43,7 @@ final class ClockCalendarPanelController: ObservableObject {
     private var expansionObserver: AnyCancellable?
     private var presentation: Presentation?
     private var isShowing = false
+    private var keepsVisibleForSettings = false
     private var transitionSequence = ClockCalendarPanelTransitionSequence()
 
     private struct Presentation {
@@ -98,6 +99,10 @@ final class ClockCalendarPanelController: ObservableObject {
                 panel.orderOut(nil)
             }
         }
+    }
+
+    func setKeepsVisibleForSettings(_ keepsVisible: Bool) {
+        keepsVisibleForSettings = keepsVisible
     }
 
     private func present(screen: NSScreen, position: TaskbarPosition, barHeight: CGFloat, theme: AppTheme) {
@@ -233,6 +238,9 @@ final class ClockCalendarPanelController: ObservableObject {
             if event.window !== self.panel {
                 DispatchQueue.main.async { [weak self] in
                     guard let self,
+                          TransientSurfaceDismissalPolicy.shouldDismissForOutsideInteraction(
+                              keepsVisibleForSettings: self.keepsVisibleForSettings
+                          ),
                           ClockCalendarDismissalPolicy.shouldDismissForFocusLoss(
                               isEditingCalendarEvent: self.state.isEditingCalendarEvent,
                               isRequestingCalendarAccess: self.calendarService.isRequestingAccess
@@ -244,6 +252,9 @@ final class ClockCalendarPanelController: ObservableObject {
         }
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             guard let self,
+                  TransientSurfaceDismissalPolicy.shouldDismissForOutsideInteraction(
+                      keepsVisibleForSettings: self.keepsVisibleForSettings
+                  ),
                   ClockCalendarDismissalPolicy.shouldDismissForFocusLoss(
                       isEditingCalendarEvent: self.state.isEditingCalendarEvent,
                       isRequestingCalendarAccess: self.calendarService.isRequestingAccess

@@ -63,10 +63,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         actions.toggleStartMenuHandler = { [weak startMenu] screen in startMenu?.toggle(on: screen) }
         actions.closeStartMenuHandler = { [weak startMenu] in startMenu?.hide() }
-        actions.openSettingsHandler = { [weak settings, weak startMenu] in
-            startMenu?.hide()
-            settings?.show()
+        settings.onVisibilityChanged = { [weak startMenu, weak taskbar] visible in
+            startMenu?.setSettingsObservationMode(visible)
+            taskbar?.setSettingsObservationMode(visible)
         }
+        actions.openSettingsHandler = { [weak settings] in settings?.show() }
         actions.fitWindowsHandler = { [weak self] in
             self?.windowFittingService.fitAllWindowsToFreeSpace()
         }
@@ -118,12 +119,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--run-demo") {
             runWindowController.show()
         }
+        if CommandLine.arguments.contains("--settings-demo") {
+            startMenu.toggle()
+            settings.show()
+        }
 #endif
         windowFittingService.start()
         var shouldShowOnboarding = !preferences.hasCompletedOnboarding
 #if DEBUG
         shouldShowOnboarding = shouldShowOnboarding
             && !CommandLine.arguments.contains("--run-demo")
+            && !CommandLine.arguments.contains("--settings-demo")
 #endif
         if shouldShowOnboarding {
             let onboarding = OnboardingWindowController(preferences: preferences)
@@ -307,7 +313,22 @@ func runSelfTest() async -> Int32 {
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
     let preferences = PreferencesStore(defaults: defaults)
-    guard preferences.position == .bottom,
+    guard SettingsPage.allCases.map(\.rawValue) == [
+        "General",
+        "Appearance",
+        "Start Menu",
+        "Taskbar & Tray",
+        "Hotkeys",
+        "Shortcut Mappings",
+        "About"
+    ],
+          TransientSurfaceDismissalPolicy.shouldDismissForOutsideInteraction(
+              keepsVisibleForSettings: false
+          ),
+          !TransientSurfaceDismissalPolicy.shouldDismissForOutsideInteraction(
+              keepsVisibleForSettings: true
+          ),
+          preferences.position == .bottom,
           preferences.barHeight == 48,
           preferences.iconScale == 1,
           preferences.iconPadding == 0.06,

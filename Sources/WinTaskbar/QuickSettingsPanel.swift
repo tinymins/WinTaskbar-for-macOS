@@ -168,6 +168,10 @@ final class QuickSettingsPanelController: ObservableObject {
     func dismiss() {
         panelController.dismiss()
     }
+
+    func setKeepsVisibleForSettings(_ keepsVisible: Bool) {
+        panelController.setKeepsVisibleForSettings(keepsVisible)
+    }
 }
 
 private enum QuickSettingsDestination {

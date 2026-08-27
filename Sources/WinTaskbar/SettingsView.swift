@@ -3,32 +3,90 @@ import Carbon
 import SwiftUI
 import UniformTypeIdentifiers
 
+enum SettingsPage: String, CaseIterable, Identifiable {
+    case general = "General"
+    case appearance = "Appearance"
+    case startMenu = "Start Menu"
+    case taskbar = "Taskbar & Tray"
+    case hotkeys = "Hotkeys"
+    case shortcutMappings = "Shortcut Mappings"
+    case about = "About"
+
+    var id: String { rawValue }
+
+    var symbol: String {
+        switch self {
+        case .general: "gearshape"
+        case .appearance: "paintbrush"
+        case .startMenu: "square.grid.2x2"
+        case .taskbar: "dock.rectangle"
+        case .hotkeys: "keyboard"
+        case .shortcutMappings: "command"
+        case .about: "info.circle"
+        }
+    }
+}
+
 struct SettingsView: View {
     @ObservedObject var preferences: PreferencesStore
     @ObservedObject private var dockToggle = DockToggleService.shared
     @ObservedObject private var loginItem = LoginItemService.shared
     @ObservedObject private var globalHotkeys = GlobalHotkeysService.shared
+    @State private var selectedPage = SettingsPage.general
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                general
-                appearance
-                startMenu
-                features
-                hotkeys
-                about
+        NavigationSplitView {
+            List(SettingsPage.allCases, selection: $selectedPage) { page in
+                Label(page.rawValue, systemImage: page.symbol)
+                    .tag(page)
             }
-            .padding(16)
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 220)
+        } detail: {
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Image(systemName: selectedPage.symbol)
+                        .foregroundStyle(.secondary)
+                    Text(selectedPage.rawValue)
+                        .font(.title2.weight(.semibold))
+                    Spacer()
+                }
+                .padding(.horizontal, 22)
+                .frame(height: 58)
+                Divider()
+                selectedPageContent
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationSplitViewStyle(.balanced)
         .onAppear {
             loginItem.refresh()
         }
     }
 
+    @ViewBuilder
+    private var selectedPageContent: some View {
+        switch selectedPage {
+        case .general: settingsPage(general)
+        case .appearance: settingsPage(appearance)
+        case .startMenu: settingsPage(startMenu)
+        case .taskbar: settingsPage(features)
+        case .hotkeys: settingsPage(hotkeySettings)
+        case .shortcutMappings: settingsPage(shortcutMappings)
+        case .about: settingsPage(about)
+        }
+    }
+
+    private func settingsPage<Content: View>(_ content: Content) -> some View {
+        ScrollView {
+            content
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private var general: some View {
-        SettingsSection("General") {
+        SettingsSection("Taskbar") {
             Picker("Position", selection: $preferences.position) {
                 ForEach(TaskbarPosition.allCases) { Text($0.rawValue).tag($0) }
             }
@@ -77,7 +135,7 @@ struct SettingsView: View {
     }
 
     private var appearance: some View {
-        SettingsSection("Appearance") {
+        SettingsSection("Visual style") {
             Picker("Theme", selection: $preferences.theme) {
                 ForEach(AppTheme.allCases) { Text($0.rawValue).tag($0) }
             }
@@ -146,7 +204,7 @@ struct SettingsView: View {
     }
 
     private var startMenu: some View {
-        SettingsSection("Start menu") {
+        SettingsSection("Behavior") {
             Picker("Windows style", selection: $preferences.menuWindowStyle) {
                 ForEach(HighlightStyle.allCases) { Text($0.rawValue).tag($0) }
             }
@@ -182,52 +240,52 @@ struct SettingsView: View {
         }
     }
 
-    private var hotkeys: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            SettingsSection("Windows Global Shortcuts") {
-                Toggle("Enable global shortcuts", isOn: $preferences.globalHotkeysEnabled)
-                Picker("Windows key", selection: $preferences.windowsKeyMapping) {
-                    ForEach(WindowsKeyMapping.allCases) { mapping in
-                        Text(mapping.rawValue).tag(mapping)
-                    }
+    private var hotkeySettings: some View {
+        SettingsSection("Windows Global Shortcuts") {
+            Toggle("Enable global shortcuts", isOn: $preferences.globalHotkeysEnabled)
+            Picker("Windows key", selection: $preferences.windowsKeyMapping) {
+                ForEach(WindowsKeyMapping.allCases) { mapping in
+                    Text(mapping.rawValue).tag(mapping)
                 }
-                Toggle("Press Windows key alone to open Start", isOn: $preferences.windowsKeyOpensStart)
-                    .disabled(!preferences.globalHotkeysEnabled)
-                if let issue = globalHotkeys.windowsKeyIssue,
-                   preferences.globalHotkeysEnabled,
-                   preferences.windowsKeyOpensStart {
-                    Text(issue)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-                Text("Option preserves the existing WinTaskbar behavior. Command matches the Windows-logo key on most PC keyboards connected to a Mac.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("Enabled mappings override matching macOS and application shortcuts.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
+            Toggle("Press Windows key alone to open Start", isOn: $preferences.windowsKeyOpensStart)
+                .disabled(!preferences.globalHotkeysEnabled)
+            if let issue = globalHotkeys.windowsKeyIssue,
+               preferences.globalHotkeysEnabled,
+               preferences.windowsKeyOpensStart {
+                Text(issue)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            Text("Option preserves the existing WinTaskbar behavior. Command matches the Windows-logo key on most PC keyboards connected to a Mac.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("Enabled mappings override matching macOS and application shortcuts.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
 
-            SettingsSection("Shortcut mappings") {
-                ForEach(Array(preferences.globalShortcutConfigurations.enumerated()), id: \.element.id) { index, configuration in
-                    GlobalShortcutRow(
-                        configuration: configurationBinding(id: configuration.id),
-                        windowsKeyMapping: preferences.windowsKeyMapping,
-                        globalEnabled: preferences.globalHotkeysEnabled,
-                        registrationIssue: globalHotkeys.registrationIssues[configuration.id],
-                        onChooseApplication: { chooseApplication(for: configuration.id) },
-                        onResetTrigger: { resetTrigger(for: configuration.id) }
-                    )
-                    if index < preferences.globalShortcutConfigurations.count - 1 {
-                        Divider()
-                    }
+    private var shortcutMappings: some View {
+        SettingsSection("Shortcut mappings") {
+            ForEach(Array(preferences.globalShortcutConfigurations.enumerated()), id: \.element.id) { index, configuration in
+                GlobalShortcutRow(
+                    configuration: configurationBinding(id: configuration.id),
+                    windowsKeyMapping: preferences.windowsKeyMapping,
+                    globalEnabled: preferences.globalHotkeysEnabled,
+                    registrationIssue: globalHotkeys.registrationIssues[configuration.id],
+                    onChooseApplication: { chooseApplication(for: configuration.id) },
+                    onResetTrigger: { resetTrigger(for: configuration.id) }
+                )
+                if index < preferences.globalShortcutConfigurations.count - 1 {
+                    Divider()
                 }
             }
         }
     }
 
     private var about: some View {
-        SettingsSection("About") {
+        SettingsSection("Application") {
             LabeledContent("Version", value: AppMetadata.version)
             Button("Check for Updates") {
                 if let url = URL(string: "https://github.com/tinymins/WinTaskbar-for-macOS/releases") {

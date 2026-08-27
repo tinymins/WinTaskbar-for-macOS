@@ -506,6 +506,7 @@ final class TaskbarWindowController {
     private var panels: [TaskbarPanel] = []
     private var cancellable: AnyCancellable?
     private var taskbarCycleIndex: Int?
+    private var keepsTransientSurfacesVisibleForSettings = false
 
     init(
         preferences: PreferencesStore,
@@ -558,6 +559,18 @@ final class TaskbarWindowController {
         clockCalendarPanelController.dismiss(animated: false)
         snapLayoutsPanelController.dismiss()
         clipboardHistoryPanelController.dismiss()
+    }
+
+    func setSettingsObservationMode(_ enabled: Bool) {
+        keepsTransientSurfacesVisibleForSettings = enabled
+        taskbarJumpListController.setKeepsVisibleForSettings(enabled)
+        startButtonContextMenuController.setKeepsVisibleForSettings(enabled)
+        startButtonPowerMenuController.setKeepsVisibleForSettings(enabled)
+        quickSettingsPanelController.setKeepsVisibleForSettings(enabled)
+        inputSourcePanelController.setKeepsVisibleForSettings(enabled)
+        clockCalendarPanelController.setKeepsVisibleForSettings(enabled)
+        snapLayoutsPanelController.setKeepsVisibleForSettings(enabled)
+        clipboardHistoryPanelController.setKeepsVisibleForSettings(enabled)
     }
 
     func toggleQuickSettings() {
@@ -694,9 +707,11 @@ final class TaskbarWindowController {
     }
 
     func applyLayout() {
-        taskbarJumpListController.dismiss()
-        startButtonContextMenuController.dismiss()
-        startButtonPowerMenuController.dismiss()
+        if !keepsTransientSurfacesVisibleForSettings {
+            taskbarJumpListController.dismiss()
+            startButtonContextMenuController.dismiss()
+            startButtonPowerMenuController.dismiss()
+        }
         let expectedCount = preferences.displayMode == .primary ? min(1, NSScreen.screens.count) : NSScreen.screens.count
         guard panels.count == expectedCount else {
             rebuildPanels()
@@ -827,6 +842,7 @@ final class StartMenuController: NSObject, NSWindowDelegate {
     private var isPresented = false
     private var targetFrame: NSRect?
     private var orderOutTask: Task<Void, Never>?
+    private var keepsVisibleForSettings = false
 
     init(
         preferences: PreferencesStore,
@@ -923,9 +939,16 @@ final class StartMenuController: NSObject, NSWindowDelegate {
         }
     }
 
+    func setSettingsObservationMode(_ enabled: Bool) {
+        keepsVisibleForSettings = enabled
+        if !enabled, isPresented, !panel.isKeyWindow {
+            hide()
+        }
+    }
+
     func windowDidResignKey(_ notification: Notification) {
         lastResignDate = Date()
-        hide()
+        if !keepsVisibleForSettings { hide() }
     }
 
     private func applyAppearance() {
@@ -1136,15 +1159,18 @@ enum StartMenuGeometry {
 
 @MainActor
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
+    var onVisibilityChanged: ((Bool) -> Void)?
+
     init(preferences: PreferencesStore) {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 720),
+            contentRect: NSRect(x: 0, y: 0, width: 820, height: 650),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "WinTaskbar Settings"
         window.isReleasedWhenClosed = false
+        window.minSize = NSSize(width: 720, height: 540)
         window.contentView = NSHostingView(rootView: SettingsView(preferences: preferences))
         super.init(window: window)
         window.delegate = self
@@ -1153,9 +1179,14 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     required init?(coder: NSCoder) { nil }
 
     func show() {
+        onVisibilityChanged?(true)
         NSApp.activate(ignoringOtherApps: true)
         window?.center()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onVisibilityChanged?(false)
     }
 }

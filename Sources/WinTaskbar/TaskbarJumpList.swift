@@ -109,6 +109,12 @@ struct TaskbarJumpListInteractionPolicy {
     }
 }
 
+enum TransientSurfaceDismissalPolicy {
+    static func shouldDismissForOutsideInteraction(keepsVisibleForSettings: Bool) -> Bool {
+        !keepsVisibleForSettings
+    }
+}
+
 final class TaskbarJumpListPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -121,6 +127,7 @@ final class TaskbarJumpListController: ObservableObject {
     private let hostingView = NSHostingView(rootView: AnyView(EmptyView()))
     private var localEventMonitor: Any?
     private var globalEventMonitor: Any?
+    private var keepsVisibleForSettings = false
 
     var isVisible: Bool { panel?.isVisible == true }
 
@@ -178,6 +185,10 @@ final class TaskbarJumpListController: ObservableObject {
         removeEventMonitors()
     }
 
+    func setKeepsVisibleForSettings(_ keepsVisible: Bool) {
+        keepsVisibleForSettings = keepsVisible
+    }
+
     private func makePanel() -> TaskbarJumpListPanel {
         let panel = TaskbarJumpListPanel(
             contentRect: .zero,
@@ -208,6 +219,9 @@ final class TaskbarJumpListController: ObservableObject {
                 return nil
             }
             if event.type != .keyDown,
+               TransientSurfaceDismissalPolicy.shouldDismissForOutsideInteraction(
+                   keepsVisibleForSettings: keepsVisibleForSettings
+               ),
                let panel,
                !panel.frame.contains(NSEvent.mouseLocation) {
                 dismiss()
@@ -217,7 +231,13 @@ final class TaskbarJumpListController: ObservableObject {
         globalEventMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] _ in
-            Task { @MainActor in self?.dismiss() }
+            Task { @MainActor in
+                guard let self,
+                      TransientSurfaceDismissalPolicy.shouldDismissForOutsideInteraction(
+                          keepsVisibleForSettings: self.keepsVisibleForSettings
+                      ) else { return }
+                self.dismiss()
+            }
         }
     }
 

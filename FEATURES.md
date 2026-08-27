@@ -25,6 +25,6 @@
 | Dock control | Hide/restore Dock and orientation sync | Code path + build |
 | Login item | ServiceManagement registration and status | Code path + build |
 | Permissions | Accessibility, Screen Recording, Automation status/actions | Onboarding + settings UI |
-| Preferences | General, Appearance, Start Menu, Features, Permissions, Hotkeys, About | Live embedded settings |
+| Preferences | Standalone paged window: General, Appearance, Start Menu, Taskbar & Tray, Hotkeys, Shortcut Mappings, About | Live settings with Start and transient panels retained for comparison |
 | Onboarding | Welcome, Accessibility, Dock choice | Live three-step flow |
 | Localization | Twelve localization bundles including Simplified Chinese | Packaged resources |

@@ -102,6 +102,10 @@ final class InputSourcePanelController: ObservableObject {
     func dismiss() {
         panelController.dismiss()
     }
+
+    func setKeepsVisibleForSettings(_ keepsVisible: Bool) {
+        panelController.setKeepsVisibleForSettings(keepsVisible)
+    }
 }
 
 private enum InputSourceSettings {

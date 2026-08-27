@@ -22,7 +22,6 @@ struct StartMenuView: View {
     @ObservedObject var actions: AppActions
     @ObservedObject var preferences: PreferencesStore
     @State private var query = ""
-    @State private var showingSettings = false
     @State private var shortcutIsDropTarget = false
 
     private var filteredApps: [DiscoveredApp] {
@@ -37,24 +36,12 @@ struct StartMenuView: View {
     var body: some View {
         HStack(spacing: 0) {
             if preferences.menuActionsSide == .left { actionRail; Divider() }
-            mainPanel
+            appsPanel
             if preferences.menuActionsSide == .right { Divider(); actionRail }
         }
         .frame(width: 400)
         .frame(maxHeight: .infinity)
-        .animation(.easeInOut(duration: 0.18), value: showingSettings)
         .onExitCommand { actions.closeStartMenu() }
-    }
-
-    private var mainPanel: some View {
-        ZStack {
-            appsPanel
-                .opacity(showingSettings ? 0 : 1)
-                .allowsHitTesting(!showingSettings)
-            settingsPanel
-                .opacity(showingSettings ? 1 : 0)
-                .allowsHitTesting(showingSettings)
-        }
     }
 
     private var appsPanel: some View {
@@ -106,19 +93,6 @@ struct StartMenuView: View {
                 .help("New folder")
         }
         .padding(.horizontal, 8)
-    }
-
-    private var settingsPanel: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Button { showingSettings = false } label: { Label("Back", systemImage: "chevron.left") }
-                    .buttonStyle(.plain)
-                Spacer()
-            }
-            .padding(8)
-            Divider()
-            SettingsView(preferences: preferences)
-        }
     }
 
     private var searchField: some View {
@@ -205,7 +179,7 @@ struct StartMenuView: View {
     private var actionRail: some View {
         VStack(spacing: 4) {
             HoveringIconButton(systemName: "gearshape", help: "Settings") {
-                showingSettings = true
+                actions.openSettings()
             }
             HoveringIconButton(systemName: "rectangle.arrowtriangle.2.inward", help: "Fit windows") {
                 actions.fitWindows()
