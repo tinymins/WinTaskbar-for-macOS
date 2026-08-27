@@ -495,11 +495,17 @@ final class TaskbarWindowController {
     private let quickSettingsPanelController = QuickSettingsPanelController()
     private let inputSourcePanelController = InputSourcePanelController()
     private let clockCalendarPanelController = ClockCalendarPanelController()
+    private let snapLayoutsPanelController = TaskbarJumpListController()
+    private let clipboardHistoryPanelController = TaskbarJumpListController()
     private let shortcutEditorController: ShortcutEditorController
     private let recentDocuments: RecentDocumentsService
     private let dockBadges: DockBadgeService
+    private let activeWindowShortcuts: ActiveWindowShortcutService
+    private let clipboardHistory: ClipboardHistoryService
+    private let systemShortcuts: SystemShortcutService
     private var panels: [TaskbarPanel] = []
     private var cancellable: AnyCancellable?
+    private var taskbarCycleIndex: Int?
 
     init(
         preferences: PreferencesStore,
@@ -509,7 +515,10 @@ final class TaskbarWindowController {
         windowActivator: WindowActivationService,
         windowsService: WindowsService,
         recentDocuments: RecentDocumentsService,
-        dockBadges: DockBadgeService
+        dockBadges: DockBadgeService,
+        activeWindowShortcuts: ActiveWindowShortcutService,
+        clipboardHistory: ClipboardHistoryService,
+        systemShortcuts: SystemShortcutService
     ) {
         self.preferences = preferences
         self.apps = apps
@@ -521,6 +530,9 @@ final class TaskbarWindowController {
         self.recentDocuments = recentDocuments
         windowPeekController = WindowPeekController(windowsService: windowsService)
         self.dockBadges = dockBadges
+        self.activeWindowShortcuts = activeWindowShortcuts
+        self.clipboardHistory = clipboardHistory
+        self.systemShortcuts = systemShortcuts
         cancellable = preferences.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async {
                 self?.applyLayout()
@@ -544,6 +556,8 @@ final class TaskbarWindowController {
         quickSettingsPanelController.dismiss()
         inputSourcePanelController.dismiss()
         clockCalendarPanelController.dismiss(animated: false)
+        snapLayoutsPanelController.dismiss()
+        clipboardHistoryPanelController.dismiss()
     }
 
     func toggleQuickSettings() {
@@ -610,6 +624,60 @@ final class TaskbarWindowController {
             barHeight: CGFloat(preferences.barHeight),
             theme: preferences.theme
         )
+    }
+
+    func toggleSnapLayouts() {
+        if snapLayoutsPanelController.isVisible {
+            snapLayoutsPanelController.dismiss()
+            return
+        }
+        dismissTransientSurfaces()
+        let size = CGSize(width: 330, height: 190)
+        let frame = utilityPanelFrame(contentSize: size)
+        let view = SnapLayoutsView { [weak self] placement in
+            self?.snapLayoutsPanelController.dismiss()
+            self?.activeWindowShortcuts.place(placement)
+        }
+        .frame(width: size.width, height: size.height)
+        snapLayoutsPanelController.show(rootView: AnyView(view), frame: frame, appearance: appearance)
+    }
+
+    func toggleClipboardHistory() {
+        if clipboardHistoryPanelController.isVisible {
+            clipboardHistoryPanelController.dismiss()
+            return
+        }
+        let targetApplication = NSWorkspace.shared.frontmostApplication
+        dismissTransientSurfaces()
+        let size = CGSize(width: 360, height: 360)
+        let frame = utilityPanelFrame(contentSize: size)
+        let view = ClipboardHistoryView(service: clipboardHistory) { [weak self] entry in
+            guard let self else { return }
+            clipboardHistory.copy(entry)
+            clipboardHistoryPanelController.dismiss()
+            targetApplication?.activate(options: [.activateIgnoringOtherApps])
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(80)) {
+                self.systemShortcuts.postPaste()
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        clipboardHistoryPanelController.show(rootView: AnyView(view), frame: frame, appearance: appearance)
+    }
+
+    func cycleTaskbarApps() {
+        let items = apps.taskbarItems(
+            pinnedBundleIDs: preferences.pinnedBundleIDs,
+            badges: dockBadges.badges,
+            showFinder: preferences.showFinder
+        )
+        guard !items.isEmpty else { return }
+        let nextIndex = ((taskbarCycleIndex ?? -1) + 1) % items.count
+        taskbarCycleIndex = nextIndex
+        apps.open(items[nextIndex])
+    }
+
+    func focusSystemTray() {
+        toggleQuickSettings()
     }
 
     func rebuildPanels() {
@@ -708,6 +776,18 @@ final class TaskbarWindowController {
     private func dismissStartButtonContextMenus() {
         startButtonPowerMenuController.dismiss()
         startButtonContextMenuController.dismiss()
+    }
+
+    private func utilityPanelFrame(contentSize: CGSize) -> CGRect {
+        let screen = activeScreen
+        return StartMenuGeometry.anchoredFrame(
+            screenFrame: screen.frame,
+            visibleFrame: screen.visibleFrame,
+            position: preferences.position,
+            barHeight: CGFloat(preferences.barHeight),
+            contentSize: contentSize,
+            oppositeEnd: true
+        )
     }
 
     private var appearance: NSAppearance? {

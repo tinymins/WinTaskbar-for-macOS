@@ -36,6 +36,7 @@ final class PowerService {
 final class ShowDesktopService {
     private let ownBundleID: String
     private var minimizedWindows: [AXUIElement] = []
+    private var minimizedOtherWindows: [AXUIElement] = []
     private(set) var isDesktopShown = false
 
     init(ownBundleID: String = Bundle.main.bundleIdentifier ?? "io.github.tinymins.WinTaskbar") {
@@ -44,6 +45,41 @@ final class ShowDesktopService {
 
     func toggle() {
         if isDesktopShown { restore() } else { showDesktop() }
+    }
+
+    func minimizeAll() {
+        if isDesktopShown { return }
+        showDesktop()
+    }
+
+    func restoreMinimized() {
+        restore()
+    }
+
+    func toggleOtherWindows() {
+        if !minimizedOtherWindows.isEmpty {
+            minimizedOtherWindows.forEach {
+                AXUIElementSetAttributeValue($0, kAXMinimizedAttribute as CFString, false as CFBoolean)
+            }
+            minimizedOtherWindows.removeAll()
+            return
+        }
+        let activePID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        for app in NSWorkspace.shared.runningApplications
+        where app.activationPolicy == .regular
+            && app.bundleIdentifier != ownBundleID
+            && app.processIdentifier != activePID {
+            let element = AXUIElementCreateApplication(app.processIdentifier)
+            for window in windows(of: element) where !isMinimized(window) {
+                if AXUIElementSetAttributeValue(
+                    window,
+                    kAXMinimizedAttribute as CFString,
+                    true as CFBoolean
+                ) == .success {
+                    minimizedOtherWindows.append(window)
+                }
+            }
+        }
     }
 
     private func showDesktop() {

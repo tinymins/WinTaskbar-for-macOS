@@ -16,6 +16,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let dockBadges = DockBadgeService()
     private let powerService = PowerService()
     private let showDesktopService = ShowDesktopService()
+    private lazy var activeWindowShortcutService = ActiveWindowShortcutService(preferences: preferences)
+    private let systemShortcutService = SystemShortcutService()
+    private let clipboardHistoryService = ClipboardHistoryService()
+    private let runWindowController = RunWindowController()
     private lazy var windowFittingService = WindowFittingService(preferences: preferences)
     private let dockToggleService = DockToggleService.shared
     private let loginItemService = LoginItemService.shared
@@ -34,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildApplicationMenu()
         dockToggleService.applyConfiguredStateOnLaunch()
         recentDocuments.start()
+        clipboardHistoryService.start()
 
         let taskbar = TaskbarWindowController(
             preferences: preferences,
@@ -43,7 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             windowActivator: windowActivator,
             windowsService: windowsService,
             recentDocuments: recentDocuments,
-            dockBadges: dockBadges
+            dockBadges: dockBadges,
+            activeWindowShortcuts: activeWindowShortcutService,
+            clipboardHistory: clipboardHistoryService,
+            systemShortcuts: systemShortcutService
         )
         let startMenu = StartMenuController(
             preferences: preferences,
@@ -107,9 +115,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.dockBadges.runAttentionDemo()
             }
         }
+        if CommandLine.arguments.contains("--run-demo") {
+            runWindowController.show()
+        }
 #endif
         windowFittingService.start()
-        if !preferences.hasCompletedOnboarding {
+        var shouldShowOnboarding = !preferences.hasCompletedOnboarding
+#if DEBUG
+        shouldShowOnboarding = shouldShowOnboarding
+            && !CommandLine.arguments.contains("--run-demo")
+#endif
+        if shouldShowOnboarding {
             let onboarding = OnboardingWindowController(preferences: preferences)
             onboardingController = onboarding
             onboarding.present()
@@ -145,6 +161,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .openApplication:
             guard let target = configuration.applicationTarget else { return }
             openApplication(target)
+        case .showRunDialog:
+            runWindowController.show()
         case .lockScreen:
             powerService.perform(.lockScreen)
         case .toggleQuickSettings:
@@ -153,6 +171,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             taskbarController?.toggleCalendar()
         case .toggleInputSources:
             taskbarController?.toggleInputSources()
+        case .snapWindowLeft:
+            activeWindowShortcutService.place(.leftHalf)
+        case .snapWindowRight:
+            activeWindowShortcutService.place(.rightHalf)
+        case .maximizeWindow:
+            activeWindowShortcutService.place(.maximized)
+        case .restoreOrMinimizeWindow:
+            activeWindowShortcutService.restoreOrMinimize()
+        case .toggleSnapLayouts:
+            taskbarController?.toggleSnapLayouts()
+        case .showTaskView:
+            systemShortcutService.showTaskView()
+        case .moveWindowToPreviousDisplay:
+            activeWindowShortcutService.moveToAdjacentDisplay(step: -1)
+        case .moveWindowToNextDisplay:
+            activeWindowShortcutService.moveToAdjacentDisplay(step: 1)
+        case .minimizeAllWindows:
+            showDesktopService.minimizeAll()
+        case .restoreMinimizedWindows:
+            showDesktopService.restoreMinimized()
+        case .cycleTaskbarApps:
+            taskbarController?.cycleTaskbarApps()
+        case .focusSystemTray:
+            taskbarController?.focusSystemTray()
+        case .showClipboardHistory:
+            taskbarController?.toggleClipboardHistory()
+        case .captureScreenRegion:
+            systemShortcutService.captureScreenRegion()
+        case .showCharacterPalette:
+            systemShortcutService.showCharacterPalette()
+        case .openAccessibilitySettings:
+            systemShortcutService.openAccessibilitySettings()
+        case .openDisplaySettings, .openWirelessDisplaySettings:
+            systemShortcutService.openDisplaySettings()
+        case .minimizeOtherWindows:
+            showDesktopService.toggleOtherWindows()
+        case .createDesktop:
+            systemShortcutService.createDesktop()
+        case .switchDesktopLeft:
+            systemShortcutService.switchDesktop(.left)
+        case .switchDesktopRight:
+            systemShortcutService.switchDesktop(.right)
+        case .closeDesktop:
+            systemShortcutService.closeDesktop()
         case .launchPinned:
             guard let index = configuration.pinnedIndex,
                   preferences.pinnedBundleIDs.indices.contains(index),
@@ -257,7 +319,7 @@ func runSelfTest() async -> Int32 {
           preferences.menuButtonPlacement == .standard,
           preferences.windowsKeyMapping == .option,
           preferences.windowsKeyOpensStart,
-          preferences.globalShortcutConfigurations.count == 20,
+          preferences.globalShortcutConfigurations.count == 43,
           preferences.globalShortcutConfigurations.first(where: {
               $0.id == GlobalShortcutCatalog.fileManagerID
           })?.isEnabled == true,
@@ -266,7 +328,24 @@ func runSelfTest() async -> Int32 {
           })?.action == .toggleQuickLinkMenu,
           preferences.globalShortcutConfigurations.first(where: {
               $0.id == GlobalShortcutCatalog.quickLinkMenuID
-          })?.isEnabled == true else {
+          })?.isEnabled == true,
+          preferences.globalShortcutConfigurations.first(where: {
+              $0.id == GlobalShortcutCatalog.showDesktopID
+          })?.usesWindowsKey == true,
+          preferences.globalShortcutConfigurations.first(where: {
+              $0.id == GlobalShortcutCatalog.runID
+          })?.action == .showRunDialog,
+          preferences.globalShortcutConfigurations.first(where: {
+              $0.id == GlobalShortcutCatalog.snapLayoutsID
+          })?.isEnabled == true,
+          Set(preferences.globalShortcutConfigurations.map(\.id)).count == 43,
+          GlobalHotkeysService.duplicateIssues(
+              configurations: preferences.globalShortcutConfigurations,
+              mapping: preferences.windowsKeyMapping
+          ).isEmpty,
+          Set(GlobalShortcutAction.allCases).subtracting(
+              preferences.globalShortcutConfigurations.map(\.action)
+          ) == [.openApplication] else {
         fputs("SELF-TEST FAILED: default values mismatch\n", stderr)
         return 1
     }
@@ -296,6 +375,18 @@ func runSelfTest() async -> Int32 {
           PowerAction.restart.requiresConfirmation,
           PowerAction.shutDown.requiresConfirmation else {
         fputs("SELF-TEST FAILED: power confirmation policy mismatch\n", stderr)
+        return 1
+    }
+
+    let placementArea = CGRect(x: 10, y: 20, width: 1000, height: 700)
+    guard WindowPlacementGeometry.frame(for: .leftHalf, in: placementArea)
+            == CGRect(x: 10, y: 20, width: 500, height: 700),
+          WindowPlacementGeometry.frame(for: .topRight, in: placementArea)
+            == CGRect(x: 510, y: 370, width: 500, height: 350),
+          ClipboardHistoryService.recording(" second ", in: ["first", "second"])
+            == ["second", "first"],
+          ClipboardHistoryService.recording("", in: ["first"]) == ["first"] else {
+        fputs("SELF-TEST FAILED: Windows shortcut service policy mismatch\n", stderr)
         return 1
     }
 
@@ -1418,6 +1509,35 @@ func runSelfTest() async -> Int32 {
               $0.id == GlobalShortcutCatalog.quickLinkMenuID
           }) else {
         fputs("SELF-TEST FAILED: legacy hotkey migration mismatch\n", stderr)
+        return 1
+    }
+
+    var storedShortcutConfigurations = GlobalShortcutCatalog.defaults(
+        legacyShortcuts: GlobalShortcutCatalog.defaultLegacyShortcuts
+    )
+    guard let storedShowDesktopIndex = storedShortcutConfigurations.firstIndex(where: {
+        $0.id == GlobalShortcutCatalog.showDesktopID
+    }),
+    let storedPinnedIndex = storedShortcutConfigurations.firstIndex(where: { $0.id == "pinned-1" }),
+    let storedRunIndex = storedShortcutConfigurations.firstIndex(where: {
+        $0.id == GlobalShortcutCatalog.runID
+    }) else {
+        fputs("SELF-TEST FAILED: Windows shortcut migration fixture mismatch\n", stderr)
+        return 1
+    }
+    storedShortcutConfigurations[storedShowDesktopIndex].shortcut = GlobalShortcutCatalog.defaultLegacyShortcuts[1]
+    storedShortcutConfigurations[storedShowDesktopIndex].usesWindowsKey = false
+    storedShortcutConfigurations[storedPinnedIndex].shortcut = GlobalShortcutCatalog.defaultLegacyShortcuts[2]
+    storedShortcutConfigurations[storedPinnedIndex].usesWindowsKey = false
+    storedShortcutConfigurations[storedRunIndex].action = .openApplication
+    let mergedShortcutConfigurations = GlobalShortcutCatalog.merged(
+        stored: storedShortcutConfigurations,
+        legacyShortcuts: GlobalShortcutCatalog.defaultLegacyShortcuts
+    )
+    guard mergedShortcutConfigurations[storedShowDesktopIndex].usesWindowsKey,
+          mergedShortcutConfigurations[storedPinnedIndex].usesWindowsKey,
+          mergedShortcutConfigurations[storedRunIndex].action == .showRunDialog else {
+        fputs("SELF-TEST FAILED: Windows shortcut trigger migration mismatch\n", stderr)
         return 1
     }
 

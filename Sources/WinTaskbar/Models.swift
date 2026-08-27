@@ -199,10 +199,34 @@ enum GlobalShortcutAction: String, Codable, CaseIterable, Identifiable {
     case openSystemSettings
     case openSearch
     case openApplication
+    case showRunDialog
     case lockScreen
     case toggleQuickSettings
     case toggleCalendar
     case toggleInputSources
+    case snapWindowLeft
+    case snapWindowRight
+    case maximizeWindow
+    case restoreOrMinimizeWindow
+    case toggleSnapLayouts
+    case showTaskView
+    case moveWindowToPreviousDisplay
+    case moveWindowToNextDisplay
+    case minimizeAllWindows
+    case restoreMinimizedWindows
+    case cycleTaskbarApps
+    case focusSystemTray
+    case showClipboardHistory
+    case captureScreenRegion
+    case showCharacterPalette
+    case openAccessibilitySettings
+    case openDisplaySettings
+    case openWirelessDisplaySettings
+    case minimizeOtherWindows
+    case createDesktop
+    case switchDesktopLeft
+    case switchDesktopRight
+    case closeDesktop
     case launchPinned
 
     var id: String { rawValue }
@@ -216,10 +240,34 @@ enum GlobalShortcutAction: String, Codable, CaseIterable, Identifiable {
         case .openSystemSettings: "Open System Settings"
         case .openSearch: "Open Search"
         case .openApplication: "Open Application"
+        case .showRunDialog: "Show Run Dialog"
         case .lockScreen: "Lock Screen"
         case .toggleQuickSettings: "Toggle Quick Settings"
         case .toggleCalendar: "Toggle Calendar"
         case .toggleInputSources: "Toggle Input Sources"
+        case .snapWindowLeft: "Snap Window Left"
+        case .snapWindowRight: "Snap Window Right"
+        case .maximizeWindow: "Maximize Window"
+        case .restoreOrMinimizeWindow: "Restore or Minimize Window"
+        case .toggleSnapLayouts: "Toggle Snap Layouts"
+        case .showTaskView: "Show Task View"
+        case .moveWindowToPreviousDisplay: "Move Window to Previous Display"
+        case .moveWindowToNextDisplay: "Move Window to Next Display"
+        case .minimizeAllWindows: "Minimize All Windows"
+        case .restoreMinimizedWindows: "Restore Minimized Windows"
+        case .cycleTaskbarApps: "Cycle Taskbar Apps"
+        case .focusSystemTray: "Focus System Tray"
+        case .showClipboardHistory: "Show Clipboard History"
+        case .captureScreenRegion: "Capture Screen Region"
+        case .showCharacterPalette: "Show Character Palette"
+        case .openAccessibilitySettings: "Open Accessibility Settings"
+        case .openDisplaySettings: "Open Display Settings"
+        case .openWirelessDisplaySettings: "Open Wireless Display Settings"
+        case .minimizeOtherWindows: "Minimize Other Windows"
+        case .createDesktop: "Create Desktop"
+        case .switchDesktopLeft: "Switch Desktop Left"
+        case .switchDesktopRight: "Switch Desktop Right"
+        case .closeDesktop: "Close Desktop"
         case .launchPinned: "Launch Pinned App"
         }
     }
@@ -272,9 +320,33 @@ enum GlobalShortcutCatalog {
     static let searchID = "search"
     static let runID = "run"
     static let lockScreenID = "lock-screen"
+    static let snapLeftID = "snap-left"
+    static let snapRightID = "snap-right"
+    static let maximizeID = "maximize-window"
+    static let restoreOrMinimizeID = "restore-or-minimize-window"
+    static let snapLayoutsID = "snap-layouts"
+    static let taskViewID = "task-view"
+    static let previousDisplayID = "previous-display"
+    static let nextDisplayID = "next-display"
+    static let minimizeAllID = "minimize-all"
+    static let restoreMinimizedID = "restore-minimized"
+    static let cycleTaskbarID = "cycle-taskbar"
+    static let focusTrayID = "focus-tray"
+    static let clipboardHistoryID = "clipboard-history"
+    static let captureRegionID = "capture-region"
+    static let characterPaletteID = "character-palette"
+    static let accessibilitySettingsID = "accessibility-settings"
+    static let displaySettingsID = "display-settings"
+    static let wirelessDisplayID = "wireless-display"
+    static let minimizeOthersID = "minimize-others"
+    static let createDesktopID = "create-desktop"
+    static let desktopLeftID = "desktop-left"
+    static let desktopRightID = "desktop-right"
+    static let closeDesktopID = "close-desktop"
 
     static func defaults(legacyShortcuts: [HotkeyShortcut]) -> [GlobalShortcutConfiguration] {
         let legacy = legacyShortcuts.count == 11 ? legacyShortcuts : defaultLegacyShortcuts
+        let showDesktopUsesWindowsKey = legacy[1] == defaultLegacyShortcuts[1]
         var configurations = [
             configuration(
                 id: startMenuID,
@@ -289,7 +361,10 @@ enum GlobalShortcutCatalog {
                 title: "Show Desktop",
                 windowsLabel: "Win+D",
                 enabled: true,
-                shortcut: legacy[1],
+                shortcut: showDesktopUsesWindowsKey
+                    ? HotkeyShortcut(keyCode: 2, modifiers: 0, keyLabel: "D")
+                    : legacy[1],
+                usesWindowsKey: showDesktopUsesWindowsKey,
                 action: .showDesktop
             ),
             configuration(
@@ -314,7 +389,7 @@ enum GlobalShortcutCatalog {
                 id: quickSettingsID,
                 title: "Quick Settings",
                 windowsLabel: "Win+A",
-                enabled: false,
+                enabled: true,
                 shortcut: HotkeyShortcut(keyCode: 0, modifiers: 0, keyLabel: "A"),
                 usesWindowsKey: true,
                 action: .toggleQuickSettings
@@ -323,7 +398,7 @@ enum GlobalShortcutCatalog {
                 id: calendarID,
                 title: "Notifications and Calendar",
                 windowsLabel: "Win+N",
-                enabled: false,
+                enabled: true,
                 shortcut: HotkeyShortcut(keyCode: 45, modifiers: 0, keyLabel: "N"),
                 usesWindowsKey: true,
                 action: .toggleCalendar
@@ -332,7 +407,7 @@ enum GlobalShortcutCatalog {
                 id: inputSourcesID,
                 title: "Input Sources",
                 windowsLabel: "Win+Space",
-                enabled: false,
+                enabled: true,
                 shortcut: HotkeyShortcut(keyCode: 49, modifiers: 0, keyLabel: "Space"),
                 usesWindowsKey: true,
                 action: .toggleInputSources
@@ -341,7 +416,7 @@ enum GlobalShortcutCatalog {
                 id: systemSettingsID,
                 title: "Settings",
                 windowsLabel: "Win+I",
-                enabled: false,
+                enabled: true,
                 shortcut: HotkeyShortcut(keyCode: 34, modifiers: 0, keyLabel: "I"),
                 usesWindowsKey: true,
                 action: .openSystemSettings
@@ -350,7 +425,7 @@ enum GlobalShortcutCatalog {
                 id: searchID,
                 title: "Search",
                 windowsLabel: "Win+S",
-                enabled: false,
+                enabled: true,
                 shortcut: HotkeyShortcut(keyCode: 1, modifiers: 0, keyLabel: "S"),
                 usesWindowsKey: true,
                 action: .openSearch
@@ -359,28 +434,59 @@ enum GlobalShortcutCatalog {
                 id: runID,
                 title: "Run",
                 windowsLabel: "Win+R",
-                enabled: false,
+                enabled: true,
                 shortcut: HotkeyShortcut(keyCode: 15, modifiers: 0, keyLabel: "R"),
                 usesWindowsKey: true,
-                action: .openApplication
+                action: .showRunDialog
             ),
             configuration(
                 id: lockScreenID,
                 title: "Lock Screen",
                 windowsLabel: "Win+L",
-                enabled: false,
+                enabled: true,
                 shortcut: HotkeyShortcut(keyCode: 37, modifiers: 0, keyLabel: "L"),
                 usesWindowsKey: true,
                 action: .lockScreen
-            )
+            ),
+            windowsConfiguration(snapLeftID, "Snap Window Left", "Win+Left", 123, "Left", .snapWindowLeft),
+            windowsConfiguration(snapRightID, "Snap Window Right", "Win+Right", 124, "Right", .snapWindowRight),
+            windowsConfiguration(maximizeID, "Maximize Window", "Win+Up", 126, "Up", .maximizeWindow),
+            windowsConfiguration(restoreOrMinimizeID, "Restore or Minimize Window", "Win+Down", 125, "Down", .restoreOrMinimizeWindow),
+            windowsConfiguration(snapLayoutsID, "Snap Layouts", "Win+Z", 6, "Z", .toggleSnapLayouts),
+            windowsConfiguration(taskViewID, "Task View", "Win+Tab", 48, "Tab", .showTaskView),
+            windowsConfiguration(previousDisplayID, "Move to Previous Display", "Win+Shift+Left", 123, "Left", .moveWindowToPreviousDisplay, modifiers: UInt32(shiftKey)),
+            windowsConfiguration(nextDisplayID, "Move to Next Display", "Win+Shift+Right", 124, "Right", .moveWindowToNextDisplay, modifiers: UInt32(shiftKey)),
+            windowsConfiguration(minimizeAllID, "Minimize All Windows", "Win+M", 46, "M", .minimizeAllWindows),
+            windowsConfiguration(restoreMinimizedID, "Restore Minimized Windows", "Win+Shift+M", 46, "M", .restoreMinimizedWindows, modifiers: UInt32(shiftKey)),
+            windowsConfiguration(cycleTaskbarID, "Cycle Taskbar Apps", "Win+T", 17, "T", .cycleTaskbarApps),
+            windowsConfiguration(focusTrayID, "System Tray", "Win+B", 11, "B", .focusSystemTray),
+            windowsConfiguration(clipboardHistoryID, "Clipboard History", "Win+V", 9, "V", .showClipboardHistory),
+            windowsConfiguration(captureRegionID, "Capture Screen Region", "Win+Shift+S", 1, "S", .captureScreenRegion, modifiers: UInt32(shiftKey)),
+            windowsConfiguration(characterPaletteID, "Emoji and Symbols", "Win+Period", 47, ".", .showCharacterPalette),
+            windowsConfiguration(accessibilitySettingsID, "Accessibility Settings", "Win+U", 32, "U", .openAccessibilitySettings),
+            windowsConfiguration(displaySettingsID, "Display Settings", "Win+P", 35, "P", .openDisplaySettings),
+            windowsConfiguration(wirelessDisplayID, "Wireless Display", "Win+K", 40, "K", .openWirelessDisplaySettings),
+            windowsConfiguration(minimizeOthersID, "Minimize Other Windows", "Win+Home", 115, "Home", .minimizeOtherWindows),
+            windowsConfiguration(createDesktopID, "Create Desktop", "Win+Ctrl+D", 2, "D", .createDesktop, modifiers: UInt32(controlKey)),
+            windowsConfiguration(desktopLeftID, "Switch Desktop Left", "Win+Ctrl+Left", 123, "Left", .switchDesktopLeft, modifiers: UInt32(controlKey)),
+            windowsConfiguration(desktopRightID, "Switch Desktop Right", "Win+Ctrl+Right", 124, "Right", .switchDesktopRight, modifiers: UInt32(controlKey)),
+            windowsConfiguration(closeDesktopID, "Close Desktop", "Win+Ctrl+F4", 118, "F4", .closeDesktop, modifiers: UInt32(controlKey))
         ]
         for index in 0..<9 {
+            let usesWindowsKey = legacy[index + 2] == defaultLegacyShortcuts[index + 2]
             configurations.append(configuration(
                 id: "pinned-\(index + 1)",
                 title: "Pinned App \(index + 1)",
                 windowsLabel: "Win+\(index + 1)",
                 enabled: true,
-                shortcut: legacy[index + 2],
+                shortcut: usesWindowsKey
+                    ? HotkeyShortcut(
+                        keyCode: defaultLegacyShortcuts[index + 2].keyCode,
+                        modifiers: 0,
+                        keyLabel: "\(index + 1)"
+                    )
+                    : legacy[index + 2],
+                usesWindowsKey: usesWindowsKey,
                 action: .launchPinned,
                 pinnedIndex: index
             ))
@@ -393,7 +499,22 @@ enum GlobalShortcutCatalog {
         legacyShortcuts: [HotkeyShortcut]
     ) -> [GlobalShortcutConfiguration] {
         let storedByID = Dictionary(stored.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        return defaults(legacyShortcuts: legacyShortcuts).map { storedByID[$0.id] ?? $0 }
+        let defaults = defaults(legacyShortcuts: legacyShortcuts)
+        return defaults.map { defaultConfiguration in
+            guard var storedConfiguration = storedByID[defaultConfiguration.id] else {
+                return defaultConfiguration
+            }
+            if shouldMigrateLegacyTrigger(storedConfiguration, legacyShortcuts: legacyShortcuts) {
+                storedConfiguration.shortcut = defaultConfiguration.shortcut
+                storedConfiguration.usesWindowsKey = true
+            }
+            if storedConfiguration.id == runID,
+               storedConfiguration.action == .openApplication,
+               storedConfiguration.applicationTarget == nil {
+                storedConfiguration.action = .showRunDialog
+            }
+            return storedConfiguration
+        }
     }
 
     static func defaultConfiguration(
@@ -441,6 +562,39 @@ enum GlobalShortcutCatalog {
             pinnedIndex: pinnedIndex,
             applicationTarget: nil
         )
+    }
+
+    private static func windowsConfiguration(
+        _ id: String,
+        _ title: String,
+        _ windowsLabel: String,
+        _ keyCode: UInt32,
+        _ keyLabel: String,
+        _ action: GlobalShortcutAction,
+        modifiers: UInt32 = 0
+    ) -> GlobalShortcutConfiguration {
+        configuration(
+            id: id,
+            title: title,
+            windowsLabel: windowsLabel,
+            enabled: true,
+            shortcut: HotkeyShortcut(keyCode: keyCode, modifiers: modifiers, keyLabel: keyLabel),
+            usesWindowsKey: true,
+            action: action
+        )
+    }
+
+    private static func shouldMigrateLegacyTrigger(
+        _ configuration: GlobalShortcutConfiguration,
+        legacyShortcuts: [HotkeyShortcut]
+    ) -> Bool {
+        let legacy = legacyShortcuts.count == 11 ? legacyShortcuts : defaultLegacyShortcuts
+        if configuration.id == showDesktopID {
+            return !configuration.usesWindowsKey && configuration.shortcut == legacy[1]
+        }
+        guard let pinnedIndex = configuration.pinnedIndex,
+              (0..<9).contains(pinnedIndex) else { return false }
+        return !configuration.usesWindowsKey && configuration.shortcut == legacy[pinnedIndex + 2]
     }
 }
 
