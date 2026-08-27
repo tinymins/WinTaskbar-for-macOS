@@ -6,6 +6,8 @@ enum WindowsTrayIconMetrics {
     static let batteryControlWidth: CGFloat = 60
     static let controlHeight: CGFloat = 40
     static let iconSize: CGFloat = 18
+    static let clockFontSize: CGFloat = 12
+    static let clockRowHeight: CGFloat = 18
     static let horizontalContentPadding: CGFloat = 7
     static let tooltipGap: CGFloat = 4
     static let clockTooltipGap: CGFloat = 10

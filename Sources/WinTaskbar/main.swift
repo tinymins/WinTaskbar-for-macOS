@@ -383,6 +383,7 @@ func runSelfTest() async -> Int32 {
           ),
           ExternalStatusItemsView.controlWidth(for: NSImage(size: NSSize(width: 18, height: 18))) == 32,
           ClockTrayView.controlWidth(time: "14:35:55", date: "8/27/2026") < 80,
+          WindowsTrayIconMetrics.clockRowHeight == 18,
           WindowsTrayTooltipMetrics.size(for: "QQ音乐").height == 32,
           WindowsTrayTooltipMetrics.size(for: "Thursday, August 27, 2026\n\nThu 14:35:49 (Local time)").height > 32,
           preferences.menuButtonPlacement == .standard,

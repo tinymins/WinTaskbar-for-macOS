@@ -213,9 +213,23 @@ struct ClockTrayView: View {
         ) {
             VStack(alignment: .trailing, spacing: 0) {
                 Text(time)
-                if let date { Text(date) }
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: date == nil ? WindowsTrayIconMetrics.controlHeight : WindowsTrayIconMetrics.clockRowHeight,
+                        maxHeight: date == nil ? WindowsTrayIconMetrics.controlHeight : WindowsTrayIconMetrics.clockRowHeight,
+                        alignment: .trailing
+                    )
+                if let date {
+                    Text(date)
+                        .frame(
+                            maxWidth: .infinity,
+                            minHeight: WindowsTrayIconMetrics.clockRowHeight,
+                            maxHeight: WindowsTrayIconMetrics.clockRowHeight,
+                            alignment: .trailing
+                        )
+                }
             }
-            .font(.caption2.monospacedDigit())
+            .font(.system(size: WindowsTrayIconMetrics.clockFontSize, weight: .regular).monospacedDigit())
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.horizontal, WindowsTrayIconMetrics.horizontalContentPadding)
         }
@@ -227,7 +241,10 @@ struct ClockTrayView: View {
     }
 
     static func controlWidth(time: String, date: String?) -> CGFloat {
-        let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+        let font = NSFont.monospacedDigitSystemFont(
+            ofSize: WindowsTrayIconMetrics.clockFontSize,
+            weight: .regular
+        )
         let strings = [time, date].compactMap { $0 }
         let textWidth = strings.map {
             ($0 as NSString).size(withAttributes: [.font: font]).width
