@@ -665,13 +665,16 @@ struct ExternalStatusItemsView: View {
                 service: service,
                 visibility: visibility,
                 horizontal: horizontal,
-                controlWidth: Self.controlWidth(for: item.image),
+                controlWidth: Self.controlWidth(for: item.image, horizontal: horizontal),
                 onActivate: onActivate
             )
         }
     }
 
-    static func controlWidth(for image: NSImage) -> CGFloat {
+    static let maximumContentWidth: CGFloat = 120
+
+    static func controlWidth(for image: NSImage, horizontal: Bool = true) -> CGFloat {
+        guard horizontal else { return WindowsTrayIconMetrics.squareControlWidth }
         guard image.size.height > 0 else { return WindowsTrayIconMetrics.squareControlWidth }
         return contentWidth(for: image) + 2 * WindowsTrayIconMetrics.horizontalContentPadding
     }
@@ -679,7 +682,7 @@ struct ExternalStatusItemsView: View {
     static func contentWidth(for image: NSImage) -> CGFloat {
         guard image.size.height > 0 else { return WindowsTrayIconMetrics.iconSize }
         let imageWidth = WindowsTrayIconMetrics.iconSize * image.size.width / image.size.height
-        return min(max(imageWidth, WindowsTrayIconMetrics.iconSize), 40)
+        return min(max(imageWidth, WindowsTrayIconMetrics.iconSize), maximumContentWidth)
     }
 }
 
@@ -891,7 +894,13 @@ struct ExternalStatusItemButton: View {
                 .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
                 .frame(
-                    width: ExternalStatusItemsView.contentWidth(for: item.image),
+                    width: min(
+                        ExternalStatusItemsView.contentWidth(for: item.image),
+                        max(
+                            controlWidth - 2 * WindowsTrayIconMetrics.horizontalContentPadding,
+                            WindowsTrayIconMetrics.iconSize
+                        )
+                    ),
                     height: WindowsTrayIconMetrics.iconSize
                 )
         }

@@ -478,7 +478,10 @@ struct TaskbarView: View {
                 service: externalStatusItems,
                 visibility: .visible,
                 horizontal: preferences.position.isHorizontal,
-                controlWidth: ExternalStatusItemsView.controlWidth(for: item.image),
+                controlWidth: ExternalStatusItemsView.controlWidth(
+                    for: item.image,
+                    horizontal: preferences.position.isHorizontal
+                ),
                 onActivate: { externalStatusOverflowPanelController.dismiss() }
             )
         case .system(.wifi):
@@ -543,7 +546,9 @@ struct TaskbarView: View {
         let itemLength = itemGeometry.cellSize + TaskbarItemGeometry.itemSpacing
         let visibleExternalItems = externalStatusItems.items(on: screen)
         let externalStatusItemLength = visibleExternalItems.reduce(CGFloat.zero) {
-            $0 + ExternalStatusItemsView.controlWidth(for: $1.image)
+            $0 + (preferences.position.isHorizontal
+                ? ExternalStatusItemsView.controlWidth(for: $1.image)
+                : WindowsTrayIconMetrics.controlHeight)
         }
         let overflowButtonLength = externalStatusItems.allItems(on: screen).isEmpty
             ? 0

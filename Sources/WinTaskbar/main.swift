@@ -439,6 +439,12 @@ func runSelfTest() async -> Int32 {
           ExternalStatusOverflowVisibilityPolicy.shouldShowButton(hiddenItemCount: 1, isDragging: false),
           ExternalStatusOverflowVisibilityPolicy.shouldShowButton(hiddenItemCount: 0, isDragging: true),
           ExternalStatusItemsView.controlWidth(for: NSImage(size: NSSize(width: 18, height: 18))) == 32,
+          ExternalStatusItemsView.controlWidth(for: NSImage(size: NSSize(width: 90, height: 18))) == 104,
+          ExternalStatusItemsView.controlWidth(for: NSImage(size: NSSize(width: 180, height: 18))) == 134,
+          ExternalStatusItemsView.controlWidth(
+              for: NSImage(size: NSSize(width: 90, height: 18)),
+              horizontal: false
+          ) == 32,
           ClockTrayView.controlWidth(time: "14:35:55", date: "8/27/2026") < 80,
           WindowsTrayIconMetrics.clockRowHeight == 18,
           WindowsTrayIconMetrics.showDesktopVisibleThickness < WindowsTrayIconMetrics.showDesktopHitThickness,
