@@ -54,7 +54,7 @@ struct TaskbarWindowMenuEntry: Identifiable {
 enum TaskbarContextMenuMetrics {
     static let width: CGFloat = 200
     static let verticalPadding = TaskbarJumpListMetrics.verticalPadding
-    static let rootRowCount: CGFloat = 9
+    static let rootRowCount: CGFloat = 8
     static let dividerCount: CGFloat = 2
     static let maximumWindowRows = 8
 
