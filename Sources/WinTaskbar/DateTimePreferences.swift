@@ -25,19 +25,53 @@ struct DateTimeFormatConfiguration: Equatable {
     let firstDayOfWeek: DateTimeFirstDayOfWeek
     let shortDatePattern: String
     let longDatePattern: String
+    let longDateIncludesLunar: Bool
     let shortTimePattern: String
     let longTimePattern: String
     let amSymbol: String
     let pmSymbol: String
 }
 
+enum DateTimeLongDateStyle: String, CaseIterable, Identifiable {
+    case windowsFull
+    case monthDayYear
+    case dayMonthYear
+    case yearMonthDay
+    case yearMonthDayPadded
+    case chinese
+    case chinesePadded
+    case chineseLunar
+    case chinesePaddedLunar
+    case custom
+
+    var id: String { rawValue }
+
+    var pattern: String? {
+        switch self {
+        case .windowsFull: "EEEE, MMMM d, yyyy"
+        case .monthDayYear: "MMMM d, yyyy"
+        case .dayMonthYear: "EEEE, d MMMM, yyyy"
+        case .yearMonthDay: "yyyy/M/d"
+        case .yearMonthDayPadded: "yyyy/MM/dd"
+        case .chinese, .chineseLunar: "yyyy年M月d日"
+        case .chinesePadded, .chinesePaddedLunar: "yyyy年MM月dd日"
+        case .custom: nil
+        }
+    }
+
+    var includesLunar: Bool {
+        self == .chineseLunar || self == .chinesePaddedLunar
+    }
+
+    static func migrated(from pattern: String?) -> DateTimeLongDateStyle {
+        guard let pattern else { return .windowsFull }
+        return allCases.first { $0.pattern == pattern && !$0.includesLunar } ?? .custom
+    }
+}
+
 enum DateTimeFormatCatalog {
-    static let shortDatePatterns = ["M/d/yyyy", "M/d/yy", "MM/dd/yyyy", "yyyy-MM-dd", "dd/MM/yyyy"]
-    static let longDatePatterns = [
-        "EEEE, MMMM d, yyyy",
-        "MMMM d, yyyy",
-        "EEEE, d MMMM, yyyy",
-        "d MMMM, yyyy"
+    static let shortDatePatterns = [
+        "M/d/yyyy", "M/d/yy", "MM/dd/yyyy", "yyyy/M/d", "yyyy/MM/dd", "yyyy-MM-dd", "dd/MM/yyyy"
     ]
     static let shortTimePatterns = ["H:mm", "HH:mm", "h:mm a", "hh:mm a"]
     static let longTimePatterns = ["H:mm:ss", "HH:mm:ss", "h:mm:ss a", "hh:mm:ss a"]
@@ -76,6 +110,22 @@ enum DateTimeFormatter {
         formatter.pmSymbol = configuration.pmSymbol
         formatter.dateFormat = pattern
         return formatter.string(from: date)
+    }
+
+    static func longDateString(
+        from date: Date,
+        configuration: DateTimeFormatConfiguration,
+        timeZone: TimeZone = .autoupdatingCurrent
+    ) -> String {
+        let dateText = string(
+            from: date,
+            pattern: configuration.longDatePattern,
+            configuration: configuration,
+            timeZone: timeZone
+        )
+        guard configuration.longDateIncludesLunar else { return dateText }
+        let lunar = ClockCalendarLunarCalendar.lunarDate(for: date, timeZone: timeZone)
+        return "\(dateText)  \(lunar.fullLabel)"
     }
 }
 

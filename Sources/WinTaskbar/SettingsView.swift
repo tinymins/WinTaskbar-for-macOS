@@ -53,11 +53,11 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 HStack(spacing: 10) {
                     if selectedPage == .dateTime, showsDateTimeFormat {
-                        Button { showsDateTimeFormat = false } label: {
-                            Image(systemName: "chevron.left")
+                        SettingsBackButton {
+                            withAnimation(.easeInOut(duration: 0.24)) {
+                                showsDateTimeFormat = false
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .help("Back")
                     }
                     Image(systemName: selectedPage.symbol)
                         .foregroundStyle(.secondary)
@@ -99,15 +99,27 @@ struct SettingsView: View {
         case .appearance: settingsPage(appearance)
         case .startMenu: settingsPage(startMenu)
         case .taskbar: settingsPage(features)
-        case .dateTime:
-            if showsDateTimeFormat {
-                settingsPage(dateTimeFormat)
-            } else {
-                settingsPage(dateTime)
-            }
+        case .dateTime: dateTimePages
         case .hotkeys: settingsPage(hotkeySettings)
         case .shortcutMappings: settingsPage(shortcutMappings)
         case .about: settingsPage(about)
+        }
+    }
+
+    private var dateTimePages: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                settingsPage(dateTime)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .offset(x: showsDateTimeFormat ? -geometry.size.width : 0)
+                    .allowsHitTesting(!showsDateTimeFormat)
+                settingsPage(dateTimeFormat)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .offset(x: showsDateTimeFormat ? 0 : geometry.size.width)
+                    .allowsHitTesting(showsDateTimeFormat)
+            }
+            .clipped()
+            .animation(.easeInOut(duration: 0.24), value: showsDateTimeFormat)
         }
     }
 
@@ -288,9 +300,8 @@ struct SettingsView: View {
                         ))
                         .font(.system(size: 28, weight: .semibold))
                         .monospacedDigit()
-                        Text(DateTimeFormatter.string(
+                        Text(DateTimeFormatter.longDateString(
                             from: context.date,
-                            pattern: preferences.dateTimeLongDatePattern,
                             configuration: preferences.dateTimeFormatConfiguration
                         ))
                         .foregroundStyle(.secondary)
@@ -316,7 +327,11 @@ struct SettingsView: View {
                 }
             }
 
-            Button { showsDateTimeFormat = true } label: {
+            Button {
+                withAnimation(.easeInOut(duration: 0.24)) {
+                    showsDateTimeFormat = true
+                }
+            } label: {
                 HStack {
                     Label("Change the date and time format", systemImage: "globe")
                     Spacer()
@@ -344,10 +359,21 @@ struct SettingsView: View {
                     Text(formatExample(pattern)).tag(pattern)
                 }
             }
-            Picker("Long date", selection: $preferences.dateTimeLongDatePattern) {
-                ForEach(DateTimeFormatCatalog.longDatePatterns, id: \.self) { pattern in
-                    Text(formatExample(pattern)).tag(pattern)
+            Picker("Long date", selection: $preferences.dateTimeLongDateStyle) {
+                ForEach(DateTimeLongDateStyle.allCases) { style in
+                    Text(longDateExample(style)).tag(style)
                 }
+            }
+            if preferences.dateTimeLongDateStyle == .custom {
+                LabeledContent("Custom format") {
+                    TextField("yyyy年M月d日", text: $preferences.dateTimeCustomLongDatePattern)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 220)
+                }
+                Toggle("Include lunar date", isOn: $preferences.dateTimeCustomLongDateIncludesLunar)
+                Text("Use Unicode date format symbols, for example yyyy.MM.dd.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Picker("Short time", selection: $preferences.dateTimeShortTimePattern) {
                 ForEach(DateTimeFormatCatalog.shortTimePatterns, id: \.self) { pattern in
@@ -435,6 +461,29 @@ struct SettingsView: View {
             from: DateTimeFormatCatalog.exampleDate,
             pattern: pattern,
             configuration: preferences.dateTimeFormatConfiguration,
+            timeZone: TimeZone(secondsFromGMT: 0)!
+        )
+    }
+
+    private func longDateExample(_ style: DateTimeLongDateStyle) -> String {
+        guard style != .custom else {
+            return NSLocalizedString("Custom", comment: "Custom date format option")
+        }
+        let current = preferences.dateTimeFormatConfiguration
+        let exampleConfiguration = DateTimeFormatConfiguration(
+            calendarKind: current.calendarKind,
+            firstDayOfWeek: current.firstDayOfWeek,
+            shortDatePattern: current.shortDatePattern,
+            longDatePattern: style.pattern!,
+            longDateIncludesLunar: style.includesLunar,
+            shortTimePattern: current.shortTimePattern,
+            longTimePattern: current.longTimePattern,
+            amSymbol: current.amSymbol,
+            pmSymbol: current.pmSymbol
+        )
+        return DateTimeFormatter.longDateString(
+            from: DateTimeFormatCatalog.exampleDate,
+            configuration: exampleConfiguration,
             timeZone: TimeZone(secondsFromGMT: 0)!
         )
     }
@@ -987,6 +1036,25 @@ private struct PanelTintPicker: View {
     private static let hueGradient = Gradient(colors: stride(from: 0.0, through: 1.0, by: 0.1).map {
         Color(hue: $0, saturation: 1, brightness: 1)
     })
+}
+
+private struct SettingsBackButton: View {
+    let action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 30, height: 30)
+                .background(isHovering ? Color.primary.opacity(0.1) : .clear)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help("Back")
+    }
 }
 
 private struct GradientSlider: View {

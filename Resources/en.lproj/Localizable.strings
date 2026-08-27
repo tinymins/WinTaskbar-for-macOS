@@ -60,6 +60,12 @@
 	<string>Short date</string>
 	<key>Long date</key>
 	<string>Long date</string>
+	<key>Custom format</key>
+	<string>Custom format</string>
+	<key>Include lunar date</key>
+	<string>Include lunar date</string>
+	<key>Use Unicode date format symbols, for example yyyy.MM.dd.</key>
+	<string>Use Unicode date format symbols, for example yyyy.MM.dd.</string>
 	<key>Short time</key>
 	<string>Short time</string>
 	<key>Long time</key>

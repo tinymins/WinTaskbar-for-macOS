@@ -462,16 +462,21 @@ struct ClockCalendarPanelView: View {
                     .accessibilityLabel(state.isExpanded ? "Collapse calendar" : "Expand calendar")
                 }
 
-                Text(DateTimeFormatter.string(
+                Text(DateTimeFormatter.longDateString(
                     from: context.date,
-                    pattern: preferences.dateTimeLongDatePattern,
                     configuration: preferences.dateTimeFormatConfiguration
                 ))
                     .font(.system(size: 14))
                     .foregroundStyle(secondaryText)
 
-                ForEach(preferences.additionalClocks.filter(\.isEnabled)) { clock in
-                    additionalClockRow(clock, date: context.date)
+                let enabledClocks = preferences.additionalClocks.filter(\.isEnabled)
+                if !enabledClocks.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(enabledClocks) { clock in
+                            additionalClockRow(clock, date: context.date)
+                        }
+                    }
+                    .padding(.top, 8)
                 }
             }
             .padding(.horizontal, 16)

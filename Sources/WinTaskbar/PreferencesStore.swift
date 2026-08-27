@@ -40,7 +40,9 @@ final class PreferencesStore: ObservableObject {
     @Published var dateTimeCalendarKind: DateTimeCalendarKind { didSet { defaults.set(dateTimeCalendarKind.rawValue, forKey: "wintaskbar.dateTime.calendar") } }
     @Published var dateTimeFirstDayOfWeek: DateTimeFirstDayOfWeek { didSet { defaults.set(dateTimeFirstDayOfWeek.rawValue, forKey: "wintaskbar.dateTime.firstDayOfWeek") } }
     @Published var dateTimeShortDatePattern: String { didSet { defaults.set(dateTimeShortDatePattern, forKey: "wintaskbar.dateTime.shortDatePattern") } }
-    @Published var dateTimeLongDatePattern: String { didSet { defaults.set(dateTimeLongDatePattern, forKey: "wintaskbar.dateTime.longDatePattern") } }
+    @Published var dateTimeLongDateStyle: DateTimeLongDateStyle { didSet { defaults.set(dateTimeLongDateStyle.rawValue, forKey: "wintaskbar.dateTime.longDateStyle") } }
+    @Published var dateTimeCustomLongDatePattern: String { didSet { defaults.set(dateTimeCustomLongDatePattern, forKey: "wintaskbar.dateTime.customLongDatePattern") } }
+    @Published var dateTimeCustomLongDateIncludesLunar: Bool { didSet { defaults.set(dateTimeCustomLongDateIncludesLunar, forKey: "wintaskbar.dateTime.customLongDateIncludesLunar") } }
     @Published var dateTimeShortTimePattern: String { didSet { defaults.set(dateTimeShortTimePattern, forKey: "wintaskbar.dateTime.shortTimePattern") } }
     @Published var dateTimeLongTimePattern: String { didSet { defaults.set(dateTimeLongTimePattern, forKey: "wintaskbar.dateTime.longTimePattern") } }
     @Published var dateTimeAMSymbol: String { didSet { defaults.set(dateTimeAMSymbol, forKey: "wintaskbar.dateTime.amSymbol") } }
@@ -119,11 +121,17 @@ final class PreferencesStore: ObservableObject {
             allowed: DateTimeFormatCatalog.shortDatePatterns,
             fallback: "M/d/yyyy"
         )
-        dateTimeLongDatePattern = DateTimeFormatCatalog.validated(
-            defaults.string(forKey: "wintaskbar.dateTime.longDatePattern"),
-            allowed: DateTimeFormatCatalog.longDatePatterns,
-            fallback: "EEEE, MMMM d, yyyy"
-        )
+        let legacyLongDatePattern = defaults.string(forKey: "wintaskbar.dateTime.longDatePattern")
+        let storedLongDateStyle = DateTimeLongDateStyle(
+            rawValue: defaults.string(forKey: "wintaskbar.dateTime.longDateStyle") ?? ""
+        ) ?? DateTimeLongDateStyle.migrated(from: legacyLongDatePattern)
+        dateTimeLongDateStyle = storedLongDateStyle
+        dateTimeCustomLongDatePattern = defaults.string(forKey: "wintaskbar.dateTime.customLongDatePattern")
+            ?? (storedLongDateStyle == .custom ? legacyLongDatePattern : nil)
+            ?? "yyyy年M月d日"
+        dateTimeCustomLongDateIncludesLunar = defaults.object(
+            forKey: "wintaskbar.dateTime.customLongDateIncludesLunar"
+        ) as? Bool ?? false
         dateTimeShortTimePattern = DateTimeFormatCatalog.validated(
             defaults.string(forKey: "wintaskbar.dateTime.shortTimePattern"),
             allowed: DateTimeFormatCatalog.shortTimePatterns,
@@ -195,11 +203,18 @@ final class PreferencesStore: ObservableObject {
     }
 
     var dateTimeFormatConfiguration: DateTimeFormatConfiguration {
-        DateTimeFormatConfiguration(
+        let customPattern = dateTimeCustomLongDatePattern.trimmingCharacters(in: .whitespacesAndNewlines)
+        let usesCustomLongDate = dateTimeLongDateStyle == .custom
+        return DateTimeFormatConfiguration(
             calendarKind: dateTimeCalendarKind,
             firstDayOfWeek: dateTimeFirstDayOfWeek,
             shortDatePattern: dateTimeShortDatePattern,
-            longDatePattern: dateTimeLongDatePattern,
+            longDatePattern: usesCustomLongDate
+                ? (customPattern.isEmpty ? "yyyy年M月d日" : customPattern)
+                : dateTimeLongDateStyle.pattern!,
+            longDateIncludesLunar: usesCustomLongDate
+                ? dateTimeCustomLongDateIncludesLunar
+                : dateTimeLongDateStyle.includesLunar,
             shortTimePattern: dateTimeShortTimePattern,
             longTimePattern: dateTimeLongTimePattern,
             amSymbol: dateTimeAMSymbol,
@@ -240,7 +255,9 @@ final class PreferencesStore: ObservableObject {
         dateTimeCalendarKind = .gregorian
         dateTimeFirstDayOfWeek = .sunday
         dateTimeShortDatePattern = "M/d/yyyy"
-        dateTimeLongDatePattern = "EEEE, MMMM d, yyyy"
+        dateTimeLongDateStyle = .windowsFull
+        dateTimeCustomLongDatePattern = "yyyy年M月d日"
+        dateTimeCustomLongDateIncludesLunar = false
         dateTimeShortTimePattern = "HH:mm"
         dateTimeLongTimePattern = "HH:mm:ss"
         dateTimeAMSymbol = "AM"

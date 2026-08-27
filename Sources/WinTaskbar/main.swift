@@ -359,7 +359,9 @@ func runSelfTest() async -> Int32 {
           preferences.dateTimeCalendarKind == .gregorian,
           preferences.dateTimeFirstDayOfWeek == .sunday,
           preferences.dateTimeShortDatePattern == "M/d/yyyy",
-          preferences.dateTimeLongDatePattern == "EEEE, MMMM d, yyyy",
+          preferences.dateTimeLongDateStyle == .windowsFull,
+          preferences.dateTimeFormatConfiguration.longDatePattern == "EEEE, MMMM d, yyyy",
+          !preferences.dateTimeFormatConfiguration.longDateIncludesLunar,
           preferences.dateTimeShortTimePattern == "HH:mm",
           preferences.dateTimeLongTimePattern == "HH:mm:ss",
           preferences.additionalClocks == AdditionalClockConfiguration.defaults,
@@ -537,6 +539,61 @@ func runSelfTest() async -> Int32 {
         localTimeZone: clockReferenceTimeZone
     ) == .yesterday else {
         fputs("SELF-TEST FAILED: Windows tray clock presentation mismatch\n", stderr)
+        return 1
+    }
+
+    var dateFormatReferenceComponents = DateComponents()
+    dateFormatReferenceComponents.calendar = Calendar(identifier: .gregorian)
+    dateFormatReferenceComponents.timeZone = clockReferenceTimeZone
+    dateFormatReferenceComponents.year = 2026
+    dateFormatReferenceComponents.month = 7
+    dateFormatReferenceComponents.day = 1
+    let dateFormatReferenceDate = dateFormatReferenceComponents.date!
+    let lunarDateConfiguration = DateTimeFormatConfiguration(
+        calendarKind: .gregorian,
+        firstDayOfWeek: .sunday,
+        shortDatePattern: "yyyy/M/d",
+        longDatePattern: "yyyy年M月d日",
+        longDateIncludesLunar: true,
+        shortTimePattern: "HH:mm",
+        longTimePattern: "HH:mm:ss",
+        amSymbol: "AM",
+        pmSymbol: "PM"
+    )
+    let lunarDateExample = DateTimeFormatter.longDateString(
+        from: dateFormatReferenceDate,
+        configuration: lunarDateConfiguration,
+        timeZone: clockReferenceTimeZone
+    )
+    guard DateTimeFormatCatalog.shortDatePatterns.contains("yyyy/M/d"),
+          DateTimeFormatCatalog.shortDatePatterns.contains("yyyy/MM/dd"),
+          DateTimeFormatter.string(
+              from: dateFormatReferenceDate,
+              pattern: "yyyy/M/d",
+              configuration: preferences.dateTimeFormatConfiguration,
+              timeZone: clockReferenceTimeZone
+          ) == "2026/7/1",
+          DateTimeFormatter.string(
+              from: dateFormatReferenceDate,
+              pattern: "yyyy/MM/dd",
+              configuration: preferences.dateTimeFormatConfiguration,
+              timeZone: clockReferenceTimeZone
+          ) == "2026/07/01",
+          DateTimeFormatter.string(
+              from: dateFormatReferenceDate,
+              pattern: "yyyy年M月d日",
+              configuration: preferences.dateTimeFormatConfiguration,
+              timeZone: clockReferenceTimeZone
+          ) == "2026年7月1日",
+          DateTimeFormatter.string(
+              from: dateFormatReferenceDate,
+              pattern: "yyyy年MM月dd日",
+              configuration: preferences.dateTimeFormatConfiguration,
+              timeZone: clockReferenceTimeZone
+          ) == "2026年07月01日",
+          lunarDateExample.hasPrefix("2026年7月1日"),
+          lunarDateExample.contains("农历") else {
+        fputs("SELF-TEST FAILED: date format catalog mismatch\n", stderr)
         return 1
     }
 
@@ -1673,6 +1730,9 @@ func runSelfTest() async -> Int32 {
     preferences.trayClockShowsSeconds = false
     preferences.dateTimeFirstDayOfWeek = .monday
     preferences.dateTimeShortDatePattern = "yyyy-MM-dd"
+    preferences.dateTimeLongDateStyle = .custom
+    preferences.dateTimeCustomLongDatePattern = "yyyy.MM.dd"
+    preferences.dateTimeCustomLongDateIncludesLunar = true
     preferences.additionalClocks[0] = AdditionalClockConfiguration(
         slot: 1,
         isEnabled: true,
@@ -1697,6 +1757,9 @@ func runSelfTest() async -> Int32 {
           !PreferencesStore(defaults: defaults).trayClockShowsSeconds,
           PreferencesStore(defaults: defaults).dateTimeFirstDayOfWeek == .monday,
           PreferencesStore(defaults: defaults).dateTimeShortDatePattern == "yyyy-MM-dd",
+          PreferencesStore(defaults: defaults).dateTimeLongDateStyle == .custom,
+          PreferencesStore(defaults: defaults).dateTimeFormatConfiguration.longDatePattern == "yyyy.MM.dd",
+          PreferencesStore(defaults: defaults).dateTimeFormatConfiguration.longDateIncludesLunar,
           PreferencesStore(defaults: defaults).additionalClocks[0].displayName == "Chicago",
           reorderedPinnedBundleIDs == ["three", "one", "two"],
           preferences.pinnedBundleIDs == ["two", "three", "one"],
