@@ -46,6 +46,8 @@ enum InputSourcePanelGeometry {
 final class InputSourcePanelController: ObservableObject {
     private let panelController = TaskbarJumpListController()
 
+    var isVisible: Bool { panelController.isVisible }
+
     func toggle(
         service: SystemStatusService,
         position: TaskbarPosition,

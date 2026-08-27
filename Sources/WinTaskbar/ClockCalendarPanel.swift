@@ -46,6 +46,8 @@ final class ClockCalendarPanelController: ObservableObject {
     private var keepsVisibleForSettings = false
     private var transitionSequence = ClockCalendarPanelTransitionSequence()
 
+    var isVisible: Bool { isShowing }
+
     private struct Presentation {
         let screen: NSScreen
         let position: TaskbarPosition

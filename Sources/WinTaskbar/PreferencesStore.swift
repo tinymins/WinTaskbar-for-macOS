@@ -10,6 +10,9 @@ final class PreferencesStore: ObservableObject {
 
     @Published var position: TaskbarPosition { didSet { defaults.set(position.rawValue, forKey: "wintaskbar.position") } }
     @Published var displayMode: DisplayMode { didSet { defaults.set(displayMode.rawValue, forKey: "wintaskbar.displayMode") } }
+    @Published var autoHideTaskbar: Bool { didSet { defaults.set(autoHideTaskbar, forKey: "wintaskbar.autoHideTaskbar") } }
+    @Published var showBadgesOnTaskbarApps: Bool { didSet { defaults.set(showBadgesOnTaskbarApps, forKey: "wintaskbar.showBadgesOnTaskbarApps") } }
+    @Published var showFlashingOnTaskbarApps: Bool { didSet { defaults.set(showFlashingOnTaskbarApps, forKey: "wintaskbar.showFlashingOnTaskbarApps") } }
     @Published var barHeight: Double { didSet { defaults.set(barHeight, forKey: "wintaskbar.barHeight") } }
     @Published var iconScale: Double { didSet { defaults.set(iconScale, forKey: "wintaskbar.iconScale") } }
     @Published var iconPadding: Double { didSet { defaults.set(iconPadding, forKey: "wintaskbar.iconPadding") } }
@@ -75,6 +78,9 @@ final class PreferencesStore: ObservableObject {
         self.defaults = defaults
         position = TaskbarPosition(rawValue: defaults.string(forKey: "wintaskbar.position") ?? "") ?? .bottom
         displayMode = DisplayMode(rawValue: defaults.string(forKey: "wintaskbar.displayMode") ?? "") ?? .all
+        autoHideTaskbar = defaults.object(forKey: "wintaskbar.autoHideTaskbar") as? Bool ?? false
+        showBadgesOnTaskbarApps = defaults.object(forKey: "wintaskbar.showBadgesOnTaskbarApps") as? Bool ?? true
+        showFlashingOnTaskbarApps = defaults.object(forKey: "wintaskbar.showFlashingOnTaskbarApps") as? Bool ?? true
         let storedBarHeight = defaults.object(forKey: "wintaskbar.barHeight") as? Double
         let storedIconScale = defaults.object(forKey: "wintaskbar.iconScale") as? Double
         let storedIconPadding = defaults.object(forKey: "wintaskbar.iconPadding") as? Double
@@ -225,6 +231,9 @@ final class PreferencesStore: ObservableObject {
     func reset() {
         position = .bottom
         displayMode = .all
+        autoHideTaskbar = false
+        showBadgesOnTaskbarApps = true
+        showFlashingOnTaskbarApps = true
         barHeight = 48
         iconScale = 1
         iconPadding = 0.06

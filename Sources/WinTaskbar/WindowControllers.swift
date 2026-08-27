@@ -29,8 +29,55 @@ private enum WindowBlur {
 }
 
 final class TaskbarPanel: NSPanel {
+    var isAutoHidden = false
+    var autoHideTask: Task<Void, Never>?
+
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+}
+
+enum TaskbarAutoHideGeometry {
+    static let revealThickness: CGFloat = 2
+
+    static func hiddenFrame(from shownFrame: CGRect, position: TaskbarPosition) -> CGRect {
+        var frame = shownFrame
+        switch position {
+        case .bottom: frame.origin.y -= frame.height
+        case .top: frame.origin.y += frame.height
+        case .left: frame.origin.x -= frame.width
+        case .right: frame.origin.x += frame.width
+        }
+        return frame
+    }
+
+    static func revealZone(
+        screenFrame: CGRect,
+        visibleFrame: CGRect,
+        position: TaskbarPosition,
+        thickness: CGFloat = revealThickness
+    ) -> CGRect {
+        switch position {
+        case .bottom:
+            CGRect(x: screenFrame.minX, y: screenFrame.minY, width: screenFrame.width, height: thickness)
+        case .top:
+            CGRect(x: screenFrame.minX, y: visibleFrame.maxY - thickness, width: screenFrame.width, height: thickness)
+        case .left:
+            CGRect(x: screenFrame.minX, y: screenFrame.minY, width: thickness, height: screenFrame.height)
+        case .right:
+            CGRect(x: screenFrame.maxX - thickness, y: screenFrame.minY, width: thickness, height: screenFrame.height)
+        }
+    }
+}
+
+enum TaskbarAutoHidePolicy {
+    static func shouldHide(
+        isEnabled: Bool,
+        pointerIsInsideTaskbar: Bool,
+        hasVisibleSurface: Bool,
+        isMouseButtonPressed: Bool
+    ) -> Bool {
+        isEnabled && !pointerIsInsideTaskbar && !hasVisibleSurface && !isMouseButtonPressed
+    }
 }
 
 final class StartMenuPanel: NSPanel {
@@ -573,6 +620,14 @@ final class TaskbarWindowController {
     private var cancellable: AnyCancellable?
     private var taskbarCycleIndex: Int?
     private var keepsTransientSurfacesVisibleForSettings = false
+    private var isStartMenuPresented = false
+    private var localPointerMonitor: Any?
+    private var globalPointerMonitor: Any?
+    private var menuTrackingObservers: [NSObjectProtocol] = []
+    private var isMenuTracking = false
+
+    private static let autoHideDelayNanoseconds: UInt64 = 400_000_000
+    private static let autoHideAnimationDuration: TimeInterval = 0.18
 
     init(
         preferences: PreferencesStore,
@@ -610,6 +665,8 @@ final class TaskbarWindowController {
         actions.toggleQuickLinkMenuHandler = { [weak self] screen in
             self?.toggleQuickLinkMenu(on: screen)
         }
+        installPointerMonitors()
+        installMenuTrackingObservers()
     }
 
     func show() {
@@ -644,6 +701,7 @@ final class TaskbarWindowController {
     }
 
     func toggleQuickSettings() {
+        revealTaskbar(on: activeScreen)
         quickSettingsPanelController.toggle(
             service: status,
             actions: actions,
@@ -666,6 +724,7 @@ final class TaskbarWindowController {
         startButtonPowerMenuController.dismiss()
 
         let screen = requestedScreen ?? activeScreen
+        revealTaskbar(on: screen)
         let frame = StartMenuGeometry.anchoredFrame(
             screenFrame: screen.frame,
             visibleFrame: screen.visibleFrame,
@@ -691,6 +750,7 @@ final class TaskbarWindowController {
     }
 
     func toggleInputSources() {
+        revealTaskbar(on: activeScreen)
         inputSourcePanelController.toggle(
             service: status,
             position: preferences.position,
@@ -703,6 +763,7 @@ final class TaskbarWindowController {
     func handleWindowsSpaceGesture(_ action: WindowsSpaceGestureAction) {
         switch action {
         case .present:
+            revealTaskbar(on: activeScreen)
             inputSourcePanelController.show(
                 service: status,
                 position: preferences.position,
@@ -718,6 +779,7 @@ final class TaskbarWindowController {
     }
 
     func toggleCalendar() {
+        revealTaskbar(on: activeScreen)
         clockCalendarPanelController.toggle(
             screen: activeScreen,
             position: preferences.position,
@@ -731,6 +793,7 @@ final class TaskbarWindowController {
             snapLayoutsPanelController.dismiss()
             return
         }
+        revealTaskbar(on: activeScreen)
         dismissTransientSurfaces()
         let size = CGSize(width: 330, height: 190)
         let frame = utilityPanelFrame(contentSize: size)
@@ -747,6 +810,7 @@ final class TaskbarWindowController {
             clipboardHistoryPanelController.dismiss()
             return
         }
+        revealTaskbar(on: activeScreen)
         let targetApplication = NSWorkspace.shared.frontmostApplication
         dismissTransientSurfaces()
         let size = CGSize(width: 360, height: 360)
@@ -782,7 +846,10 @@ final class TaskbarWindowController {
 
     func rebuildPanels() {
         dismissTransientSurfaces()
-        panels.forEach { $0.orderOut(nil) }
+        panels.forEach {
+            $0.autoHideTask?.cancel()
+            $0.orderOut(nil)
+        }
         panels.removeAll()
 
         let screens = preferences.displayMode == .primary ? Array(NSScreen.screens.prefix(1)) : NSScreen.screens
@@ -791,6 +858,7 @@ final class TaskbarWindowController {
             panels.append(panel)
             panel.orderFrontRegardless()
         }
+        updateAutoHideState()
     }
 
     func applyLayout() {
@@ -805,8 +873,35 @@ final class TaskbarWindowController {
             return
         }
         for (panel, screen) in zip(panels, NSScreen.screens) {
-            panel.setFrame(frame(for: screen), display: true, animate: false)
+            let remainsHidden = preferences.autoHideTaskbar && panel.isAutoHidden
+            panel.autoHideTask?.cancel()
+            panel.autoHideTask = nil
+            let targetFrame = frame(for: screen)
+            if remainsHidden {
+                panel.setFrame(
+                    TaskbarAutoHideGeometry.hiddenFrame(
+                        from: targetFrame,
+                        position: preferences.position
+                    ),
+                    display: false
+                )
+                panel.orderOut(nil)
+            } else {
+                panel.isAutoHidden = false
+                panel.orderFrontRegardless()
+                panel.setFrame(targetFrame, display: true, animate: false)
+            }
             applyAppearance(to: panel)
+        }
+        updateAutoHideState()
+    }
+
+    func setStartMenuPresented(_ isPresented: Bool, on screen: NSScreen? = nil) {
+        isStartMenuPresented = isPresented
+        if isPresented {
+            revealTaskbar(on: screen ?? activeScreen)
+        } else {
+            updateAutoHideState()
         }
     }
 
@@ -849,6 +944,177 @@ final class TaskbarWindowController {
         ))
         applyAppearance(to: panel)
         return panel
+    }
+
+    private func installPointerMonitors() {
+        let events: NSEvent.EventTypeMask = [
+            .mouseMoved,
+            .leftMouseDragged,
+            .rightMouseDragged,
+            .leftMouseDown,
+            .rightMouseDown,
+            .leftMouseUp,
+            .rightMouseUp,
+        ]
+        localPointerMonitor = NSEvent.addLocalMonitorForEvents(matching: events) { [weak self] event in
+            DispatchQueue.main.async { self?.updateAutoHideState() }
+            return event
+        }
+        globalPointerMonitor = NSEvent.addGlobalMonitorForEvents(matching: events) { [weak self] _ in
+            Task { @MainActor in self?.updateAutoHideState() }
+        }
+    }
+
+    private func installMenuTrackingObservers() {
+        menuTrackingObservers = [
+            NotificationCenter.default.addObserver(
+                forName: NSMenu.didBeginTrackingNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.isMenuTracking = true
+                    self?.revealTaskbar(on: self?.activeScreen ?? NSScreen.main ?? NSScreen.screens[0])
+                }
+            },
+            NotificationCenter.default.addObserver(
+                forName: NSMenu.didEndTrackingNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.isMenuTracking = false
+                    self?.updateAutoHideState()
+                }
+            },
+        ]
+    }
+
+    private func updateAutoHideState() {
+        guard preferences.autoHideTaskbar else {
+            for (panel, screen) in zip(panels, selectedScreens) {
+                show(panel, on: screen, animated: panel.isAutoHidden)
+            }
+            return
+        }
+
+        let pointer = NSEvent.mouseLocation
+        let isMouseButtonPressed = NSEvent.pressedMouseButtons != 0
+        for (panel, screen) in zip(panels, selectedScreens) {
+            let revealZone = TaskbarAutoHideGeometry.revealZone(
+                screenFrame: screen.frame,
+                visibleFrame: screen.visibleFrame,
+                position: preferences.position
+            )
+            if revealZone.contains(pointer) {
+                show(panel, on: screen, animated: true)
+                continue
+            }
+
+            let pointerIsInsideTaskbar = !panel.isAutoHidden && panel.frame.contains(pointer)
+            if TaskbarAutoHidePolicy.shouldHide(
+                isEnabled: true,
+                pointerIsInsideTaskbar: pointerIsInsideTaskbar,
+                hasVisibleSurface: hasVisibleTransientSurface,
+                isMouseButtonPressed: isMouseButtonPressed
+            ) {
+                scheduleHide(panel, on: screen)
+            } else {
+                panel.autoHideTask?.cancel()
+                panel.autoHideTask = nil
+            }
+        }
+    }
+
+    private func scheduleHide(_ panel: TaskbarPanel, on screen: NSScreen) {
+        guard !panel.isAutoHidden, panel.autoHideTask == nil else { return }
+        panel.autoHideTask = Task { @MainActor [weak self, weak panel, weak screen] in
+            try? await Task.sleep(nanoseconds: Self.autoHideDelayNanoseconds)
+            guard !Task.isCancelled, let self, let panel, let screen else { return }
+            panel.autoHideTask = nil
+            let pointer = NSEvent.mouseLocation
+            guard TaskbarAutoHidePolicy.shouldHide(
+                isEnabled: self.preferences.autoHideTaskbar,
+                pointerIsInsideTaskbar: panel.frame.contains(pointer),
+                hasVisibleSurface: self.hasVisibleTransientSurface,
+                isMouseButtonPressed: NSEvent.pressedMouseButtons != 0
+            ) else { return }
+            self.hide(panel, on: screen)
+        }
+    }
+
+    private func show(_ panel: TaskbarPanel, on screen: NSScreen, animated: Bool) {
+        panel.autoHideTask?.cancel()
+        panel.autoHideTask = nil
+        let targetFrame = frame(for: screen)
+        guard panel.isAutoHidden || !panel.isVisible || panel.frame != targetFrame else { return }
+        if !panel.isVisible {
+            panel.setFrame(
+                TaskbarAutoHideGeometry.hiddenFrame(from: targetFrame, position: preferences.position),
+                display: false
+            )
+            panel.orderFrontRegardless()
+        }
+        panel.isAutoHidden = false
+        animate(panel, to: targetFrame, animated: animated)
+    }
+
+    private func hide(_ panel: TaskbarPanel, on screen: NSScreen) {
+        guard preferences.autoHideTaskbar, !panel.isAutoHidden else { return }
+        panel.isAutoHidden = true
+        let hiddenFrame = TaskbarAutoHideGeometry.hiddenFrame(
+            from: frame(for: screen),
+            position: preferences.position
+        )
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                ? 0
+                : Self.autoHideAnimationDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            panel.animator().setFrame(hiddenFrame, display: true)
+        } completionHandler: { [weak panel] in
+            Task { @MainActor in
+                guard panel?.isAutoHidden == true else { return }
+                panel?.orderOut(nil)
+            }
+        }
+    }
+
+    private func revealTaskbar(on screen: NSScreen) {
+        guard let index = selectedScreens.firstIndex(of: screen), panels.indices.contains(index) else { return }
+        show(panels[index], on: screen, animated: true)
+    }
+
+    private func animate(_ panel: TaskbarPanel, to frame: CGRect, animated: Bool) {
+        guard animated, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            panel.setFrame(frame, display: true)
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Self.autoHideAnimationDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(frame, display: true)
+        }
+    }
+
+    private var selectedScreens: [NSScreen] {
+        preferences.displayMode == .primary ? Array(NSScreen.screens.prefix(1)) : NSScreen.screens
+    }
+
+    private var hasVisibleTransientSurface: Bool {
+        isStartMenuPresented
+            || isMenuTracking
+            || windowPreviewPanelController.activeOwnerID != nil
+            || taskbarJumpListController.isVisible
+            || startButtonContextMenuController.isVisible
+            || startButtonPowerMenuController.isVisible
+            || quickSettingsPanelController.isVisible
+            || inputSourcePanelController.isVisible
+            || clockCalendarPanelController.isVisible
+            || externalStatusOverflowPanelController.isVisible
+            || snapLayoutsPanelController.isVisible
+            || clipboardHistoryPanelController.isVisible
+            || WindowsTrayDragSessionState.shared.draggedItemID != nil
     }
 
     private func applyAppearance(to panel: NSPanel) {
@@ -978,6 +1244,7 @@ final class StartMenuController: NSObject, NSWindowDelegate {
         orderOutTask = nil
         isPresented = true
         taskbar.dismissTransientSurfaces()
+        taskbar.setStartMenuPresented(true, on: screen)
 
         let finalFrame = frame(on: screen)
         targetFrame = finalFrame
@@ -1002,6 +1269,7 @@ final class StartMenuController: NSObject, NSWindowDelegate {
     func hide() {
         guard isPresented else { return }
         isPresented = false
+        taskbar.setStartMenuPresented(false)
         guard panel.isVisible, let targetFrame else {
             panel.orderOut(nil)
             panel.alphaValue = 1

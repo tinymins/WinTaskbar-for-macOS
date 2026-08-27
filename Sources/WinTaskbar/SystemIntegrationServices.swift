@@ -289,7 +289,7 @@ enum WindowFittingGeometry {
         barHeight: CGFloat
     ) -> CGRect {
         var target = screen.visibleFrame
-        let reserved = max(0, barHeight + safetyInset)
+        let reserved = barHeight > 0 ? barHeight + safetyInset : 0
         switch position {
         case .bottom:
             target.origin.y += reserved
@@ -522,7 +522,7 @@ final class WindowFittingService {
         return WindowFittingContext(
             primaryHeight: primaryHeight,
             position: preferences.position,
-            barHeight: CGFloat(preferences.barHeight),
+            barHeight: preferences.autoHideTaskbar ? 0 : CGFloat(preferences.barHeight),
             screens: screens
         )
     }

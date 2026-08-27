@@ -119,7 +119,7 @@ struct TaskbarView: View {
             let _ = taskbarOrderRevision
             let items = apps.taskbarItems(
                 pinnedBundleIDs: preferences.pinnedBundleIDs,
-                badges: dockBadges.badges,
+                badges: preferences.showBadgesOnTaskbarApps ? dockBadges.badges : [:],
                 showFinder: preferences.showFinder
             )
             let capacity = visibleCapacity(length: horizontal ? geometry.size.width : geometry.size.height)
@@ -1068,7 +1068,8 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
     }
 
     private var attentionState: TaskbarAttentionState? {
-        dockBadges.attentionStates[item.bundleIdentifier]
+        guard preferences.showFlashingOnTaskbarApps else { return nil }
+        return dockBadges.attentionStates[item.bundleIdentifier]
     }
 
     private func startAttentionPulse() {

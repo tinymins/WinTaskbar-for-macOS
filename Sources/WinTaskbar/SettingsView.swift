@@ -133,44 +133,7 @@ struct SettingsView: View {
     }
 
     private var general: some View {
-        SettingsSection("Taskbar") {
-            Picker("Position", selection: $preferences.position) {
-                ForEach(TaskbarPosition.allCases) { Text($0.rawValue).tag($0) }
-            }
-            Picker("Show on", selection: $preferences.displayMode) {
-                ForEach(DisplayMode.allCases) { Text($0.rawValue).tag($0) }
-            }
-            Slider(
-                value: $preferences.barHeight,
-                in: 40...72,
-                step: 1,
-                label: { Text("Height") },
-                minimumValueLabel: { Text("40").foregroundStyle(.secondary) },
-                maximumValueLabel: { Text("72").foregroundStyle(.secondary) }
-            )
-            Slider(
-                value: $preferences.iconScale,
-                in: 0.6...1.2,
-                label: { Text("Icon size") },
-                minimumValueLabel: { Image(systemName: "smallcircle.filled.circle") },
-                maximumValueLabel: { Image(systemName: "largecircle.fill.circle") }
-            )
-            Slider(
-                value: $preferences.iconPadding,
-                in: 0...0.2,
-                label: { Text("Icon padding") },
-                minimumValueLabel: { Image(systemName: "square.fill") },
-                maximumValueLabel: { Image(systemName: "square.dashed") }
-            )
-            Picker("Menu button", selection: $preferences.menuButtonPlacement) {
-                ForEach(MenuButtonPlacement.allCases) { Text($0.rawValue).tag($0) }
-            }
-            Picker("Start button label", selection: $preferences.startButtonLabel) {
-                ForEach(["", "Start", "Menu"], id: \.self) { value in
-                    Text(value.isEmpty ? "None" : value).tag(value)
-                }
-            }
-            Toggle("Show Finder in running apps", isOn: $preferences.showFinder)
+        SettingsSection("Startup") {
             Toggle("Launch at login", isOn: Binding(
                 get: { loginItem.isEnabled },
                 set: { enabled in
@@ -194,7 +157,6 @@ struct SettingsView: View {
             Picker("Highlight style", selection: $preferences.highlightStyle) {
                 ForEach(HighlightStyle.allCases) { Text($0.rawValue).tag($0) }
             }
-            Toggle("Show app labels under icons", isOn: $preferences.showAppLabels)
             Toggle("Transparency", isOn: $preferences.transparencyEnabled)
             if preferences.transparencyEnabled {
                 Slider(value: $preferences.panelOpacity, in: 0.25...1, step: 0.01) {
@@ -269,9 +231,55 @@ struct SettingsView: View {
 
     private var features: some View {
         VStack(alignment: .leading, spacing: 22) {
-            SettingsSection("Features") {
+            SettingsDisclosureSection(
+                "Taskbar behaviors",
+                subtitle: "Taskbar position, badging, automatically hide, and multiple displays"
+            ) {
+                Picker("Taskbar position", selection: $preferences.position) {
+                    ForEach(TaskbarPosition.allCases) { Text($0.rawValue).tag($0) }
+                }
+                Toggle("Automatically hide the taskbar", isOn: $preferences.autoHideTaskbar)
+                Toggle("Show badges on taskbar apps", isOn: $preferences.showBadgesOnTaskbarApps)
+                Toggle("Show flashing on taskbar apps", isOn: $preferences.showFlashingOnTaskbarApps)
+                Picker("Show taskbar on", selection: $preferences.displayMode) {
+                    ForEach(DisplayMode.allCases) { Text($0.rawValue).tag($0) }
+                }
                 Toggle("Window Previews", isOn: $preferences.windowPreviewsEnabled)
                 Toggle("Show Desktop", isOn: $preferences.showDesktopEnabled)
+                Toggle("Show app labels under icons", isOn: $preferences.showAppLabels)
+                Toggle("Show Finder in running apps", isOn: $preferences.showFinder)
+            }
+            SettingsSection("Taskbar layout") {
+                Slider(
+                    value: $preferences.barHeight,
+                    in: 40...72,
+                    step: 1,
+                    label: { Text("Height") },
+                    minimumValueLabel: { Text("40").foregroundStyle(.secondary) },
+                    maximumValueLabel: { Text("72").foregroundStyle(.secondary) }
+                )
+                Slider(
+                    value: $preferences.iconScale,
+                    in: 0.6...1.2,
+                    label: { Text("Icon size") },
+                    minimumValueLabel: { Image(systemName: "smallcircle.filled.circle") },
+                    maximumValueLabel: { Image(systemName: "largecircle.fill.circle") }
+                )
+                Slider(
+                    value: $preferences.iconPadding,
+                    in: 0...0.2,
+                    label: { Text("Icon padding") },
+                    minimumValueLabel: { Image(systemName: "square.fill") },
+                    maximumValueLabel: { Image(systemName: "square.dashed") }
+                )
+                Picker("Menu button", selection: $preferences.menuButtonPlacement) {
+                    ForEach(MenuButtonPlacement.allCases) { Text($0.rawValue).tag($0) }
+                }
+                Picker("Start button label", selection: $preferences.startButtonLabel) {
+                    ForEach(["", "Start", "Menu"], id: \.self) { value in
+                        Text(value.isEmpty ? "None" : value).tag(value)
+                    }
+                }
             }
             SettingsSection("Taskbar menu") {
                 Toggle("Recent items", isOn: $preferences.showRecentInMenu)
@@ -694,6 +702,58 @@ private struct SettingsSection<Content: View>: View {
                 .background(Color.primary.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
+    }
+}
+
+private struct SettingsDisclosureSection<Content: View>: View {
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
+    @ViewBuilder let content: Content
+    @State private var isExpanded = true
+
+    init(
+        _ title: LocalizedStringKey,
+        subtitle: LocalizedStringKey,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.16)) { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title).font(.headline)
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 11, weight: .semibold))
+                        .rotationEffect(.degrees(isExpanded ? 0 : 180))
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+                .padding(14)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                Divider()
+                VStack(alignment: .leading, spacing: 10) { content }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 

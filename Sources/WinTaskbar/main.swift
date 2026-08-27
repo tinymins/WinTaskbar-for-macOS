@@ -370,6 +370,9 @@ func runSelfTest() async -> Int32 {
               keepsVisibleForSettings: true
           ),
           preferences.position == .bottom,
+          !preferences.autoHideTaskbar,
+          preferences.showBadgesOnTaskbarApps,
+          preferences.showFlashingOnTaskbarApps,
           preferences.barHeight == 48,
           preferences.iconScale == 1,
           preferences.iconPadding == 0.06,
@@ -894,6 +897,11 @@ func runSelfTest() async -> Int32 {
         position: .right,
         barHeight: 48
     ) == CGRect(x: 0, y: 0, width: 1149, height: 775),
+    WindowFittingGeometry.freeRect(
+        on: fittingScreen,
+        position: .bottom,
+        barHeight: 0
+    ) == fittingScreen.visibleFrame,
     WindowFittingGeometry.clampedRect(
         CGRect(x: 100, y: 20, width: 600, height: 500),
         on: fittingScreen,
@@ -923,6 +931,74 @@ func runSelfTest() async -> Int32 {
     ) == CGPoint(x: 80, y: 120),
     WindowFittingGeometry.isFullScreen(fittingScreen.frame, in: [fittingScreen]) else {
         fputs("SELF-TEST FAILED: window fitting geometry mismatch\n", stderr)
+        return 1
+    }
+
+    let shownBottomTaskbar = CGRect(x: 0, y: 0, width: 1200, height: 48)
+    let shownTopTaskbar = CGRect(x: 0, y: 727, width: 1200, height: 48)
+    let shownLeftTaskbar = CGRect(x: 0, y: 0, width: 48, height: 800)
+    let shownRightTaskbar = CGRect(x: 1152, y: 0, width: 48, height: 800)
+    guard TaskbarAutoHideGeometry.hiddenFrame(
+        from: shownBottomTaskbar,
+        position: .bottom
+    ) == CGRect(x: 0, y: -48, width: 1200, height: 48),
+    TaskbarAutoHideGeometry.hiddenFrame(
+        from: shownTopTaskbar,
+        position: .top
+    ) == CGRect(x: 0, y: 775, width: 1200, height: 48),
+    TaskbarAutoHideGeometry.hiddenFrame(
+        from: shownLeftTaskbar,
+        position: .left
+    ) == CGRect(x: -48, y: 0, width: 48, height: 800),
+    TaskbarAutoHideGeometry.hiddenFrame(
+        from: shownRightTaskbar,
+        position: .right
+    ) == CGRect(x: 1200, y: 0, width: 48, height: 800),
+    TaskbarAutoHideGeometry.revealZone(
+        screenFrame: fittingScreen.frame,
+        visibleFrame: fittingScreen.visibleFrame,
+        position: .bottom
+    ) == CGRect(x: 0, y: 0, width: 1200, height: 2),
+    TaskbarAutoHideGeometry.revealZone(
+        screenFrame: fittingScreen.frame,
+        visibleFrame: fittingScreen.visibleFrame,
+        position: .top
+    ) == CGRect(x: 0, y: 773, width: 1200, height: 2),
+    TaskbarAutoHideGeometry.revealZone(
+        screenFrame: fittingScreen.frame,
+        visibleFrame: fittingScreen.visibleFrame,
+        position: .left
+    ) == CGRect(x: 0, y: 0, width: 2, height: 800),
+    TaskbarAutoHideGeometry.revealZone(
+        screenFrame: fittingScreen.frame,
+        visibleFrame: fittingScreen.visibleFrame,
+        position: .right
+    ) == CGRect(x: 1198, y: 0, width: 2, height: 800),
+    TaskbarAutoHidePolicy.shouldHide(
+        isEnabled: true,
+        pointerIsInsideTaskbar: false,
+        hasVisibleSurface: false,
+        isMouseButtonPressed: false
+    ),
+    !TaskbarAutoHidePolicy.shouldHide(
+        isEnabled: true,
+        pointerIsInsideTaskbar: true,
+        hasVisibleSurface: false,
+        isMouseButtonPressed: false
+    ),
+    !TaskbarAutoHidePolicy.shouldHide(
+        isEnabled: true,
+        pointerIsInsideTaskbar: false,
+        hasVisibleSurface: true,
+        isMouseButtonPressed: false
+    ),
+    !TaskbarAutoHidePolicy.shouldHide(
+        isEnabled: true,
+        pointerIsInsideTaskbar: false,
+        hasVisibleSurface: false,
+        isMouseButtonPressed: true
+    ) else {
+        fputs("SELF-TEST FAILED: taskbar auto-hide geometry or policy mismatch\n", stderr)
         return 1
     }
 
@@ -1846,6 +1922,9 @@ func runSelfTest() async -> Int32 {
     }
 
     preferences.position = .left
+    preferences.autoHideTaskbar = true
+    preferences.showBadgesOnTaskbarApps = false
+    preferences.showFlashingOnTaskbarApps = false
     preferences.barHeight = 64
     preferences.trayWifiEnabled = false
     preferences.trayClockShowsSeconds = false
@@ -1873,6 +1952,9 @@ func runSelfTest() async -> Int32 {
     customShortcut.action = .showDesktop
     preferences.customShortcutConfigurations = [customShortcut]
     guard defaults.string(forKey: "wintaskbar.position") == "Left",
+          defaults.bool(forKey: "wintaskbar.autoHideTaskbar"),
+          defaults.bool(forKey: "wintaskbar.showBadgesOnTaskbarApps") == false,
+          defaults.bool(forKey: "wintaskbar.showFlashingOnTaskbarApps") == false,
           defaults.double(forKey: "wintaskbar.barHeight") == 64,
           defaults.bool(forKey: "wintaskbar.feature.trayWifi") == false,
           !PreferencesStore(defaults: defaults).trayClockShowsSeconds,
