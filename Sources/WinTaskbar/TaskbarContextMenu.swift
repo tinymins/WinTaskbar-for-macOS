@@ -52,17 +52,17 @@ struct TaskbarWindowMenuEntry: Identifiable {
 }
 
 enum TaskbarContextMenuMetrics {
-    static let width: CGFloat = 160
+    static let width: CGFloat = 164
     static let rowHeight: CGFloat = 30
     static let verticalPadding: CGFloat = 5
     static let cornerRadius: CGFloat = 8
     static let rowLayout = TaskbarJumpListRow.Layout(
         rowHeight: rowHeight,
         fontSize: 12,
-        iconSize: 14,
+        iconSize: 16,
         iconFontSize: 13,
         spacing: 8,
-        contentHorizontalPadding: 5,
+        contentHorizontalPadding: 11,
         outerHorizontalPadding: 4,
         trailingIconFontSize: 10,
         hoverCornerRadius: 4
@@ -88,7 +88,7 @@ enum TaskbarContextMenuMetrics {
 }
 
 enum TaskbarContextMenuGeometry {
-    static let submenuGap: CGFloat = 8
+    static let submenuGap: CGFloat = 5
     static let screenInset: CGFloat = 8
 
     static func rootFrame(
@@ -202,7 +202,6 @@ struct TaskbarContextMenuView: View {
 
     private var sectionDivider: some View {
         Divider()
-            .padding(.horizontal, 9)
             .padding(.vertical, 4)
     }
 }
