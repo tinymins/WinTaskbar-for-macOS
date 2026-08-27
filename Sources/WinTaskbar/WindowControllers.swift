@@ -759,10 +759,10 @@ final class TaskbarWindowController {
         }
 
         let screen = taskbarWindow.screen ?? activeScreen
-        taskbarContextScreen = screen
-        taskbarTerminalEntries = TaskbarTerminalCatalog.installed()
         actions.closeStartMenu()
         dismissTransientSurfaces()
+        taskbarContextScreen = screen
+        taskbarTerminalEntries = TaskbarTerminalCatalog.installed()
         revealTaskbar(on: screen)
 
         let frame = TaskbarContextMenuGeometry.rootFrame(
