@@ -762,7 +762,8 @@ final class TaskbarWindowController {
         taskbarContextMenuController.show(
             rootView: AnyView(rootView),
             frame: frame,
-            appearance: taskbarWindow.appearance
+            appearance: taskbarWindow.appearance,
+            cornerRadius: TaskbarContextMenuMetrics.cornerRadius
         )
     }
 
@@ -1245,7 +1246,8 @@ final class TaskbarWindowController {
         taskbarContextSubmenuController.show(
             rootView: AnyView(submenu),
             frame: frame,
-            appearance: appearance
+            appearance: appearance,
+            cornerRadius: TaskbarContextMenuMetrics.cornerRadius
         )
     }
 

@@ -52,8 +52,21 @@ struct TaskbarWindowMenuEntry: Identifiable {
 }
 
 enum TaskbarContextMenuMetrics {
-    static let width: CGFloat = 200
-    static let verticalPadding = TaskbarJumpListMetrics.verticalPadding
+    static let width: CGFloat = 160
+    static let rowHeight: CGFloat = 30
+    static let verticalPadding: CGFloat = 5
+    static let cornerRadius: CGFloat = 8
+    static let rowLayout = TaskbarJumpListRow.Layout(
+        rowHeight: rowHeight,
+        fontSize: 12,
+        iconSize: 14,
+        iconFontSize: 13,
+        spacing: 8,
+        contentHorizontalPadding: 5,
+        outerHorizontalPadding: 4,
+        trailingIconFontSize: 10,
+        hoverCornerRadius: 4
+    )
     static let rootRowCount: CGFloat = 8
     static let dividerCount: CGFloat = 2
     static let maximumWindowRows = 8
@@ -61,7 +74,7 @@ enum TaskbarContextMenuMetrics {
     static let rootSize = CGSize(
         width: width,
         height: verticalPadding * 2
-            + rootRowCount * TaskbarJumpListMetrics.rowHeight
+            + rootRowCount * rowHeight
             + dividerCount * TaskbarJumpListMetrics.dividerBlockHeight
     )
 
@@ -69,7 +82,7 @@ enum TaskbarContextMenuMetrics {
         CGSize(
             width: width,
             height: verticalPadding * 2
-                + CGFloat(max(rowCount, 1)) * TaskbarJumpListMetrics.rowHeight
+                + CGFloat(max(rowCount, 1)) * rowHeight
         )
     }
 }
@@ -120,7 +133,7 @@ enum TaskbarContextMenuGeometry {
         let fitsOnRight = rightX + contentSize.width <= screenFrame.maxX - screenInset
         let rowCenterY = parentFrame.maxY
             - TaskbarContextMenuMetrics.verticalPadding
-            - (CGFloat(rowIndex) + 0.5) * TaskbarJumpListMetrics.rowHeight
+            - (CGFloat(rowIndex) + 0.5) * TaskbarContextMenuMetrics.rowHeight
         let minimumY = screenFrame.minY + screenInset
         let maximumY = max(minimumY, screenFrame.maxY - screenInset - contentSize.height)
         return CGRect(
@@ -144,6 +157,7 @@ struct TaskbarContextMenuView: View {
                     title: section.title,
                     systemImage: section.systemImage,
                     trailingSystemImage: "chevron.right",
+                    layout: TaskbarContextMenuMetrics.rowLayout,
                     onHoverChanged: { hovering in
                         if hovering { onShowSection(section) }
                     },
@@ -178,6 +192,7 @@ struct TaskbarContextMenuView: View {
         TaskbarJumpListRow(
             title: title,
             systemImage: systemImage,
+            layout: TaskbarContextMenuMetrics.rowLayout,
             onHoverChanged: { hovering in
                 if hovering { onDismissSubmenu() }
             },
@@ -187,7 +202,7 @@ struct TaskbarContextMenuView: View {
 
     private var sectionDivider: some View {
         Divider()
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 9)
             .padding(.vertical, 4)
     }
 }
@@ -226,11 +241,16 @@ struct TaskbarContextSubmenuView: View {
                         title: "No open windows",
                         systemImage: "rectangle.on.rectangle.slash",
                         isEnabled: false,
+                        layout: TaskbarContextMenuMetrics.rowLayout,
                         action: {}
                     )
                 } else {
                     ForEach(windows.prefix(TaskbarContextMenuMetrics.maximumWindowRows)) { entry in
-                        TaskbarJumpListRow(title: entry.title, image: entry.icon) {
+                        TaskbarJumpListRow(
+                            title: entry.title,
+                            image: entry.icon,
+                            layout: TaskbarContextMenuMetrics.rowLayout
+                        ) {
                             onDismiss()
                             onOpenWindow(entry.window)
                         }
@@ -256,7 +276,11 @@ struct TaskbarContextSubmenuView: View {
         systemImage: String,
         action: @escaping () -> Void
     ) -> some View {
-        TaskbarJumpListRow(title: title, systemImage: systemImage) {
+        TaskbarJumpListRow(
+            title: title,
+            systemImage: systemImage,
+            layout: TaskbarContextMenuMetrics.rowLayout
+        ) {
             onDismiss()
             action()
         }

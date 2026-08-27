@@ -163,7 +163,8 @@ final class TaskbarJumpListController: ObservableObject {
         contentSize: CGSize,
         relativeTo anchorView: NSView,
         position: TaskbarPosition,
-        preservesOnTrayItemMouseDown: Bool = false
+        preservesOnTrayItemMouseDown: Bool = false,
+        cornerRadius: CGFloat = 10
     ) {
         guard let anchorWindow = anchorView.window else { return }
         let windowRect = anchorView.convert(anchorView.bounds, to: nil)
@@ -180,7 +181,8 @@ final class TaskbarJumpListController: ObservableObject {
             rootView: rootView,
             frame: targetFrame,
             appearance: anchorWindow.appearance,
-            preservesOnTrayItemMouseDown: preservesOnTrayItemMouseDown
+            preservesOnTrayItemMouseDown: preservesOnTrayItemMouseDown,
+            cornerRadius: cornerRadius
         )
     }
 
@@ -188,11 +190,13 @@ final class TaskbarJumpListController: ObservableObject {
         rootView: AnyView,
         frame: CGRect,
         appearance: NSAppearance?,
-        preservesOnTrayItemMouseDown: Bool = false
+        preservesOnTrayItemMouseDown: Bool = false,
+        cornerRadius: CGFloat = 10
     ) {
         let panel = panel ?? makePanel()
         self.preservesOnTrayItemMouseDown = preservesOnTrayItemMouseDown
         hostingView.rootView = rootView
+        backdrop.layer?.cornerRadius = cornerRadius
         panel.appearance = appearance
         panel.setFrame(frame, display: true)
         panel.makeKeyAndOrderFront(nil)
@@ -438,51 +442,64 @@ struct TaskbarJumpListView: View {
 }
 
 struct TaskbarJumpListRow: View {
+    struct Layout {
+        var rowHeight = TaskbarJumpListMetrics.rowHeight
+        var fontSize: CGFloat = 13
+        var iconSize: CGFloat = 18
+        var iconFontSize: CGFloat = 14
+        var spacing: CGFloat = 10
+        var contentHorizontalPadding: CGFloat = 10
+        var outerHorizontalPadding: CGFloat = 4
+        var trailingIconFontSize: CGFloat = 11
+        var hoverCornerRadius: CGFloat = 5
+    }
+
     let title: String
     var systemImage: String?
     var image: NSImage?
     var trailingSystemImage: String?
     var reservesIconSpace = true
     var isEnabled = true
+    var layout = Layout()
     var onHoverChanged: ((Bool) -> Void)?
     let action: () -> Void
     @State private var isHovering = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: layout.spacing) {
                 if let image {
                     Image(nsImage: image)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 18, height: 18)
+                        .frame(width: layout.iconSize, height: layout.iconSize)
                 } else if let systemImage {
                     Image(systemName: systemImage)
-                        .font(.system(size: 14, weight: .regular))
-                        .frame(width: 18, height: 18)
+                        .font(.system(size: layout.iconFontSize, weight: .regular))
+                        .frame(width: layout.iconSize, height: layout.iconSize)
                 } else if reservesIconSpace {
-                    Color.clear.frame(width: 18, height: 18)
+                    Color.clear.frame(width: layout.iconSize, height: layout.iconSize)
                 }
 
                 Text(title)
-                    .font(.system(size: 13))
+                    .font(.system(size: layout.fontSize, weight: .regular))
                     .lineLimit(1)
                 Spacer(minLength: 8)
 
                 if let trailingSystemImage {
                     Image(systemName: trailingSystemImage)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: layout.trailingIconFontSize, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
             }
             .foregroundStyle(isEnabled ? Color.primary : Color.secondary)
-            .padding(.horizontal, 10)
-            .frame(height: TaskbarJumpListMetrics.rowHeight)
+            .padding(.horizontal, layout.contentHorizontalPadding)
+            .frame(height: layout.rowHeight)
             .background(
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                RoundedRectangle(cornerRadius: layout.hoverCornerRadius, style: .continuous)
                     .fill(isHovering && isEnabled ? Color.primary.opacity(0.10) : .clear)
             )
-            .padding(.horizontal, 4)
+            .padding(.horizontal, layout.outerHorizontalPadding)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
