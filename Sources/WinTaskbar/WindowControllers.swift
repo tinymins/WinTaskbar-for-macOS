@@ -492,6 +492,9 @@ final class TaskbarWindowController {
     private let taskbarJumpListController = TaskbarJumpListController()
     private let startButtonContextMenuController = TaskbarJumpListController()
     private let startButtonPowerMenuController = TaskbarJumpListController()
+    private let quickSettingsPanelController = QuickSettingsPanelController()
+    private let inputSourcePanelController = InputSourcePanelController()
+    private let clockCalendarPanelController = ClockCalendarPanelController()
     private let shortcutEditorController: ShortcutEditorController
     private let recentDocuments: RecentDocumentsService
     private let dockBadges: DockBadgeService
@@ -535,6 +538,38 @@ final class TaskbarWindowController {
         taskbarJumpListController.dismiss()
         startButtonContextMenuController.dismiss()
         startButtonPowerMenuController.dismiss()
+        quickSettingsPanelController.dismiss()
+        inputSourcePanelController.dismiss()
+        clockCalendarPanelController.dismiss(animated: false)
+    }
+
+    func toggleQuickSettings() {
+        quickSettingsPanelController.toggle(
+            service: status,
+            actions: actions,
+            position: preferences.position,
+            barHeight: CGFloat(preferences.barHeight),
+            screen: activeScreen
+        )
+    }
+
+    func toggleInputSources() {
+        inputSourcePanelController.toggle(
+            service: status,
+            position: preferences.position,
+            barHeight: CGFloat(preferences.barHeight),
+            screen: activeScreen,
+            appearance: appearance
+        )
+    }
+
+    func toggleCalendar() {
+        clockCalendarPanelController.toggle(
+            screen: activeScreen,
+            position: preferences.position,
+            barHeight: CGFloat(preferences.barHeight),
+            theme: preferences.theme
+        )
     }
 
     func rebuildPanels() {
@@ -593,6 +628,9 @@ final class TaskbarWindowController {
             taskbarJumpListController: taskbarJumpListController,
             startButtonContextMenuController: startButtonContextMenuController,
             startButtonPowerMenuController: startButtonPowerMenuController,
+            quickSettingsPanelController: quickSettingsPanelController,
+            inputSourcePanelController: inputSourcePanelController,
+            clockCalendarPanelController: clockCalendarPanelController,
             shortcutEditorController: shortcutEditorController,
             recentDocuments: recentDocuments,
             screen: screen

@@ -85,6 +85,9 @@ struct TaskbarView: View {
     @ObservedObject var taskbarJumpListController: TaskbarJumpListController
     @ObservedObject var startButtonContextMenuController: TaskbarJumpListController
     @ObservedObject var startButtonPowerMenuController: TaskbarJumpListController
+    @ObservedObject var quickSettingsPanelController: QuickSettingsPanelController
+    @ObservedObject var inputSourcePanelController: InputSourcePanelController
+    @ObservedObject var clockCalendarPanelController: ClockCalendarPanelController
     let shortcutEditorController: ShortcutEditorController
     @ObservedObject var recentDocuments: RecentDocumentsService
     let screen: NSScreen
@@ -94,7 +97,6 @@ struct TaskbarView: View {
     @State private var taskbarOrderRevision = 0
     @State private var dragGrabOffset = CGSize.zero
     @State private var dragFixedCrossAxisPosition: CGFloat?
-    @StateObject private var quickSettingsPanelController = QuickSettingsPanelController()
 
     var body: some View {
         GeometryReader { geometry in
@@ -460,7 +462,8 @@ struct TaskbarView: View {
                 panelController: quickSettingsPanelController,
                 actions: actions,
                 position: preferences.position,
-                barHeight: CGFloat(preferences.barHeight)
+                barHeight: CGFloat(preferences.barHeight),
+                screen: screen
             )
         }
         if preferences.trayVolumeEnabled {
@@ -469,7 +472,8 @@ struct TaskbarView: View {
                 panelController: quickSettingsPanelController,
                 actions: actions,
                 position: preferences.position,
-                barHeight: CGFloat(preferences.barHeight)
+                barHeight: CGFloat(preferences.barHeight),
+                screen: screen
             )
         }
         if preferences.trayBatteryEnabled {
@@ -479,19 +483,23 @@ struct TaskbarView: View {
                 actions: actions,
                 position: preferences.position,
                 barHeight: CGFloat(preferences.barHeight),
-                horizontal: preferences.position.isHorizontal
+                horizontal: preferences.position.isHorizontal,
+                screen: screen
             )
         }
         if preferences.trayInputSourceEnabled {
             InputSourceTrayView(
                 service: status,
+                panelController: inputSourcePanelController,
                 position: preferences.position,
-                barHeight: CGFloat(preferences.barHeight)
+                barHeight: CGFloat(preferences.barHeight),
+                screen: screen
             )
         }
         if preferences.trayClockEnabled {
             ClockTrayView(
                 service: status,
+                panelController: clockCalendarPanelController,
                 position: preferences.position,
                 barHeight: CGFloat(preferences.barHeight),
                 theme: preferences.theme,

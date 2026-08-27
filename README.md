@@ -32,7 +32,7 @@ The website is a realistic, installation-free simulation of the design. Open Sta
 - Window enumeration, hover previews, thumbnails, activation, minimization, Show Desktop, and taskbar-aware window fitting
 - Searchable Start menu with custom folders, category grouping, drag-and-drop shortcuts, and power actions
 - Interactive clock/calendar, battery, volume, Wi-Fi, and input-source tray controls
-- Dock hiding and restoration, launch at login, global hotkeys, onboarding, and permission guidance
+- Dock hiding and restoration, launch at login, configurable Windows-style global shortcuts, onboarding, and permission guidance
 - Twelve bundled localizations, including Simplified Chinese
 
 ## Requirements

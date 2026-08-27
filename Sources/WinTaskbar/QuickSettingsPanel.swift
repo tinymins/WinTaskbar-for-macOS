@@ -105,25 +105,34 @@ enum QuickSettingsPanelGeometry {
 @MainActor
 final class QuickSettingsPanelController: ObservableObject {
     private let panelController = TaskbarJumpListController()
-    private weak var anchorView: NSView?
-
-    func attach(anchorView: NSView) {
-        self.anchorView = anchorView
-    }
 
     func toggle(
         service: SystemStatusService,
         actions: AppActions,
         position: TaskbarPosition,
-        barHeight: CGFloat
+        barHeight: CGFloat,
+        screen: NSScreen
     ) {
         if panelController.isVisible {
             dismiss()
             return
         }
-        guard let anchorView,
-              let anchorWindow = anchorView.window,
-              let screen = anchorWindow.screen else { return }
+        present(
+            service: service,
+            actions: actions,
+            position: position,
+            barHeight: barHeight,
+            screen: screen
+        )
+    }
+
+    private func present(
+        service: SystemStatusService,
+        actions: AppActions,
+        position: TaskbarPosition,
+        barHeight: CGFloat,
+        screen: NSScreen
+    ) {
         service.refresh()
         let rootView = QuickSettingsPanelView(
             service: service,
@@ -1241,24 +1250,6 @@ struct WindowsBatteryIcon: View {
     }
 }
 
-private struct QuickSettingsPanelAnchor: NSViewRepresentable {
-    let onAttach: @MainActor (NSView) -> Void
-
-    func makeNSView(context: Context) -> QuickSettingsPanelAnchorView {
-        let view = QuickSettingsPanelAnchorView()
-        onAttach(view)
-        return view
-    }
-
-    func updateNSView(_ nsView: QuickSettingsPanelAnchorView, context: Context) {
-        onAttach(nsView)
-    }
-}
-
-private final class QuickSettingsPanelAnchorView: NSView {
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-}
-
 private struct QuickSettingsScrollMonitor: NSViewRepresentable {
     let onScroll: @MainActor (CGFloat) -> Void
 
@@ -1302,11 +1293,5 @@ private final class QuickSettingsScrollMonitorView: NSView {
         guard let eventMonitor else { return }
         NSEvent.removeMonitor(eventMonitor)
         self.eventMonitor = nil
-    }
-}
-
-extension View {
-    func quickSettingsPanelAnchor(controller: QuickSettingsPanelController) -> some View {
-        background(QuickSettingsPanelAnchor(onAttach: controller.attach(anchorView:)))
     }
 }

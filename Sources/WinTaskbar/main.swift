@@ -20,7 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let dockToggleService = DockToggleService.shared
     private let loginItemService = LoginItemService.shared
     private let permissionsService = PermissionsService.shared
-    private let globalHotkeysService = GlobalHotkeysService()
+    private let globalHotkeysService = GlobalHotkeysService.shared
     private var cancellables = Set<AnyCancellable>()
 
     private var taskbarController: TaskbarWindowController?
@@ -65,21 +65,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         actions.showDesktopHandler = { [weak self] in self?.showDesktopService.toggle() }
         actions.powerHandler = { [weak self] action in self?.confirmAndPerform(action) }
 
-        globalHotkeysService.onToggleStartMenu = { [weak startMenu] in
-            startMenu?.toggle()
+        globalHotkeysService.onInvoke = { [weak self] configuration in
+            self?.performGlobalShortcut(configuration)
         }
-        globalHotkeysService.onShowDesktop = { [weak self] in
-            self?.showDesktopService.toggle()
-        }
-        globalHotkeysService.onLaunchPinned = { [weak self] index in
-            guard let self, self.preferences.pinnedBundleIDs.indices.contains(index),
-                  let app = self.apps.app(bundleIdentifier: self.preferences.pinnedBundleIDs[index]) else { return }
-            self.apps.open(app)
-        }
-        globalHotkeysService.setEnabled(preferences.globalHotkeysEnabled, shortcuts: preferences.hotkeyShortcuts)
-        Publishers.CombineLatest(preferences.$globalHotkeysEnabled, preferences.$hotkeyShortcuts)
-            .sink { [weak self] enabled, shortcuts in
-                self?.globalHotkeysService.setEnabled(enabled, shortcuts: shortcuts)
+        Publishers.CombineLatest4(
+            preferences.$globalHotkeysEnabled,
+            preferences.$windowsKeyMapping,
+            preferences.$windowsKeyOpensStart,
+            preferences.$globalShortcutConfigurations
+        )
+            .sink { [weak self] enabled, mapping, opensStart, configurations in
+                self?.globalHotkeysService.setConfiguration(
+                    enabled: enabled,
+                    windowsKeyMapping: mapping,
+                    windowsKeyOpensStart: opensStart,
+                    configurations: configurations
+                )
             }
             .store(in: &cancellables)
         preferences.$position
@@ -121,6 +122,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.taskbarController?.rebuildPanels() }
         }
+    }
+
+    private func performGlobalShortcut(_ configuration: GlobalShortcutConfiguration) {
+        switch configuration.action {
+        case .toggleStartMenu:
+            startMenuController?.toggle()
+        case .showDesktop:
+            showDesktopService.toggle()
+        case .openFileManager:
+            openFileManager(configuration.applicationTarget)
+        case .openSystemSettings:
+            openApplication(bundleIdentifier: "com.apple.systempreferences")
+        case .openSearch:
+            if let target = configuration.applicationTarget {
+                openApplication(target)
+            } else {
+                openApplication(bundleIdentifier: "com.apple.Spotlight")
+            }
+        case .openApplication:
+            guard let target = configuration.applicationTarget else { return }
+            openApplication(target)
+        case .lockScreen:
+            powerService.perform(.lockScreen)
+        case .toggleQuickSettings:
+            taskbarController?.toggleQuickSettings()
+        case .toggleCalendar:
+            taskbarController?.toggleCalendar()
+        case .toggleInputSources:
+            taskbarController?.toggleInputSources()
+        case .launchPinned:
+            guard let index = configuration.pinnedIndex,
+                  preferences.pinnedBundleIDs.indices.contains(index),
+                  let app = apps.app(bundleIdentifier: preferences.pinnedBundleIDs[index]) else { return }
+            apps.open(app)
+        }
+    }
+
+    private func openFileManager(_ target: ShortcutApplicationTarget?) {
+        let homeURL = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+        guard let target else {
+            NSWorkspace.shared.open(homeURL)
+            return
+        }
+        guard let applicationURL = target.resolvedURL else { return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.open(
+            [homeURL],
+            withApplicationAt: applicationURL,
+            configuration: configuration
+        )
+    }
+
+    private func openApplication(_ target: ShortcutApplicationTarget) {
+        guard let url = target.resolvedURL else { return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+    }
+
+    private func openApplication(bundleIdentifier: String) {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else { return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -187,8 +253,32 @@ func runSelfTest() async -> Int32 {
           preferences.panelBlurRadius == 20,
           preferences.trayClockEnabled,
           preferences.menuButtonPlacement == .standard,
-          preferences.hotkeyShortcuts.count == 11 else {
+          preferences.windowsKeyMapping == .option,
+          preferences.windowsKeyOpensStart,
+          preferences.globalShortcutConfigurations.count == 19,
+          preferences.globalShortcutConfigurations.first(where: {
+              $0.id == GlobalShortcutCatalog.fileManagerID
+          })?.isEnabled == true else {
         fputs("SELF-TEST FAILED: default values mismatch\n", stderr)
+        return 1
+    }
+    guard let fileManagerShortcut = preferences.globalShortcutConfigurations.first(where: {
+        $0.id == GlobalShortcutCatalog.fileManagerID
+    }),
+    fileManagerShortcut.displayValue(mapping: .option) == "⌥E",
+    fileManagerShortcut.resolvedShortcut(mapping: .option).modifiers == UInt32(optionKey),
+    fileManagerShortcut.resolvedShortcut(mapping: .command).modifiers == UInt32(cmdKey) else {
+        fputs("SELF-TEST FAILED: Windows shortcut mapping mismatch\n", stderr)
+        return 1
+    }
+    var duplicateShortcuts = preferences.globalShortcutConfigurations
+    duplicateShortcuts[1].shortcut = duplicateShortcuts[0].shortcut
+    duplicateShortcuts[1].usesWindowsKey = duplicateShortcuts[0].usesWindowsKey
+    guard GlobalHotkeysService.duplicateIssues(
+        configurations: duplicateShortcuts,
+        mapping: preferences.windowsKeyMapping
+    )[duplicateShortcuts[1].id] != nil else {
+        fputs("SELF-TEST FAILED: duplicate global shortcut was not detected\n", stderr)
         return 1
     }
 
@@ -1172,44 +1262,53 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
-    var optionGesture = OptionKeyGestureState()
+    var optionGesture = WindowsKeyGestureState()
     guard !optionGesture.flagsChanged(to: [.option]),
           optionGesture.flagsChanged(to: []) else {
         fputs("SELF-TEST FAILED: Option-only release did not trigger\n", stderr)
         return 1
     }
-    optionGesture = OptionKeyGestureState()
+    optionGesture = WindowsKeyGestureState()
     guard !optionGesture.flagsChanged(to: [.capsLock, .option]),
           optionGesture.flagsChanged(to: [.capsLock]) else {
         fputs("SELF-TEST FAILED: Caps Lock blocked Option-only release\n", stderr)
         return 1
     }
-    optionGesture = OptionKeyGestureState()
+    optionGesture = WindowsKeyGestureState()
     _ = optionGesture.handle(eventType: .flagsChanged, modifierFlags: [.option])
     _ = optionGesture.handle(eventType: .keyDown)
     guard !optionGesture.flagsChanged(to: []) else {
         fputs("SELF-TEST FAILED: Option key combination triggered\n", stderr)
         return 1
     }
-    optionGesture = OptionKeyGestureState()
+    optionGesture = WindowsKeyGestureState()
     guard !optionGesture.flagsChanged(to: [.command]),
           !optionGesture.flagsChanged(to: [.command, .option]),
           !optionGesture.flagsChanged(to: [.command]) else {
         fputs("SELF-TEST FAILED: pre-held modifier combination triggered\n", stderr)
         return 1
     }
-    optionGesture = OptionKeyGestureState()
+    optionGesture = WindowsKeyGestureState()
     guard !optionGesture.flagsChanged(to: [.option]),
           !optionGesture.flagsChanged(to: [.option, .shift]),
           !optionGesture.flagsChanged(to: [.shift]) else {
         fputs("SELF-TEST FAILED: modifier added after Option triggered\n", stderr)
         return 1
     }
-    optionGesture = OptionKeyGestureState()
+    optionGesture = WindowsKeyGestureState()
     guard !optionGesture.flagsChanged(to: [.option]),
           !optionGesture.flagsChanged(to: [.option]),
           !optionGesture.flagsChanged(to: []) else {
         fputs("SELF-TEST FAILED: dual Option gesture triggered\n", stderr)
+        return 1
+    }
+    var commandGesture = WindowsKeyGestureState(windowsModifier: .command)
+    guard !commandGesture.flagsChanged(to: [.command]),
+          commandGesture.flagsChanged(to: []),
+          !commandGesture.flagsChanged(to: [.option]),
+          !commandGesture.flagsChanged(to: [.option, .command]),
+          !commandGesture.flagsChanged(to: [.option]) else {
+        fputs("SELF-TEST FAILED: configurable Windows modifier gesture mismatch\n", stderr)
         return 1
     }
 
@@ -1293,6 +1392,24 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    let legacyHotkeySuiteName = "WinTaskbar.SelfTest.LegacyHotkeys.\(UUID().uuidString)"
+    guard let legacyHotkeyDefaults = UserDefaults(suiteName: legacyHotkeySuiteName) else {
+        fputs("SELF-TEST FAILED: cannot create legacy hotkey defaults\n", stderr)
+        return 1
+    }
+    defer { legacyHotkeyDefaults.removePersistentDomain(forName: legacyHotkeySuiteName) }
+    var legacyHotkeys = GlobalShortcutCatalog.defaultLegacyShortcuts
+    legacyHotkeys[0] = HotkeyShortcut(keyCode: 0, modifiers: UInt32(cmdKey), keyLabel: "A")
+    legacyHotkeyDefaults.set(try? JSONEncoder().encode(legacyHotkeys), forKey: "wintaskbar.hotkeyShortcuts")
+    let migratedHotkeyPreferences = PreferencesStore(defaults: legacyHotkeyDefaults)
+    guard migratedHotkeyPreferences.globalShortcutConfigurations.first?.shortcut.keyLabel == "A",
+          migratedHotkeyPreferences.globalShortcutConfigurations.contains(where: {
+              $0.id == GlobalShortcutCatalog.fileManagerID && $0.isEnabled
+          }) else {
+        fputs("SELF-TEST FAILED: legacy hotkey migration mismatch\n", stderr)
+        return 1
+    }
+
     preferences.position = .left
     preferences.barHeight = 64
     preferences.trayWifiEnabled = false
@@ -1301,14 +1418,18 @@ func runSelfTest() async -> Int32 {
     let reorderedPinnedBundleIDs = preferences.pinnedBundleIDs
     preferences.alignPinnedOrder(to: ["two", "three", "one"])
     preferences.appFolders = [AppFolder(name: "Work", bundleIDs: ["one"])]
-    preferences.hotkeyShortcuts[0] = HotkeyShortcut(keyCode: 0, modifiers: UInt32(cmdKey), keyLabel: "A")
+    preferences.globalShortcutConfigurations[0].shortcut = HotkeyShortcut(
+        keyCode: 0,
+        modifiers: UInt32(cmdKey),
+        keyLabel: "A"
+    )
     guard defaults.string(forKey: "wintaskbar.position") == "Left",
           defaults.double(forKey: "wintaskbar.barHeight") == 64,
           defaults.bool(forKey: "wintaskbar.feature.trayWifi") == false,
           reorderedPinnedBundleIDs == ["three", "one", "two"],
           preferences.pinnedBundleIDs == ["two", "three", "one"],
           PreferencesStore(defaults: defaults).appFolders.first?.bundleIDs == ["one"],
-          PreferencesStore(defaults: defaults).hotkeyShortcuts.first?.keyLabel == "A",
+          PreferencesStore(defaults: defaults).globalShortcutConfigurations.first?.shortcut.keyLabel == "A",
           DockBadgeService.parseStatusLabel("124 notifications") == "124",
           DockBadgeService.parseLSAppInfoOutput("\"StatusLabel\"={ \"label\"=\"124 notifications\" }") == "124",
           DockBadgeService.parseLSAppInfoOutput("\"StatusLabel\"=[ NULL ]") == nil else {
@@ -1324,7 +1445,7 @@ func runSelfTest() async -> Int32 {
         fputs("SELF-TEST FAILED: app URL drag provider did not round-trip\n", stderr)
         return 1
     }
-    print("SELF-TEST PASSED: defaults, taskbar and window fitting geometry, Option gesture, attention, preference persistence, and app URL drag provider")
+    print("SELF-TEST PASSED: defaults, taskbar and window fitting geometry, configurable Windows key gesture, global shortcut migration, attention, preference persistence, and app URL drag provider")
     return 0
 }
 

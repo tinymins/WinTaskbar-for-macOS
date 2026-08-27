@@ -1,38 +1,47 @@
 import AppKit
 import Carbon
+import Combine
 import Foundation
 
 private let winTaskbarHotKeySignature: OSType = 0x5754534B
 
-struct OptionKeyGestureState {
-    private static let combinationModifiers: NSEvent.ModifierFlags = [.command, .control, .shift, .function]
+struct WindowsKeyGestureState {
+    private static let allCombinationModifiers: NSEvent.ModifierFlags = [
+        .command, .control, .option, .shift, .function
+    ]
 
-    private var optionIsDown = false
+    private let windowsModifier: NSEvent.ModifierFlags
+    private var modifierIsDown = false
     private var canTrigger = false
+
+    init(windowsModifier: NSEvent.ModifierFlags = .option) {
+        self.windowsModifier = windowsModifier
+    }
 
     mutating func flagsChanged(to rawFlags: NSEvent.ModifierFlags) -> Bool {
         let flags = rawFlags.intersection(.deviceIndependentFlagsMask)
-        let optionIsNowDown = flags.contains(.option)
+        let modifierIsNowDown = flags.contains(windowsModifier)
+        let otherModifiers = Self.allCombinationModifiers.subtracting(windowsModifier)
 
-        if !optionIsDown, optionIsNowDown {
-            optionIsDown = true
-            canTrigger = flags.intersection(Self.combinationModifiers).isEmpty
+        if !modifierIsDown, modifierIsNowDown {
+            modifierIsDown = true
+            canTrigger = flags.intersection(otherModifiers).isEmpty
             return false
         }
 
-        if optionIsDown, optionIsNowDown {
+        if modifierIsDown, modifierIsNowDown {
             canTrigger = false
             return false
         }
 
-        guard optionIsDown else { return false }
-        let shouldTrigger = canTrigger && flags.intersection(Self.combinationModifiers).isEmpty
+        guard modifierIsDown else { return false }
+        let shouldTrigger = canTrigger && flags.intersection(otherModifiers).isEmpty
         reset()
         return shouldTrigger
     }
 
     mutating func keyDown() {
-        if optionIsDown { canTrigger = false }
+        if modifierIsDown { canTrigger = false }
     }
 
     mutating func handle(eventType: CGEventType, modifierFlags: NSEvent.ModifierFlags = []) -> Bool {
@@ -48,17 +57,17 @@ struct OptionKeyGestureState {
     }
 
     mutating func reset() {
-        optionIsDown = false
+        modifierIsDown = false
         canTrigger = false
     }
 }
 
-private let optionKeyEventTapHandler: CGEventTapCallBack = { _, eventType, event, userData in
+private let windowsKeyEventTapHandler: CGEventTapCallBack = { _, eventType, event, userData in
     guard let userData else { return Unmanaged.passUnretained(event) }
     let service = Unmanaged<GlobalHotkeysService>.fromOpaque(userData).takeUnretainedValue()
     let rawFlags = event.flags.rawValue
     MainActor.assumeIsolated {
-        service.handleOptionKeyEvent(eventType, rawFlags: rawFlags)
+        service.handleWindowsKeyEvent(eventType, rawFlags: rawFlags)
     }
     return Unmanaged.passUnretained(event)
 }
@@ -83,20 +92,26 @@ private let winTaskbarHotKeyHandler: EventHandlerUPP = { _, event, userData in
 }
 
 @MainActor
-final class GlobalHotkeysService {
-    var onToggleStartMenu: (() -> Void)?
-    var onShowDesktop: (() -> Void)?
-    var onLaunchPinned: ((Int) -> Void)?
+final class GlobalHotkeysService: ObservableObject {
+    static let shared = GlobalHotkeysService()
+
+    var onInvoke: ((GlobalShortcutConfiguration) -> Void)?
+
+    @Published private(set) var registrationIssues: [String: String] = [:]
+    @Published private(set) var windowsKeyIssue: String?
 
     private var handler: EventHandlerRef?
     private var hotKeys: [EventHotKeyRef] = []
-    private var optionKeyEventTap: CFMachPort?
-    private var optionKeyEventTapSource: CFRunLoopSource?
+    private var configurationByHotKeyID: [Int: GlobalShortcutConfiguration] = [:]
+    private var windowsKeyEventTap: CFMachPort?
+    private var windowsKeyEventTapSource: CFRunLoopSource?
     private(set) var isEnabled = false
-    private var shortcuts: [HotkeyShortcut] = []
-    private var optionKeyGesture = OptionKeyGestureState()
+    private var configurations: [GlobalShortcutConfiguration] = []
+    private var windowsKeyMapping: WindowsKeyMapping = .option
+    private var windowsKeyOpensStart = true
+    private var windowsKeyGesture = WindowsKeyGestureState()
 
-    init() {
+    private init() {
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         InstallEventHandler(
             GetApplicationEventTarget(),
@@ -108,55 +123,90 @@ final class GlobalHotkeysService {
         )
     }
 
-    func setEnabled(_ enabled: Bool, shortcuts: [HotkeyShortcut]? = nil) {
-        if let shortcuts { self.shortcuts = shortcuts }
-        guard enabled != isEnabled || shortcuts != nil else { return }
+    func setConfiguration(
+        enabled: Bool,
+        windowsKeyMapping: WindowsKeyMapping,
+        windowsKeyOpensStart: Bool,
+        configurations: [GlobalShortcutConfiguration]
+    ) {
+        self.configurations = configurations
+        self.windowsKeyMapping = windowsKeyMapping
+        self.windowsKeyOpensStart = windowsKeyOpensStart
         unregisterAll()
-        optionKeyGesture.reset()
+        windowsKeyGesture = WindowsKeyGestureState(windowsModifier: windowsKeyMapping.eventModifier)
+        var issues = Self.duplicateIssues(configurations: configurations, mapping: windowsKeyMapping)
+        windowsKeyIssue = nil
         if enabled {
-            for (index, shortcut) in self.shortcuts.enumerated() {
-                let id = index < 2 ? index + 1 : 100 + index - 2
-                register(id: id, shortcut: shortcut)
+            for (index, configuration) in configurations.enumerated() where configuration.isEnabled {
+                guard issues[configuration.id] == nil else { continue }
+                let shortcut = configuration.resolvedShortcut(mapping: windowsKeyMapping)
+                if let issue = register(id: index + 1, shortcut: shortcut, configuration: configuration) {
+                    issues[configuration.id] = issue
+                }
             }
-            installOptionKeyEventTap()
+            if windowsKeyOpensStart, !installWindowsKeyEventTap() {
+                windowsKeyIssue = "Event monitoring unavailable"
+            }
         } else {
-            removeOptionKeyEventTap()
+            removeWindowsKeyEventTap()
         }
+        registrationIssues = issues
         isEnabled = enabled
     }
 
-    fileprivate func handle(id: Int) {
-        switch id {
-        case 1: onToggleStartMenu?()
-        case 2: onShowDesktop?()
-        case 100...108: onLaunchPinned?(id - 100)
-        default: break
+    static func duplicateIssues(
+        configurations: [GlobalShortcutConfiguration],
+        mapping: WindowsKeyMapping
+    ) -> [String: String] {
+        var issues: [String: String] = [:]
+        var registeredShortcuts: [String: String] = [:]
+        for configuration in configurations where configuration.isEnabled {
+            let shortcut = configuration.resolvedShortcut(mapping: mapping)
+            let shortcutKey = "\(shortcut.keyCode):\(shortcut.modifiers)"
+            if let duplicateTitle = registeredShortcuts[shortcutKey] {
+                issues[configuration.id] = "Duplicates \(duplicateTitle)"
+            } else {
+                registeredShortcuts[shortcutKey] = configuration.title
+            }
         }
+        return issues
     }
 
-    private func register(id: Int, shortcut: HotkeyShortcut) {
+    fileprivate func handle(id: Int) {
+        guard let configuration = configurationByHotKeyID[id] else { return }
+        onInvoke?(configuration)
+    }
+
+    private func register(
+        id: Int,
+        shortcut: HotkeyShortcut,
+        configuration: GlobalShortcutConfiguration
+    ) -> String? {
         var reference: EventHotKeyRef?
         let hotKeyID = EventHotKeyID(signature: winTaskbarHotKeySignature, id: UInt32(id))
-        if RegisterEventHotKey(
+        let status = RegisterEventHotKey(
             shortcut.keyCode,
             shortcut.modifiers,
             hotKeyID,
             GetApplicationEventTarget(),
             0,
             &reference
-        ) == noErr,
-           let reference {
-            hotKeys.append(reference)
-        }
+        )
+        guard status == noErr, let reference else { return "Unavailable (\(status))" }
+        hotKeys.append(reference)
+        configurationByHotKeyID[id] = configuration
+        return nil
     }
 
     private func unregisterAll() {
         hotKeys.forEach { _ = UnregisterEventHotKey($0) }
         hotKeys.removeAll()
+        configurationByHotKeyID.removeAll()
+        removeWindowsKeyEventTap()
     }
 
-    private func installOptionKeyEventTap() {
-        guard optionKeyEventTap == nil else { return }
+    private func installWindowsKeyEventTap() -> Bool {
+        guard windowsKeyEventTap == nil else { return true }
         let eventMask = (CGEventMask(1) << CGEventType.flagsChanged.rawValue)
             | (CGEventMask(1) << CGEventType.keyDown.rawValue)
         guard let eventTap = CGEvent.tapCreate(
@@ -164,40 +214,51 @@ final class GlobalHotkeysService {
             place: .headInsertEventTap,
             options: .listenOnly,
             eventsOfInterest: eventMask,
-            callback: optionKeyEventTapHandler,
+            callback: windowsKeyEventTapHandler,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ),
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0) else {
-            return
+            return false
         }
-        optionKeyEventTap = eventTap
-        optionKeyEventTapSource = source
+        windowsKeyEventTap = eventTap
+        windowsKeyEventTapSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: eventTap, enable: true)
+        return true
     }
 
-    private func removeOptionKeyEventTap() {
-        if let source = optionKeyEventTapSource {
+    private func removeWindowsKeyEventTap() {
+        if let source = windowsKeyEventTapSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
         }
-        if let eventTap = optionKeyEventTap {
+        if let eventTap = windowsKeyEventTap {
             CFMachPortInvalidate(eventTap)
         }
-        optionKeyEventTapSource = nil
-        optionKeyEventTap = nil
+        windowsKeyEventTapSource = nil
+        windowsKeyEventTap = nil
     }
 
-    fileprivate func handleOptionKeyEvent(_ eventType: CGEventType, rawFlags: UInt64) {
+    fileprivate func handleWindowsKeyEvent(_ eventType: CGEventType, rawFlags: UInt64) {
         if eventType == .tapDisabledByTimeout || eventType == .tapDisabledByUserInput {
-            optionKeyGesture.reset()
-            if let eventTap = optionKeyEventTap {
+            windowsKeyGesture.reset()
+            if let eventTap = windowsKeyEventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
             }
             return
         }
         let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(rawFlags))
-        if optionKeyGesture.handle(eventType: eventType, modifierFlags: modifierFlags) {
-            onToggleStartMenu?()
+        if windowsKeyGesture.handle(eventType: eventType, modifierFlags: modifierFlags) {
+            onInvoke?(GlobalShortcutConfiguration(
+                id: GlobalShortcutCatalog.startMenuID,
+                title: "Start Menu",
+                windowsShortcutLabel: "Win",
+                isEnabled: true,
+                shortcut: HotkeyShortcut(keyCode: 0, modifiers: 0, keyLabel: ""),
+                usesWindowsKey: true,
+                action: .toggleStartMenu,
+                pinnedIndex: nil,
+                applicationTarget: nil
+            ))
         }
     }
 }

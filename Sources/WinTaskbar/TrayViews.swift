@@ -7,6 +7,7 @@ struct WiFiTrayView: View {
     let actions: AppActions
     let position: TaskbarPosition
     let barHeight: CGFloat
+    let screen: NSScreen
 
     var body: some View {
         Button {
@@ -14,14 +15,14 @@ struct WiFiTrayView: View {
                 service: service,
                 actions: actions,
                 position: position,
-                barHeight: barHeight
+                barHeight: barHeight,
+                screen: screen
             )
         } label: {
             Image(systemName: service.wifiPoweredOn ? (service.wifiSSID == nil ? "wifi.exclamationmark" : "wifi") : "wifi.slash")
         }
         .buttonStyle(.plain)
         .help(service.wifiSSID ?? (service.wifiPoweredOn ? "Not connected" : "Wi-Fi off"))
-        .quickSettingsPanelAnchor(controller: panelController)
     }
 }
 
@@ -31,6 +32,7 @@ struct VolumeTrayView: View {
     let actions: AppActions
     let position: TaskbarPosition
     let barHeight: CGFloat
+    let screen: NSScreen
 
     var body: some View {
         Button {
@@ -38,12 +40,12 @@ struct VolumeTrayView: View {
                 service: service,
                 actions: actions,
                 position: position,
-                barHeight: barHeight
+                barHeight: barHeight,
+                screen: screen
             )
         } label: { Image(systemName: symbol) }
             .buttonStyle(.plain)
             .help("Volume")
-            .quickSettingsPanelAnchor(controller: panelController)
     }
 
     private var symbol: String {
@@ -61,6 +63,7 @@ struct BatteryTrayView: View {
     let position: TaskbarPosition
     let barHeight: CGFloat
     let horizontal: Bool
+    let screen: NSScreen
 
     var body: some View {
         if let level = service.batteryLevel {
@@ -69,7 +72,8 @@ struct BatteryTrayView: View {
                     service: service,
                     actions: actions,
                     position: position,
-                    barHeight: barHeight
+                    barHeight: barHeight,
+                    screen: screen
                 )
             } label: {
                 HStack(spacing: 3) {
@@ -82,7 +86,6 @@ struct BatteryTrayView: View {
                 }
             }
             .buttonStyle(.plain)
-            .quickSettingsPanelAnchor(controller: panelController)
             .help(service.isCharging ? "Battery charging: \(level)%" : "Battery: \(level)%")
             .accessibilityLabel(service.isCharging ? "Battery charging, \(level)%" : "Battery, \(level)%")
         }
@@ -99,13 +102,20 @@ struct BatteryTrayView: View {
 
 struct InputSourceTrayView: View {
     @ObservedObject var service: SystemStatusService
+    @ObservedObject var panelController: InputSourcePanelController
     let position: TaskbarPosition
     let barHeight: CGFloat
-    @StateObject private var panelController = InputSourcePanelController()
+    let screen: NSScreen
 
     var body: some View {
         Button {
-            panelController.toggle(service: service, position: position, barHeight: barHeight)
+            panelController.toggle(
+                service: service,
+                position: position,
+                barHeight: barHeight,
+                screen: screen,
+                appearance: NSApp.effectiveAppearance
+            )
         } label: {
             Text(currentAbbreviation)
                 .font(.caption2.weight(.medium))
@@ -114,7 +124,6 @@ struct InputSourceTrayView: View {
         .fixedSize()
         .help(service.inputSource)
         .accessibilityLabel("Keyboard layout: \(service.inputSource)")
-        .inputSourcePanelAnchor(controller: panelController)
         .onDisappear { panelController.dismiss() }
     }
 
@@ -126,11 +135,11 @@ struct InputSourceTrayView: View {
 
 struct ClockTrayView: View {
     @ObservedObject var service: SystemStatusService
+    @ObservedObject var panelController: ClockCalendarPanelController
     let position: TaskbarPosition
     let barHeight: CGFloat
     let theme: AppTheme
     let screen: NSScreen
-    @StateObject private var panelController = ClockCalendarPanelController()
 
     var body: some View {
         Button {

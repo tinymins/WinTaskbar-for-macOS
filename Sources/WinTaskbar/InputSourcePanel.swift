@@ -45,20 +45,34 @@ enum InputSourcePanelGeometry {
 @MainActor
 final class InputSourcePanelController: ObservableObject {
     private let panelController = TaskbarJumpListController()
-    private weak var anchorView: NSView?
 
-    func attach(anchorView: NSView) {
-        self.anchorView = anchorView
-    }
-
-    func toggle(service: SystemStatusService, position: TaskbarPosition, barHeight: CGFloat) {
+    func toggle(
+        service: SystemStatusService,
+        position: TaskbarPosition,
+        barHeight: CGFloat,
+        screen: NSScreen,
+        appearance: NSAppearance?
+    ) {
         if panelController.isVisible {
             dismiss()
             return
         }
-        guard let anchorView,
-              let anchorWindow = anchorView.window,
-              let screen = anchorWindow.screen else { return }
+        present(
+            service: service,
+            position: position,
+            barHeight: barHeight,
+            screen: screen,
+            appearance: appearance
+        )
+    }
+
+    private func present(
+        service: SystemStatusService,
+        position: TaskbarPosition,
+        barHeight: CGFloat,
+        screen: NSScreen,
+        appearance: NSAppearance?
+    ) {
         let contentSize = InputSourcePanelMetrics.contentSize(inputSourceCount: service.inputSources.count)
         let rootView = InputSourcePanelView(
             sources: service.inputSources,
@@ -81,7 +95,7 @@ final class InputSourcePanelController: ObservableObject {
                 barHeight: barHeight,
                 contentSize: contentSize
             ),
-            appearance: anchorWindow.appearance
+            appearance: appearance
         )
     }
 
@@ -250,29 +264,5 @@ private struct InputSourceSettingsButton: View {
         .buttonStyle(.plain)
         .frame(height: InputSourcePanelMetrics.footerHeight)
         .onHover { isHovering = $0 }
-    }
-}
-
-private struct InputSourcePanelAnchor: NSViewRepresentable {
-    let onAttach: @MainActor (NSView) -> Void
-
-    func makeNSView(context: Context) -> InputSourcePanelAnchorView {
-        let view = InputSourcePanelAnchorView()
-        onAttach(view)
-        return view
-    }
-
-    func updateNSView(_ nsView: InputSourcePanelAnchorView, context: Context) {
-        onAttach(nsView)
-    }
-}
-
-private final class InputSourcePanelAnchorView: NSView {
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-}
-
-extension View {
-    func inputSourcePanelAnchor(controller: InputSourcePanelController) -> some View {
-        background(InputSourcePanelAnchor(onAttach: controller.attach(anchorView:)))
     }
 }

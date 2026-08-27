@@ -1,11 +1,13 @@
 import AppKit
 import Carbon
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @ObservedObject var preferences: PreferencesStore
     @ObservedObject private var dockToggle = DockToggleService.shared
     @ObservedObject private var loginItem = LoginItemService.shared
+    @ObservedObject private var globalHotkeys = GlobalHotkeysService.shared
 
     var body: some View {
         ScrollView {
@@ -165,7 +167,6 @@ struct SettingsView: View {
             SettingsSection("Features") {
                 Toggle("Window Previews", isOn: $preferences.windowPreviewsEnabled)
                 Toggle("Show Desktop", isOn: $preferences.showDesktopEnabled)
-                Toggle("Global Hotkeys", isOn: $preferences.globalHotkeysEnabled)
             }
             SettingsSection("Taskbar menu") {
                 Toggle("Recent items", isOn: $preferences.showRecentInMenu)
@@ -183,13 +184,43 @@ struct SettingsView: View {
 
     private var hotkeys: some View {
         VStack(alignment: .leading, spacing: 22) {
-            SettingsSection("Global Hotkeys") {
-                HotkeyRecorder("Toggle Start Menu", shortcut: hotkeyBinding(at: 0))
-                HotkeyRecorder("Show Desktop", shortcut: hotkeyBinding(at: 1))
+            SettingsSection("Windows Global Shortcuts") {
+                Toggle("Enable global shortcuts", isOn: $preferences.globalHotkeysEnabled)
+                Picker("Windows key", selection: $preferences.windowsKeyMapping) {
+                    ForEach(WindowsKeyMapping.allCases) { mapping in
+                        Text(mapping.rawValue).tag(mapping)
+                    }
+                }
+                Toggle("Press Windows key alone to open Start", isOn: $preferences.windowsKeyOpensStart)
+                    .disabled(!preferences.globalHotkeysEnabled)
+                if let issue = globalHotkeys.windowsKeyIssue,
+                   preferences.globalHotkeysEnabled,
+                   preferences.windowsKeyOpensStart {
+                    Text(issue)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                Text("Option preserves the existing WinTaskbar behavior. Command matches the Windows-logo key on most PC keyboards connected to a Mac.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Enabled mappings override matching macOS and application shortcuts.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            SettingsSection("Launch pinned apps") {
-                ForEach(1...9, id: \.self) { number in
-                    HotkeyRecorder("Launch pinned app \(number)", shortcut: hotkeyBinding(at: number + 1))
+
+            SettingsSection("Shortcut mappings") {
+                ForEach(Array(preferences.globalShortcutConfigurations.enumerated()), id: \.element.id) { index, configuration in
+                    GlobalShortcutRow(
+                        configuration: configurationBinding(id: configuration.id),
+                        windowsKeyMapping: preferences.windowsKeyMapping,
+                        globalEnabled: preferences.globalHotkeysEnabled,
+                        registrationIssue: globalHotkeys.registrationIssues[configuration.id],
+                        onChooseApplication: { chooseApplication(for: configuration.id) },
+                        onResetTrigger: { resetTrigger(for: configuration.id) }
+                    )
+                    if index < preferences.globalShortcutConfigurations.count - 1 {
+                        Divider()
+                    }
                 }
             }
         }
@@ -240,11 +271,45 @@ struct SettingsView: View {
         }
     }
 
-    private func hotkeyBinding(at index: Int) -> Binding<HotkeyShortcut> {
+    private func configurationBinding(id: String) -> Binding<GlobalShortcutConfiguration> {
         Binding(
-            get: { preferences.hotkeyShortcuts[index] },
-            set: { preferences.hotkeyShortcuts[index] = $0 }
+            get: {
+                preferences.globalShortcutConfigurations.first { $0.id == id }
+                    ?? GlobalShortcutCatalog.defaults(
+                        legacyShortcuts: GlobalShortcutCatalog.defaultLegacyShortcuts
+                    )[0]
+            },
+            set: { updated in
+                guard let index = preferences.globalShortcutConfigurations.firstIndex(where: { $0.id == id }) else { return }
+                preferences.globalShortcutConfigurations[index] = updated
+            }
         )
+    }
+
+    private func chooseApplication(for id: String) {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Application"
+        panel.prompt = "Choose"
+        panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+        panel.allowedContentTypes = [.application]
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK,
+              let url = panel.url,
+              let target = ShortcutApplicationTarget(url: url),
+              let index = preferences.globalShortcutConfigurations.firstIndex(where: { $0.id == id }) else { return }
+        preferences.globalShortcutConfigurations[index].applicationTarget = target
+    }
+
+    private func resetTrigger(for id: String) {
+        guard let index = preferences.globalShortcutConfigurations.firstIndex(where: { $0.id == id }),
+              let defaultConfiguration = GlobalShortcutCatalog.defaultConfiguration(
+                id: id,
+                legacyShortcuts: GlobalShortcutCatalog.defaultLegacyShortcuts
+              ) else { return }
+        preferences.globalShortcutConfigurations[index].shortcut = defaultConfiguration.shortcut
+        preferences.globalShortcutConfigurations[index].usesWindowsKey = defaultConfiguration.usesWindowsKey
     }
 }
 
@@ -269,27 +334,128 @@ private struct SettingsSection<Content: View>: View {
     }
 }
 
-private struct HotkeyRecorder: View {
-    let title: String
-    @Binding var shortcut: HotkeyShortcut
-    @State private var isRecording = false
-
-    init(_ title: String, shortcut: Binding<HotkeyShortcut>) {
-        self.title = title
-        _shortcut = shortcut
-    }
+private struct GlobalShortcutRow: View {
+    @Binding var configuration: GlobalShortcutConfiguration
+    let windowsKeyMapping: WindowsKeyMapping
+    let globalEnabled: Bool
+    let registrationIssue: String?
+    let onChooseApplication: () -> Void
+    let onResetTrigger: () -> Void
 
     var body: some View {
-        LabeledContent(title) {
-            Button(isRecording ? "Type shortcut" : shortcut.displayValue) {
-                isRecording = true
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 10) {
+                Toggle("", isOn: $configuration.isEnabled)
+                    .labelsHidden()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(configuration.title)
+                    Text(configuration.windowsShortcutLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                GlobalHotkeyRecorder(
+                    configuration: $configuration,
+                    windowsKeyMapping: windowsKeyMapping,
+                    onResetTrigger: onResetTrigger
+                )
             }
-            .font(.system(.body, design: .monospaced))
-            .background(ShortcutCaptureView(isRecording: isRecording) { captured in
-                if let captured { shortcut = captured }
-                isRecording = false
-            })
+
+            HStack(spacing: 8) {
+                Picker("Action", selection: actionBinding) {
+                    ForEach(GlobalShortcutAction.allCases) { action in
+                        Text(action.title).tag(action)
+                    }
+                }
+                if configuration.action == .launchPinned {
+                    Picker("Pinned app", selection: pinnedIndexBinding) {
+                        ForEach(0..<9, id: \.self) { index in
+                            Text("#\(index + 1)").tag(index)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 64)
+                }
+                if configuration.action.supportsApplicationTarget {
+                    Button(applicationTargetTitle, action: onChooseApplication)
+                        .contextMenu {
+                            if configuration.applicationTarget != nil {
+                                Button(configuration.action.defaultApplicationName == nil ? "Clear Application" : "Use Default") {
+                                    configuration.applicationTarget = nil
+                                }
+                            }
+                        }
+                }
+                Spacer()
+                if let effectiveIssue, globalEnabled, configuration.isEnabled {
+                    Text(effectiveIssue)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+            .padding(.leading, 30)
         }
+        .opacity(globalEnabled ? 1 : 0.65)
+    }
+
+    private var actionBinding: Binding<GlobalShortcutAction> {
+        Binding(
+            get: { configuration.action },
+            set: { action in
+                configuration.action = action
+                configuration.applicationTarget = nil
+                if action == .launchPinned, configuration.pinnedIndex == nil {
+                    configuration.pinnedIndex = 0
+                }
+            }
+        )
+    }
+
+    private var pinnedIndexBinding: Binding<Int> {
+        Binding(
+            get: { configuration.pinnedIndex ?? 0 },
+            set: { configuration.pinnedIndex = $0 }
+        )
+    }
+
+    private var effectiveIssue: String? {
+        if configuration.action == .openApplication, configuration.applicationTarget == nil {
+            return "Choose an application"
+        }
+        if let target = configuration.applicationTarget, target.resolvedURL == nil {
+            return "Application not found"
+        }
+        return registrationIssue
+    }
+
+    private var applicationTargetTitle: String {
+        configuration.applicationTarget?.name
+            ?? configuration.action.defaultApplicationName
+            ?? "Choose Application…"
+    }
+}
+
+private struct GlobalHotkeyRecorder: View {
+    @Binding var configuration: GlobalShortcutConfiguration
+    let windowsKeyMapping: WindowsKeyMapping
+    let onResetTrigger: () -> Void
+    @State private var isRecording = false
+
+    var body: some View {
+        Button(isRecording ? "Type shortcut" : configuration.displayValue(mapping: windowsKeyMapping)) {
+            isRecording = true
+        }
+        .font(.system(.body, design: .monospaced))
+        .contextMenu {
+            Button("Restore default shortcut", action: onResetTrigger)
+        }
+        .background(ShortcutCaptureView(isRecording: isRecording) { captured in
+            if let captured {
+                configuration.shortcut = captured
+                configuration.usesWindowsKey = false
+            }
+            isRecording = false
+        })
     }
 }
 
