@@ -76,6 +76,7 @@ struct TaskbarView: View {
     @ObservedObject var preferences: PreferencesStore
     @ObservedObject var apps: AppDiscoveryService
     @ObservedObject var status: SystemStatusService
+    @ObservedObject var externalStatusItems: ExternalStatusItemService
     @ObservedObject var actions: AppActions
     @ObservedObject var dockBadges: DockBadgeService
     let windowActivator: WindowActivationService
@@ -397,6 +398,11 @@ struct TaskbarView: View {
 
     @ViewBuilder
     private var trayContents: some View {
+        ExternalStatusItemsView(
+            service: externalStatusItems,
+            screen: screen,
+            horizontal: preferences.position.isHorizontal
+        )
         if preferences.trayWifiEnabled {
             WiFiTrayView(
                 service: status,
@@ -454,7 +460,10 @@ struct TaskbarView: View {
 
     private func visibleCapacity(length: CGFloat) -> Int {
         let itemLength = itemGeometry.cellSize + TaskbarItemGeometry.itemSpacing
-        let reserved: CGFloat = preferences.position.isHorizontal ? 250 : 240
+        let externalStatusItemLength = externalStatusItems.items(on: screen).reduce(CGFloat.zero) {
+            $0 + ExternalStatusItemsView.controlWidth(for: $1.image)
+        }
+        let reserved: CGFloat = (preferences.position.isHorizontal ? 250 : 240) + externalStatusItemLength
         return max(1, Int((length - reserved) / max(itemLength, 1)))
     }
 

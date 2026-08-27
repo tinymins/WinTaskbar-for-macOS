@@ -484,6 +484,7 @@ final class TaskbarWindowController {
     private let preferences: PreferencesStore
     private let apps: AppDiscoveryService
     private let status: SystemStatusService
+    private let externalStatusItems: ExternalStatusItemService
     private let actions: AppActions
     private let windowActivator: WindowActivationService
     private let windowsService: WindowsService
@@ -512,6 +513,7 @@ final class TaskbarWindowController {
         preferences: PreferencesStore,
         apps: AppDiscoveryService,
         status: SystemStatusService,
+        externalStatusItems: ExternalStatusItemService,
         actions: AppActions,
         windowActivator: WindowActivationService,
         windowsService: WindowsService,
@@ -524,6 +526,7 @@ final class TaskbarWindowController {
         self.preferences = preferences
         self.apps = apps
         self.status = status
+        self.externalStatusItems = externalStatusItems
         self.actions = actions
         self.windowActivator = windowActivator
         self.windowsService = windowsService
@@ -759,6 +762,7 @@ final class TaskbarWindowController {
             preferences: preferences,
             apps: apps,
             status: status,
+            externalStatusItems: externalStatusItems,
             actions: actions,
             dockBadges: dockBadges,
             windowActivator: windowActivator,

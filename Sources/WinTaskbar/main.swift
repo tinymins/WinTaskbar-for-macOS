@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let preferences = PreferencesStore.shared
     private let apps = AppDiscoveryService()
     private let status = SystemStatusService()
+    private let externalStatusItems = ExternalStatusItemService()
     private let actions = AppActions()
     private let windowsService = WindowsService()
     private lazy var windowActivator = WindowActivationService(windowsService: windowsService)
@@ -44,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             preferences: preferences,
             apps: apps,
             status: status,
+            externalStatusItems: externalStatusItems,
             actions: actions,
             windowActivator: windowActivator,
             windowsService: windowsService,
@@ -365,6 +367,21 @@ func runSelfTest() async -> Int32 {
           preferences.dateTimeShortTimePattern == "HH:mm",
           preferences.dateTimeLongTimePattern == "HH:mm:ss",
           preferences.additionalClocks == AdditionalClockConfiguration.defaults,
+          ExternalStatusItemPolicy.shouldInclude(
+              processIdentifier: 101,
+              bundleIdentifier: "com.example.StatusApp",
+              role: kAXMenuBarItemRole as String,
+              frame: CGRect(x: 100, y: 2, width: 24, height: 24),
+              ownProcessIdentifier: 202
+          ),
+          !ExternalStatusItemPolicy.shouldInclude(
+              processIdentifier: 101,
+              bundleIdentifier: "com.apple.controlcenter",
+              role: kAXMenuBarItemRole as String,
+              frame: CGRect(x: 100, y: 2, width: 24, height: 24),
+              ownProcessIdentifier: 202
+          ),
+          ExternalStatusItemsView.controlWidth(for: NSImage(size: NSSize(width: 18, height: 18))) == 32,
           preferences.menuButtonPlacement == .standard,
           preferences.windowsKeyMapping == .option,
           preferences.windowsKeyOpensStart,
