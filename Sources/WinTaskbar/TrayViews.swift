@@ -2,49 +2,30 @@ import AppKit
 import SwiftUI
 
 enum ClockTrayPresentation {
-    private static let calendar = Calendar(identifier: .gregorian)
-    private static let dateLocale = Locale(identifier: "en_US_POSIX")
-    private static let timeLocale = Locale(identifier: "en_US_POSIX@hours=h23")
-
     static func time(
         _ date: Date,
         showsSeconds: Bool,
+        configuration: DateTimeFormatConfiguration,
         timeZone: TimeZone = .autoupdatingCurrent
     ) -> String {
-        date.formatted(
-            Date.FormatStyle(
-                date: .omitted,
-                time: showsSeconds ? .standard : .shortened,
-                locale: timeLocale,
-                calendar: calendar,
-                timeZone: timeZone
-            )
+        DateTimeFormatter.string(
+            from: date,
+            pattern: showsSeconds ? configuration.longTimePattern : configuration.shortTimePattern,
+            configuration: configuration,
+            timeZone: timeZone
         )
     }
 
     static func date(
         _ date: Date,
-        usesAbbreviatedFormat: Bool,
+        configuration: DateTimeFormatConfiguration,
         timeZone: TimeZone = .autoupdatingCurrent
     ) -> String {
-        if usesAbbreviatedFormat {
-            let format = Date.FormatStyle(
-                date: .omitted,
-                time: .omitted,
-                locale: dateLocale,
-                calendar: calendar,
-                timeZone: timeZone
-            )
-            return date.formatted(format.month(.defaultDigits).day(.defaultDigits))
-        }
-        return date.formatted(
-            Date.FormatStyle(
-                date: .numeric,
-                time: .omitted,
-                locale: dateLocale,
-                calendar: calendar,
-                timeZone: timeZone
-            )
+        DateTimeFormatter.string(
+            from: date,
+            pattern: configuration.shortDatePattern,
+            configuration: configuration,
+            timeZone: timeZone
         )
     }
 }
@@ -187,8 +168,9 @@ struct ClockTrayView: View {
     let position: TaskbarPosition
     let barHeight: CGFloat
     let theme: AppTheme
-    let usesAbbreviatedFormat: Bool
     let showsSeconds: Bool
+    let formatConfiguration: DateTimeFormatConfiguration
+    let additionalClocks: [AdditionalClockConfiguration]
     let screen: NSScreen
 
     var body: some View {
@@ -201,18 +183,40 @@ struct ClockTrayView: View {
             )
         } label: {
             VStack(alignment: .trailing, spacing: 0) {
-                Text(ClockTrayPresentation.time(service.now, showsSeconds: showsSeconds))
+                Text(ClockTrayPresentation.time(
+                    service.now,
+                    showsSeconds: showsSeconds,
+                    configuration: formatConfiguration
+                ))
                 if position.isHorizontal {
                     Text(ClockTrayPresentation.date(
                         service.now,
-                        usesAbbreviatedFormat: usesAbbreviatedFormat
+                        configuration: formatConfiguration
                     ))
                 }
             }.font(.caption2.monospacedDigit())
         }
         .buttonStyle(.plain)
-        .help("Clock and calendar")
+        .help(clockHelp)
         .accessibilityLabel("Clock and calendar")
         .onDisappear { panelController.dismiss(animated: false) }
+    }
+
+    private var clockHelp: String {
+        let clockLines = additionalClocks.filter(\.isEnabled).compactMap { clock -> String? in
+            guard let timeZone = TimeZone(identifier: clock.timeZoneIdentifier) else { return nil }
+            let time = DateTimeFormatter.string(
+                from: service.now,
+                pattern: formatConfiguration.shortTimePattern,
+                configuration: formatConfiguration,
+                timeZone: timeZone
+            )
+            let relativeDay = AdditionalClockPresentation.relativeDay(
+                for: service.now,
+                targetTimeZone: timeZone
+            )
+            return "\(clock.displayName)  \([time, relativeDay?.localizedLabel].compactMap { $0 }.joined(separator: " "))"
+        }
+        return (["Clock and calendar"] + clockLines).joined(separator: "\n")
     }
 }

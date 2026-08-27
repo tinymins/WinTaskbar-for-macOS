@@ -120,13 +120,16 @@ final class ClockCalendarState: ObservableObject {
     @Published var isEditingCalendarEvent = false
 
     private var focusEndDate: Date?
+    private var configuredCalendar: Calendar
     private var focusTimer: Timer?
     private var scrollSettlingTask: Task<Void, Never>?
     private var wheelScrollTask: Task<Void, Never>?
     private var wheelTargetDistance: CGFloat = 0
 
-    init(now: Date = Date()) {
-        let calendar = Self.calendar
+    init(now: Date = Date(), firstDayOfWeek: DateTimeFirstDayOfWeek? = nil) {
+        var calendar = Self.calendar
+        if let firstDayOfWeek { calendar.firstWeekday = firstDayOfWeek.calendarWeekday }
+        configuredCalendar = calendar
         let month = calendar.dateInterval(of: .month, for: now)?.start ?? now
         displayedMonth = month
         selectedDate = now
@@ -152,17 +155,17 @@ final class ClockCalendarState: ObservableObject {
     }
 
     var weekdaySymbols: [String] {
-        ClockCalendarGrid.weekdaySymbols(calendar: Self.calendar)
+        ClockCalendarGrid.weekdaySymbols(calendar: configuredCalendar)
     }
 
     var eventQueryInterval: DateInterval {
-        let endDate = Self.calendar.date(byAdding: .day, value: 56, to: renderedStartDate)
+        let endDate = configuredCalendar.date(byAdding: .day, value: 56, to: renderedStartDate)
             ?? renderedStartDate.addingTimeInterval(56 * 86_400)
         return DateInterval(start: renderedStartDate, end: endDate)
     }
 
     func moveMonth(by offset: Int) {
-        guard let month = Self.calendar.date(byAdding: .month, value: offset, to: displayedMonth) else { return }
+        guard let month = configuredCalendar.date(byAdding: .month, value: offset, to: displayedMonth) else { return }
         showMonth(month)
     }
 
@@ -170,7 +173,7 @@ final class ClockCalendarState: ObservableObject {
         cancelWheelScrolling()
         cancelCalendarScrollSettling()
         isEditingCalendarEvent = false
-        let calendar = Self.calendar
+        let calendar = configuredCalendar
         let month = calendar.dateInterval(of: .month, for: now)?.start ?? now
         displayedMonth = month
         selectedDate = now
@@ -185,6 +188,12 @@ final class ClockCalendarState: ObservableObject {
         cancelCalendarScrollSettling()
         updateVisibleStartDate(startDate)
         resetRenderedWindow()
+    }
+
+    func updateFirstDayOfWeek(_ firstDayOfWeek: DateTimeFirstDayOfWeek) {
+        guard configuredCalendar.firstWeekday != firstDayOfWeek.calendarWeekday else { return }
+        configuredCalendar.firstWeekday = firstDayOfWeek.calendarWeekday
+        resetToToday()
     }
 
     func scrollCalendar(by deltaY: CGFloat) {
@@ -255,7 +264,7 @@ final class ClockCalendarState: ObservableObject {
         cancelWheelScrolling()
         cancelCalendarScrollSettling()
         displayedMonth = month
-        let startDate = ClockCalendarGrid.startDate(displayedMonth: month, calendar: Self.calendar) ?? month
+        let startDate = ClockCalendarGrid.startDate(displayedMonth: month, calendar: configuredCalendar) ?? month
         visibleStartDate = startDate
         resetRenderedWindow()
     }
@@ -284,26 +293,26 @@ final class ClockCalendarState: ObservableObject {
     }
 
     private func shiftedStartDate(by weekOffset: Int) -> Date? {
-        Self.calendar.date(byAdding: .day, value: weekOffset * 7, to: visibleStartDate)
+        configuredCalendar.date(byAdding: .day, value: weekOffset * 7, to: visibleStartDate)
     }
 
     private func updateVisibleStartDate(_ startDate: Date) {
-        guard let referenceDate = Self.calendar.date(byAdding: .day, value: 7, to: startDate),
-              let month = Self.calendar.dateInterval(of: .month, for: referenceDate)?.start else { return }
+        guard let referenceDate = configuredCalendar.date(byAdding: .day, value: 7, to: startDate),
+              let month = configuredCalendar.dateInterval(of: .month, for: referenceDate)?.start else { return }
         visibleStartDate = startDate
         displayedMonth = month
     }
 
     private func recycleRenderedWeek(direction: Int) {
         guard let startDate = shiftedStartDate(by: direction),
-              let renderedStartDate = Self.calendar.date(byAdding: .day, value: -7, to: startDate) else { return }
+              let renderedStartDate = configuredCalendar.date(byAdding: .day, value: -7, to: startDate) else { return }
         updateVisibleStartDate(startDate)
         self.renderedStartDate = renderedStartDate
         updateRenderedDays()
     }
 
     private func resetRenderedWindow() {
-        renderedStartDate = Self.calendar.date(byAdding: .day, value: -7, to: visibleStartDate) ?? visibleStartDate
+        renderedStartDate = configuredCalendar.date(byAdding: .day, value: -7, to: visibleStartDate) ?? visibleStartDate
         updateRenderedDays()
         gridOffset = -42
     }
@@ -312,7 +321,7 @@ final class ClockCalendarState: ObservableObject {
         renderedDays = ClockCalendarGrid.days(
             startingAt: renderedStartDate,
             displayedMonth: displayedMonth,
-            calendar: Self.calendar,
+            calendar: configuredCalendar,
             count: 56
         )
     }
@@ -366,6 +375,7 @@ final class ClockCalendarState: ObservableObject {
 struct ClockCalendarPanelView: View {
     @ObservedObject var state: ClockCalendarState
     @ObservedObject var calendarService: SystemCalendarService
+    @ObservedObject var preferences: PreferencesStore
     @Environment(\.colorScheme) private var colorScheme
     @State private var eventDraft: SystemCalendarEventDraft?
     @State private var calendarErrorMessage: String?
@@ -408,6 +418,9 @@ struct ClockCalendarPanelView: View {
         .foregroundStyle(primaryText)
         .clipped()
         .onChange(of: state.visibleStartDate) { _ in loadVisibleEvents() }
+        .onChange(of: preferences.dateTimeFirstDayOfWeek) { firstDay in
+            state.updateFirstDayOfWeek(firstDay)
+        }
         .onChange(of: state.isEditingCalendarEvent) { isEditing in
             if !isEditing, eventDraft != nil { eventDraft = nil }
         }
@@ -425,10 +438,16 @@ struct ClockCalendarPanelView: View {
     }
 
     private var clockHeader: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            VStack(alignment: .leading, spacing: 6) {
+        TimelineView(.periodic(from: .now, by: preferences.trayClockShowsSeconds ? 1 : 30)) { context in
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .center) {
-                    Text(context.date, format: .dateTime.hour().minute().second())
+                    Text(DateTimeFormatter.string(
+                        from: context.date,
+                        pattern: preferences.trayClockShowsSeconds
+                            ? preferences.dateTimeLongTimePattern
+                            : preferences.dateTimeShortTimePattern,
+                        configuration: preferences.dateTimeFormatConfiguration
+                    ))
                         .font(.system(size: 28, weight: .semibold))
                         .monospacedDigit()
                         .accessibilityLabel(context.date.formatted(date: .omitted, time: .complete))
@@ -443,22 +462,40 @@ struct ClockCalendarPanelView: View {
                     .accessibilityLabel(state.isExpanded ? "Collapse calendar" : "Expand calendar")
                 }
 
-                Text(context.date, format: .dateTime.weekday(.wide).month(.wide).day())
+                Text(DateTimeFormatter.string(
+                    from: context.date,
+                    pattern: preferences.dateTimeLongDatePattern,
+                    configuration: preferences.dateTimeFormatConfiguration
+                ))
                     .font(.system(size: 14))
                     .foregroundStyle(secondaryText)
 
-                HStack(spacing: 12) {
-                    Text(timeZoneName)
-                        .lineLimit(1)
-                    Spacer(minLength: 8)
-                    Text("\(context.date.formatted(date: .omitted, time: .shortened)) Today")
-                        .monospacedDigit()
+                ForEach(preferences.additionalClocks.filter(\.isEnabled)) { clock in
+                    additionalClockRow(clock, date: context.date)
                 }
-                .font(.system(size: 14))
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 16)
+            .padding(.vertical, 12)
         }
+    }
+
+    private func additionalClockRow(_ clock: AdditionalClockConfiguration, date: Date) -> some View {
+        let timeZone = TimeZone(identifier: clock.timeZoneIdentifier) ?? .autoupdatingCurrent
+        let time = DateTimeFormatter.string(
+            from: date,
+            pattern: preferences.dateTimeShortTimePattern,
+            configuration: preferences.dateTimeFormatConfiguration,
+            timeZone: timeZone
+        )
+        let relativeDay = AdditionalClockPresentation.relativeDay(for: date, targetTimeZone: timeZone)
+        return HStack(spacing: 12) {
+            Text(clock.displayName)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Text([time, relativeDay?.localizedLabel].compactMap { $0 }.joined(separator: " "))
+                .monospacedDigit()
+        }
+        .font(.system(size: 14))
     }
 
     private var calendarBody: some View {
@@ -777,11 +814,6 @@ struct ClockCalendarPanelView: View {
 
     private var monthTitle: String {
         state.displayedMonth.formatted(.dateTime.month(.wide).year())
-    }
-
-    private var timeZoneName: String {
-        TimeZone.autoupdatingCurrent.localizedName(for: .generic, locale: .autoupdatingCurrent)
-            ?? TimeZone.autoupdatingCurrent.identifier
     }
 
     private var focusRemainingText: String {

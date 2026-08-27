@@ -38,6 +38,64 @@
 	<string>无颜色</string>
 	<key>Clock</key>
 	<string>时钟</string>
+	<key>Date &amp; time</key>
+	<string>日期和时间</string>
+	<key>System tray clock</key>
+	<string>系统托盘时钟</string>
+	<key>Region</key>
+	<string>区域</string>
+	<key>Open macOS Date &amp; Time Settings</key>
+	<string>打开 macOS 日期与时间设置</string>
+	<key>Change the date and time format</key>
+	<string>更改日期和时间格式</string>
+	<key>Format</key>
+	<string>格式</string>
+	<key>First day of week</key>
+	<string>每周第一天</string>
+	<key>Short date</key>
+	<string>短日期</string>
+	<key>Long date</key>
+	<string>长日期</string>
+	<key>Short time</key>
+	<string>短时间</string>
+	<key>Long time</key>
+	<string>长时间</string>
+	<key>AM / PM symbol</key>
+	<string>上午/下午符号</string>
+	<key>Display name</key>
+	<string>显示名称</string>
+	<key>Not set</key>
+	<string>未设置</string>
+	<key>Change</key>
+	<string>更改</string>
+	<key>Additional clock %ld</key>
+	<string>附加时钟 %ld</string>
+	<key>Additional clock can display the time in other time zones. You can view it by clicking or hovering over the taskbar clock.</key>
+	<string>附加时钟可以显示其他时区的时间。单击或悬停在任务栏时钟上即可查看。</string>
+	<key>The dates and times above are provided as format examples.</key>
+	<string>以上日期和时间仅作为格式示例。</string>
+	<key>Yesterday</key>
+	<string>昨天</string>
+	<key>Tomorrow</key>
+	<string>明天</string>
+	<key>Gregorian Calendar</key>
+	<string>公历</string>
+	<key>Sunday</key>
+	<string>星期日</string>
+	<key>Monday</key>
+	<string>星期一</string>
+	<key>Tuesday</key>
+	<string>星期二</string>
+	<key>Wednesday</key>
+	<string>星期三</string>
+	<key>Thursday</key>
+	<string>星期四</string>
+	<key>Friday</key>
+	<string>星期五</string>
+	<key>Saturday</key>
+	<string>星期六</string>
+	<key>Date &amp; time &gt; Format</key>
+	<string>日期和时间 &gt; 格式</string>
 	<key>Connected</key>
 	<string>已连接</string>
 	<key>Custom</key>
@@ -202,8 +260,6 @@
 	<string>显示于</string>
 	<key>Show running indicators</key>
 	<string>显示运行中应用指示器</string>
-	<key>Show abbreviated time and date</key>
-	<string>显示缩略的时间和日期</string>
 	<key>Show seconds in system tray clock (uses more power)</key>
 	<string>在系统托盘时钟中显示秒数（会消耗更多电量）</string>
 	<key>Show time and date in the system tray</key>

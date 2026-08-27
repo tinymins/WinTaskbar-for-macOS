@@ -42,6 +42,46 @@
 	<string>Clear color</string>
 	<key>Clock</key>
 	<string>Clock</string>
+	<key>Date &amp; time</key>
+	<string>Date &amp; time</string>
+	<key>System tray clock</key>
+	<string>System tray clock</string>
+	<key>Region</key>
+	<string>Region</string>
+	<key>Open macOS Date &amp; Time Settings</key>
+	<string>Open macOS Date &amp; Time Settings</string>
+	<key>Change the date and time format</key>
+	<string>Change the date and time format</string>
+	<key>Format</key>
+	<string>Format</string>
+	<key>First day of week</key>
+	<string>First day of week</string>
+	<key>Short date</key>
+	<string>Short date</string>
+	<key>Long date</key>
+	<string>Long date</string>
+	<key>Short time</key>
+	<string>Short time</string>
+	<key>Long time</key>
+	<string>Long time</string>
+	<key>AM / PM symbol</key>
+	<string>AM / PM symbol</string>
+	<key>Display name</key>
+	<string>Display name</string>
+	<key>Not set</key>
+	<string>Not set</string>
+	<key>Change</key>
+	<string>Change</string>
+	<key>Additional clock %ld</key>
+	<string>Additional clock %ld</string>
+	<key>Additional clock can display the time in other time zones. You can view it by clicking or hovering over the taskbar clock.</key>
+	<string>Additional clock can display the time in other time zones. You can view it by clicking or hovering over the taskbar clock.</string>
+	<key>The dates and times above are provided as format examples.</key>
+	<string>The dates and times above are provided as format examples.</string>
+	<key>Yesterday</key>
+	<string>Yesterday</string>
+	<key>Tomorrow</key>
+	<string>Tomorrow</string>
 	<key>Connected</key>
 	<string>Connected</string>
 	<key>Couldn’t reach the server. Check your connection.</key>
@@ -210,8 +250,6 @@
 	<string>Show on</string>
 	<key>Show running indicators</key>
 	<string>Show running indicators</string>
-	<key>Show abbreviated time and date</key>
-	<string>Show abbreviated time and date</string>
 	<key>Show seconds in system tray clock (uses more power)</key>
 	<string>Show seconds in system tray clock (uses more power)</string>
 	<key>Show time and date in the system tray</key>

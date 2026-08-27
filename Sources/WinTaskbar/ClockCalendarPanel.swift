@@ -32,7 +32,7 @@ struct ClockCalendarDismissalPolicy {
 
 @MainActor
 final class ClockCalendarPanelController: ObservableObject {
-    let state = ClockCalendarState()
+    let state: ClockCalendarState
     let calendarService: SystemCalendarService
 
     private let backdrop = NSVisualEffectView()
@@ -52,12 +52,15 @@ final class ClockCalendarPanelController: ObservableObject {
         let barHeight: CGFloat
     }
 
-    init() {
+    init(preferences: PreferencesStore = .shared) {
+        let state = ClockCalendarState(firstDayOfWeek: preferences.dateTimeFirstDayOfWeek)
         let calendarService = SystemCalendarService()
+        self.state = state
         self.calendarService = calendarService
         hostingView = NSHostingView(rootView: AnyView(ClockCalendarPanelView(
             state: state,
-            calendarService: calendarService
+            calendarService: calendarService,
+            preferences: preferences
         )))
         expansionObserver = state.$isExpanded.dropFirst().sink { [weak self] isExpanded in
             MainActor.assumeIsolated { self?.resizeForExpansion(isExpanded: isExpanded) }

@@ -335,6 +335,7 @@ func runSelfTest() async -> Int32 {
         "Appearance",
         "Start Menu",
         "Taskbar & Tray",
+        "Date & time",
         "Hotkeys",
         "Shortcut Mappings",
         "About"
@@ -354,8 +355,14 @@ func runSelfTest() async -> Int32 {
           preferences.panelOpacity == 1,
           preferences.panelBlurRadius == 20,
           preferences.trayClockEnabled,
-          !preferences.trayClockUsesAbbreviatedFormat,
           preferences.trayClockShowsSeconds,
+          preferences.dateTimeCalendarKind == .gregorian,
+          preferences.dateTimeFirstDayOfWeek == .sunday,
+          preferences.dateTimeShortDatePattern == "M/d/yyyy",
+          preferences.dateTimeLongDatePattern == "EEEE, MMMM d, yyyy",
+          preferences.dateTimeShortTimePattern == "HH:mm",
+          preferences.dateTimeLongTimePattern == "HH:mm:ss",
+          preferences.additionalClocks == AdditionalClockConfiguration.defaults,
           preferences.menuButtonPlacement == .standard,
           preferences.windowsKeyMapping == .option,
           preferences.windowsKeyOpensStart,
@@ -510,23 +517,25 @@ func runSelfTest() async -> Int32 {
     guard ClockTrayPresentation.time(
         clockReferenceDate,
         showsSeconds: true,
+        configuration: preferences.dateTimeFormatConfiguration,
         timeZone: clockReferenceTimeZone
     ) == "12:51:15",
     ClockTrayPresentation.time(
         clockReferenceDate,
         showsSeconds: false,
+        configuration: preferences.dateTimeFormatConfiguration,
         timeZone: clockReferenceTimeZone
     ) == "12:51",
     ClockTrayPresentation.date(
         clockReferenceDate,
-        usesAbbreviatedFormat: false,
+        configuration: preferences.dateTimeFormatConfiguration,
         timeZone: clockReferenceTimeZone
     ) == "8/27/2026",
-    ClockTrayPresentation.date(
-        clockReferenceDate,
-        usesAbbreviatedFormat: true,
-        timeZone: clockReferenceTimeZone
-    ) == "8/27" else {
+    AdditionalClockPresentation.relativeDay(
+        for: Date(timeIntervalSince1970: 3_600),
+        targetTimeZone: TimeZone(secondsFromGMT: -21_600)!,
+        localTimeZone: clockReferenceTimeZone
+    ) == .yesterday else {
         fputs("SELF-TEST FAILED: Windows tray clock presentation mismatch\n", stderr)
         return 1
     }
@@ -1661,8 +1670,15 @@ func runSelfTest() async -> Int32 {
     preferences.position = .left
     preferences.barHeight = 64
     preferences.trayWifiEnabled = false
-    preferences.trayClockUsesAbbreviatedFormat = true
     preferences.trayClockShowsSeconds = false
+    preferences.dateTimeFirstDayOfWeek = .monday
+    preferences.dateTimeShortDatePattern = "yyyy-MM-dd"
+    preferences.additionalClocks[0] = AdditionalClockConfiguration(
+        slot: 1,
+        isEnabled: true,
+        timeZoneIdentifier: "America/Chicago",
+        displayName: "Chicago"
+    )
     preferences.pinnedBundleIDs = ["one", "two", "three"]
     preferences.reorderPinned("three", relativeTo: "one", after: false)
     let reorderedPinnedBundleIDs = preferences.pinnedBundleIDs
@@ -1678,8 +1694,10 @@ func runSelfTest() async -> Int32 {
     guard defaults.string(forKey: "wintaskbar.position") == "Left",
           defaults.double(forKey: "wintaskbar.barHeight") == 64,
           defaults.bool(forKey: "wintaskbar.feature.trayWifi") == false,
-          PreferencesStore(defaults: defaults).trayClockUsesAbbreviatedFormat,
           !PreferencesStore(defaults: defaults).trayClockShowsSeconds,
+          PreferencesStore(defaults: defaults).dateTimeFirstDayOfWeek == .monday,
+          PreferencesStore(defaults: defaults).dateTimeShortDatePattern == "yyyy-MM-dd",
+          PreferencesStore(defaults: defaults).additionalClocks[0].displayName == "Chicago",
           reorderedPinnedBundleIDs == ["three", "one", "two"],
           preferences.pinnedBundleIDs == ["two", "three", "one"],
           PreferencesStore(defaults: defaults).appFolders.first?.bundleIDs == ["one"],

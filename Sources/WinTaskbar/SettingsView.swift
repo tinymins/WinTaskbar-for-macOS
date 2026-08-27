@@ -8,6 +8,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case appearance = "Appearance"
     case startMenu = "Start Menu"
     case taskbar = "Taskbar & Tray"
+    case dateTime = "Date & time"
     case hotkeys = "Hotkeys"
     case shortcutMappings = "Shortcut Mappings"
     case about = "About"
@@ -20,6 +21,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .appearance: "paintbrush"
         case .startMenu: "square.grid.2x2"
         case .taskbar: "dock.rectangle"
+        case .dateTime: "clock"
         case .hotkeys: "keyboard"
         case .shortcutMappings: "command"
         case .about: "info.circle"
@@ -33,11 +35,14 @@ struct SettingsView: View {
     @ObservedObject private var loginItem = LoginItemService.shared
     @ObservedObject private var globalHotkeys = GlobalHotkeysService.shared
     @State private var selectedPage = SettingsPage.general
+    @State private var showsDateTimeFormat = false
+    @State private var editingAdditionalClockIndex: Int?
+    @State private var additionalClockDraft = AdditionalClockConfiguration.defaults[0]
 
     var body: some View {
         HStack(spacing: 0) {
             List(SettingsPage.allCases, selection: $selectedPage) { page in
-                Label(page.rawValue, systemImage: page.symbol)
+                Label(LocalizedStringKey(page.rawValue), systemImage: page.symbol)
                     .tag(page)
             }
             .listStyle(.sidebar)
@@ -47,10 +52,22 @@ struct SettingsView: View {
 
             VStack(spacing: 0) {
                 HStack(spacing: 10) {
+                    if selectedPage == .dateTime, showsDateTimeFormat {
+                        Button { showsDateTimeFormat = false } label: {
+                            Image(systemName: "chevron.left")
+                        }
+                        .buttonStyle(.plain)
+                        .help("Back")
+                    }
                     Image(systemName: selectedPage.symbol)
                         .foregroundStyle(.secondary)
-                    Text(selectedPage.rawValue)
-                        .font(.title2.weight(.semibold))
+                    if selectedPage == .dateTime, showsDateTimeFormat {
+                        Text("Date & time > Format")
+                            .font(.title2.weight(.semibold))
+                    } else {
+                        Text(LocalizedStringKey(selectedPage.rawValue))
+                            .font(.title2.weight(.semibold))
+                    }
                     Spacer()
                 }
                 .padding(.horizontal, 22)
@@ -62,6 +79,17 @@ struct SettingsView: View {
         .onAppear {
             loginItem.refresh()
         }
+        .onChange(of: selectedPage) { _ in showsDateTimeFormat = false }
+        .sheet(isPresented: Binding(
+            get: { editingAdditionalClockIndex != nil },
+            set: { if !$0 { editingAdditionalClockIndex = nil } }
+        )) {
+            AdditionalClockEditor(
+                configuration: $additionalClockDraft,
+                onSave: saveAdditionalClock,
+                onCancel: { editingAdditionalClockIndex = nil }
+            )
+        }
     }
 
     @ViewBuilder
@@ -71,6 +99,12 @@ struct SettingsView: View {
         case .appearance: settingsPage(appearance)
         case .startMenu: settingsPage(startMenu)
         case .taskbar: settingsPage(features)
+        case .dateTime:
+            if showsDateTimeFormat {
+                settingsPage(dateTimeFormat)
+            } else {
+                settingsPage(dateTime)
+            }
         case .hotkeys: settingsPage(hotkeySettings)
         case .shortcutMappings: settingsPage(shortcutMappings)
         case .about: settingsPage(about)
@@ -232,25 +266,188 @@ struct SettingsView: View {
                 Toggle("Shortcuts", isOn: $preferences.showShortcutsInMenu)
             }
             SettingsSection("System Tray") {
-                Toggle("Show time and date in the system tray", isOn: $preferences.trayClockEnabled)
-                VStack(alignment: .leading, spacing: 10) {
-                    Toggle(
-                        "Show abbreviated time and date",
-                        isOn: $preferences.trayClockUsesAbbreviatedFormat
-                    )
-                    Toggle(
-                        "Show seconds in system tray clock (uses more power)",
-                        isOn: $preferences.trayClockShowsSeconds
-                    )
-                }
-                .padding(.leading, 20)
-                .disabled(!preferences.trayClockEnabled)
                 Toggle("Battery", isOn: $preferences.trayBatteryEnabled)
                 Toggle("Input source", isOn: $preferences.trayInputSourceEnabled)
                 Toggle("Volume", isOn: $preferences.trayVolumeEnabled)
                 Toggle("Wi-Fi", isOn: $preferences.trayWifiEnabled)
             }
         }
+    }
+
+    private var dateTime: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            SettingsSection("Date & time") {
+                TimelineView(.periodic(from: .now, by: preferences.trayClockShowsSeconds ? 1 : 30)) { context in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(DateTimeFormatter.string(
+                            from: context.date,
+                            pattern: preferences.trayClockShowsSeconds
+                                ? preferences.dateTimeLongTimePattern
+                                : preferences.dateTimeShortTimePattern,
+                            configuration: preferences.dateTimeFormatConfiguration
+                        ))
+                        .font(.system(size: 28, weight: .semibold))
+                        .monospacedDigit()
+                        Text(DateTimeFormatter.string(
+                            from: context.date,
+                            pattern: preferences.dateTimeLongDatePattern,
+                            configuration: preferences.dateTimeFormatConfiguration
+                        ))
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                LabeledContent("Time zone", value: AdditionalClockPresentation.timeZoneLabel(
+                    identifier: TimeZone.autoupdatingCurrent.identifier
+                ))
+                LabeledContent("Region", value: currentRegionName)
+                Button("Open macOS Date & Time Settings") { openSystemDateTimeSettings() }
+            }
+
+            SettingsSection("System tray clock") {
+                Toggle("Show time and date in the system tray", isOn: $preferences.trayClockEnabled)
+                Toggle(
+                    "Show seconds in system tray clock (uses more power)",
+                    isOn: $preferences.trayClockShowsSeconds
+                )
+                .disabled(!preferences.trayClockEnabled)
+                ForEach(Array(preferences.additionalClocks.enumerated()), id: \.element.id) { index, clock in
+                    Divider()
+                    additionalClockRow(clock, index: index)
+                }
+            }
+
+            Button { showsDateTimeFormat = true } label: {
+                HStack {
+                    Label("Change the date and time format", systemImage: "globe")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(14)
+            .background(Color.primary.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    private var dateTimeFormat: some View {
+        SettingsSection("Format") {
+            Picker("Calendar", selection: $preferences.dateTimeCalendarKind) {
+                ForEach(DateTimeCalendarKind.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
+            }
+            Picker("First day of week", selection: $preferences.dateTimeFirstDayOfWeek) {
+                ForEach(DateTimeFirstDayOfWeek.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
+            }
+            Picker("Short date", selection: $preferences.dateTimeShortDatePattern) {
+                ForEach(DateTimeFormatCatalog.shortDatePatterns, id: \.self) { pattern in
+                    Text(formatExample(pattern)).tag(pattern)
+                }
+            }
+            Picker("Long date", selection: $preferences.dateTimeLongDatePattern) {
+                ForEach(DateTimeFormatCatalog.longDatePatterns, id: \.self) { pattern in
+                    Text(formatExample(pattern)).tag(pattern)
+                }
+            }
+            Picker("Short time", selection: $preferences.dateTimeShortTimePattern) {
+                ForEach(DateTimeFormatCatalog.shortTimePatterns, id: \.self) { pattern in
+                    Text(formatExample(pattern)).tag(pattern)
+                }
+            }
+            Picker("Long time", selection: $preferences.dateTimeLongTimePattern) {
+                ForEach(DateTimeFormatCatalog.longTimePatterns, id: \.self) { pattern in
+                    Text(formatExample(pattern)).tag(pattern)
+                }
+            }
+            LabeledContent("AM / PM symbol") {
+                HStack(spacing: 8) {
+                    TextField("AM", text: $preferences.dateTimeAMSymbol)
+                    TextField("PM", text: $preferences.dateTimePMSymbol)
+                }
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 190)
+            }
+            Text("The dates and times above are provided as format examples.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func additionalClockRow(_ clock: AdditionalClockConfiguration, index: Int) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(
+                    format: NSLocalizedString("Additional clock %ld", comment: "Additional clock settings slot"),
+                    clock.slot
+                ))
+                Text(additionalClockDetail(clock))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Button("Change") { editAdditionalClock(index: index) }
+            if clock.isEnabled {
+                Menu {
+                    Button("Remove", role: .destructive) { removeAdditionalClock(index: index) }
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .menuStyle(.borderlessButton)
+                .frame(width: 28)
+            }
+        }
+    }
+
+    private func additionalClockDetail(_ clock: AdditionalClockConfiguration) -> String {
+        guard clock.isEnabled else { return NSLocalizedString("Not set", comment: "Additional clock is disabled") }
+        return "\(AdditionalClockPresentation.timeZoneLabel(identifier: clock.timeZoneIdentifier)) (\(clock.displayName))"
+    }
+
+    private func editAdditionalClock(index: Int) {
+        guard preferences.additionalClocks.indices.contains(index) else { return }
+        additionalClockDraft = preferences.additionalClocks[index]
+        editingAdditionalClockIndex = index
+    }
+
+    private func saveAdditionalClock() {
+        guard let index = editingAdditionalClockIndex,
+              preferences.additionalClocks.indices.contains(index) else { return }
+        additionalClockDraft.displayName = additionalClockDraft.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        additionalClockDraft.isEnabled = true
+        preferences.additionalClocks[index] = additionalClockDraft
+        editingAdditionalClockIndex = nil
+    }
+
+    private func removeAdditionalClock(index: Int) {
+        guard preferences.additionalClocks.indices.contains(index) else { return }
+        let slot = preferences.additionalClocks[index].slot
+        preferences.additionalClocks[index] = AdditionalClockConfiguration(
+            slot: slot,
+            isEnabled: false,
+            timeZoneIdentifier: TimeZone.autoupdatingCurrent.identifier,
+            displayName: ""
+        )
+    }
+
+    private func formatExample(_ pattern: String) -> String {
+        DateTimeFormatter.string(
+            from: DateTimeFormatCatalog.exampleDate,
+            pattern: pattern,
+            configuration: preferences.dateTimeFormatConfiguration,
+            timeZone: TimeZone(secondsFromGMT: 0)!
+        )
+    }
+
+    private var currentRegionName: String {
+        let locale = Locale.autoupdatingCurrent
+        guard let regionCode = locale.region?.identifier else { return "Automatic" }
+        return locale.localizedString(forRegionCode: regionCode) ?? regionCode
+    }
+
+    private func openSystemDateTimeSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.Date-Time-Settings.extension") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private var hotkeySettings: some View {
@@ -448,6 +645,51 @@ private struct SettingsSection<Content: View>: View {
                 .background(Color.primary.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
+    }
+}
+
+private struct AdditionalClockEditor: View {
+    @Binding var configuration: AdditionalClockConfiguration
+    let onSave: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(String(
+                format: NSLocalizedString("Additional clock %ld", comment: "Additional clock editor slot"),
+                configuration.slot
+            ))
+                .font(.title2.weight(.semibold))
+            Text("Additional clock can display the time in other time zones. You can view it by clicking or hovering over the taskbar clock.")
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Time zone")
+                Picker("Time zone", selection: $configuration.timeZoneIdentifier) {
+                    ForEach(TimeZone.knownTimeZoneIdentifiers, id: \.self) { identifier in
+                        Text(AdditionalClockPresentation.timeZoneLabel(identifier: identifier)).tag(identifier)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+
+                Text("Display name")
+                TextField("Display name", text: $configuration.displayName)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            Divider()
+
+            HStack {
+                Button("Change") { onSave() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(configuration.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Cancel") { onCancel() }
+                Spacer()
+            }
+        }
+        .padding(24)
+        .frame(width: 520)
     }
 }
 
