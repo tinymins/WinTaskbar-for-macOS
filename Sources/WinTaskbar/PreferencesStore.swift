@@ -36,6 +36,8 @@ final class PreferencesStore: ObservableObject {
     @Published var trayWifiEnabled: Bool { didSet { defaults.set(trayWifiEnabled, forKey: "wintaskbar.feature.trayWifi") } }
     @Published var trayInputSourceEnabled: Bool { didSet { defaults.set(trayInputSourceEnabled, forKey: "wintaskbar.feature.trayInputSource") } }
     @Published var trayClockEnabled: Bool { didSet { defaults.set(trayClockEnabled, forKey: "wintaskbar.feature.trayClock") } }
+    @Published var trayClockUsesAbbreviatedFormat: Bool { didSet { defaults.set(trayClockUsesAbbreviatedFormat, forKey: "wintaskbar.feature.trayClockUsesAbbreviatedFormat") } }
+    @Published var trayClockShowsSeconds: Bool { didSet { defaults.set(trayClockShowsSeconds, forKey: "wintaskbar.feature.trayClockShowsSeconds") } }
     @Published var launchAtLogin: Bool { didSet { defaults.set(launchAtLogin, forKey: "wintaskbar.launchAtLogin") } }
     @Published var windowPreviewsEnabled: Bool { didSet { defaults.set(windowPreviewsEnabled, forKey: "wintaskbar.feature.windowPreviews") } }
     @Published var showDesktopEnabled: Bool { didSet { defaults.set(showDesktopEnabled, forKey: "wintaskbar.feature.showDesktop") } }
@@ -95,6 +97,8 @@ final class PreferencesStore: ObservableObject {
         trayWifiEnabled = defaults.object(forKey: "wintaskbar.feature.trayWifi") as? Bool ?? true
         trayInputSourceEnabled = defaults.object(forKey: "wintaskbar.feature.trayInputSource") as? Bool ?? true
         trayClockEnabled = defaults.object(forKey: "wintaskbar.feature.trayClock") as? Bool ?? true
+        trayClockUsesAbbreviatedFormat = defaults.object(forKey: "wintaskbar.feature.trayClockUsesAbbreviatedFormat") as? Bool ?? false
+        trayClockShowsSeconds = defaults.object(forKey: "wintaskbar.feature.trayClockShowsSeconds") as? Bool ?? true
         launchAtLogin = defaults.object(forKey: "wintaskbar.launchAtLogin") as? Bool ?? false
         windowPreviewsEnabled = defaults.object(forKey: "wintaskbar.feature.windowPreviews") as? Bool ?? true
         showDesktopEnabled = defaults.object(forKey: "wintaskbar.feature.showDesktop") as? Bool ?? true
@@ -174,6 +178,8 @@ final class PreferencesStore: ObservableObject {
         trayWifiEnabled = true
         trayInputSourceEnabled = true
         trayClockEnabled = true
+        trayClockUsesAbbreviatedFormat = false
+        trayClockShowsSeconds = true
         launchAtLogin = false
         windowPreviewsEnabled = true
         showDesktopEnabled = true

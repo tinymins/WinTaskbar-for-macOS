@@ -202,6 +202,12 @@
 	<string>显示于</string>
 	<key>Show running indicators</key>
 	<string>显示运行中应用指示器</string>
+	<key>Show abbreviated time and date</key>
+	<string>显示缩略的时间和日期</string>
+	<key>Show seconds in system tray clock (uses more power)</key>
+	<string>在系统托盘时钟中显示秒数（会消耗更多电量）</string>
+	<key>Show time and date in the system tray</key>
+	<string>在系统托盘中显示时间和日期</string>
 	<key>Shut Down</key>
 	<string>关机</string>
 	<key>Signal</key>

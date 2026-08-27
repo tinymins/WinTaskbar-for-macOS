@@ -52,6 +52,7 @@ enum InputSourcePresentation {
             .split(whereSeparator: { $0 == "-" || $0 == "_" })
             .first
             .map(String.init)
+        if baseLanguageCode?.lowercased() == "zh" { return "中" }
         guard let baseLanguageCode,
               let englishName = Locale(identifier: "en").localizedString(forLanguageCode: baseLanguageCode) else {
             return fallbackAbbreviation(for: fallbackName)
@@ -89,7 +90,8 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
     @Published private(set) var wifiScanIssue: WiFiScanIssue?
     @Published private(set) var inputSources: [InputSourceOption] = []
 
-    private var timer: Timer?
+    private var clockTimer: Timer?
+    private var statusTimer: Timer?
     private let locationManager = CLLocationManager()
     private var scannedNetworks: [String: CWNetwork] = [:]
     private var inputSourceRefs: [String: TISInputSource] = [:]
@@ -99,9 +101,20 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
         locationManager.delegate = self
         refresh()
         reloadInputSources()
-        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+        statusTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.refresh()
+            }
+        }
+    }
+
+    func setClockShowsSeconds(_ showsSeconds: Bool) {
+        clockTimer?.invalidate()
+        clockTimer = nil
+        guard showsSeconds else { return }
+        clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.now = Date()
             }
         }
     }

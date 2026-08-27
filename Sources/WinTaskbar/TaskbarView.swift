@@ -444,6 +444,8 @@ struct TaskbarView: View {
                 position: preferences.position,
                 barHeight: CGFloat(preferences.barHeight),
                 theme: preferences.theme,
+                usesAbbreviatedFormat: preferences.trayClockUsesAbbreviatedFormat,
+                showsSeconds: preferences.trayClockShowsSeconds,
                 screen: screen
             )
         }

@@ -232,7 +232,19 @@ struct SettingsView: View {
                 Toggle("Shortcuts", isOn: $preferences.showShortcutsInMenu)
             }
             SettingsSection("System Tray") {
-                Toggle("Clock", isOn: $preferences.trayClockEnabled)
+                Toggle("Show time and date in the system tray", isOn: $preferences.trayClockEnabled)
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle(
+                        "Show abbreviated time and date",
+                        isOn: $preferences.trayClockUsesAbbreviatedFormat
+                    )
+                    Toggle(
+                        "Show seconds in system tray clock (uses more power)",
+                        isOn: $preferences.trayClockShowsSeconds
+                    )
+                }
+                .padding(.leading, 20)
+                .disabled(!preferences.trayClockEnabled)
                 Toggle("Battery", isOn: $preferences.trayBatteryEnabled)
                 Toggle("Input source", isOn: $preferences.trayInputSourceEnabled)
                 Toggle("Volume", isOn: $preferences.trayVolumeEnabled)

@@ -210,6 +210,12 @@
 	<string>Show on</string>
 	<key>Show running indicators</key>
 	<string>Show running indicators</string>
+	<key>Show abbreviated time and date</key>
+	<string>Show abbreviated time and date</string>
+	<key>Show seconds in system tray clock (uses more power)</key>
+	<string>Show seconds in system tray clock (uses more power)</string>
+	<key>Show time and date in the system tray</key>
+	<string>Show time and date in the system tray</string>
 	<key>Shut Down</key>
 	<string>Shut Down</string>
 	<key>Signal</key>

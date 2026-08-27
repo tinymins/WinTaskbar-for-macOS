@@ -100,6 +100,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
             .store(in: &cancellables)
+        preferences.$trayClockEnabled
+            .combineLatest(preferences.$trayClockShowsSeconds)
+            .removeDuplicates { previous, current in
+                previous.0 == current.0 && previous.1 == current.1
+            }
+            .sink { [weak self] clockEnabled, showsSeconds in
+                self?.status.setClockShowsSeconds(clockEnabled && showsSeconds)
+            }
+            .store(in: &cancellables)
         preferences.$position
             .removeDuplicates()
             .dropFirst()
@@ -345,6 +354,8 @@ func runSelfTest() async -> Int32 {
           preferences.panelOpacity == 1,
           preferences.panelBlurRadius == 20,
           preferences.trayClockEnabled,
+          !preferences.trayClockUsesAbbreviatedFormat,
+          preferences.trayClockShowsSeconds,
           preferences.menuButtonPlacement == .standard,
           preferences.windowsKeyMapping == .option,
           preferences.windowsKeyOpensStart,
@@ -453,7 +464,7 @@ func runSelfTest() async -> Int32 {
     }
 
     guard InputSourcePresentation.abbreviation(languageCode: "en-US", fallbackName: "ABC") == "ENG",
-          InputSourcePresentation.abbreviation(languageCode: "zh-Hans", fallbackName: "Pinyin") == "CHI",
+          InputSourcePresentation.abbreviation(languageCode: "zh-Hans", fallbackName: "Pinyin") == "中",
           InputSourcePresentation.abbreviation(languageCode: nil, fallbackName: "ABC") == "ABC",
           InputSourceCycling.nextID(sourceIDs: [], currentID: "missing") == nil,
           InputSourceCycling.nextID(sourceIDs: ["abc", "pinyin"], currentID: "missing") == "abc",
@@ -491,6 +502,32 @@ func runSelfTest() async -> Int32 {
               contentSize: CGSize(width: 360, height: 215)
           ) == CGRect(x: 784, y: 12, width: 360, height: 215) else {
         fputs("SELF-TEST FAILED: input source presentation mismatch\n", stderr)
+        return 1
+    }
+
+    let clockReferenceDate = Date(timeIntervalSince1970: 1_787_835_075)
+    let clockReferenceTimeZone = TimeZone(secondsFromGMT: 0)!
+    guard ClockTrayPresentation.time(
+        clockReferenceDate,
+        showsSeconds: true,
+        timeZone: clockReferenceTimeZone
+    ) == "12:51:15",
+    ClockTrayPresentation.time(
+        clockReferenceDate,
+        showsSeconds: false,
+        timeZone: clockReferenceTimeZone
+    ) == "12:51",
+    ClockTrayPresentation.date(
+        clockReferenceDate,
+        usesAbbreviatedFormat: false,
+        timeZone: clockReferenceTimeZone
+    ) == "8/27/2026",
+    ClockTrayPresentation.date(
+        clockReferenceDate,
+        usesAbbreviatedFormat: true,
+        timeZone: clockReferenceTimeZone
+    ) == "8/27" else {
+        fputs("SELF-TEST FAILED: Windows tray clock presentation mismatch\n", stderr)
         return 1
     }
 
@@ -1624,6 +1661,8 @@ func runSelfTest() async -> Int32 {
     preferences.position = .left
     preferences.barHeight = 64
     preferences.trayWifiEnabled = false
+    preferences.trayClockUsesAbbreviatedFormat = true
+    preferences.trayClockShowsSeconds = false
     preferences.pinnedBundleIDs = ["one", "two", "three"]
     preferences.reorderPinned("three", relativeTo: "one", after: false)
     let reorderedPinnedBundleIDs = preferences.pinnedBundleIDs
@@ -1639,6 +1678,8 @@ func runSelfTest() async -> Int32 {
     guard defaults.string(forKey: "wintaskbar.position") == "Left",
           defaults.double(forKey: "wintaskbar.barHeight") == 64,
           defaults.bool(forKey: "wintaskbar.feature.trayWifi") == false,
+          PreferencesStore(defaults: defaults).trayClockUsesAbbreviatedFormat,
+          !PreferencesStore(defaults: defaults).trayClockShowsSeconds,
           reorderedPinnedBundleIDs == ["three", "one", "two"],
           preferences.pinnedBundleIDs == ["two", "three", "one"],
           PreferencesStore(defaults: defaults).appFolders.first?.bundleIDs == ["one"],
