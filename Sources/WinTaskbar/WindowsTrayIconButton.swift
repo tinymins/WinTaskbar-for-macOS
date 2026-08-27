@@ -4,7 +4,6 @@ import SwiftUI
 enum WindowsTrayIconMetrics {
     static let squareControlWidth: CGFloat = 32
     static let batteryControlWidth: CGFloat = 60
-    static let clockMinimumControlWidth: CGFloat = 94
     static let controlHeight: CGFloat = 40
     static let iconSize: CGFloat = 18
     static let horizontalContentPadding: CGFloat = 7

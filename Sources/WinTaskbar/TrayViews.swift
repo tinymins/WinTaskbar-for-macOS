@@ -211,12 +211,12 @@ struct ClockTrayView: View {
             tooltipGap: WindowsTrayIconMetrics.clockTooltipGap,
             primaryAction: togglePanel
         ) {
-            VStack(alignment: .center, spacing: 0) {
+            VStack(alignment: .trailing, spacing: 0) {
                 Text(time)
                 if let date { Text(date) }
             }
             .font(.caption2.monospacedDigit())
-            .frame(maxWidth: .infinity, alignment: .center)
+            .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.horizontal, WindowsTrayIconMetrics.horizontalContentPadding)
         }
         .frame(
@@ -233,7 +233,7 @@ struct ClockTrayView: View {
             ($0 as NSString).size(withAttributes: [.font: font]).width
         }.max() ?? 0
         return max(
-            WindowsTrayIconMetrics.clockMinimumControlWidth,
+            WindowsTrayIconMetrics.squareControlWidth,
             ceil(textWidth) + 2 * WindowsTrayIconMetrics.horizontalContentPadding
         )
     }
