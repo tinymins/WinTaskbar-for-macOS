@@ -211,11 +211,16 @@ final class WindowPreviewPanelController: ObservableObject {
     private var displayedOwnerID: WindowPreviewOwnerID?
     private var activationTask: Task<Void, Never>?
     private var dismissalTask: Task<Void, Never>?
+    private var pinnedOwnerID: WindowPreviewOwnerID?
+    private var localEventMonitor: Any?
+    private var globalEventMonitor: Any?
+    private var workspaceObserver: NSObjectProtocol?
     private var panel: WindowPreviewPanel?
     private let backdrop = NSVisualEffectView()
     private let hostingView = NSHostingView(rootView: AnyView(EmptyView()))
 
     var activeOwnerID: WindowPreviewOwnerID? { selection.activeOwnerID }
+    var isPinned: Bool { pinnedOwnerID != nil }
 
     init() {
         backdrop.material = .popover
@@ -239,6 +244,7 @@ final class WindowPreviewPanelController: ObservableObject {
     }
 
     func activate(ownerID: WindowPreviewOwnerID) {
+        guard pinnedOwnerID == nil else { return }
         cancelDismissal()
         activationTask?.cancel()
         activationTask = nil
@@ -264,15 +270,26 @@ final class WindowPreviewPanelController: ObservableObject {
             try? await Task.sleep(nanoseconds: delayNanoseconds)
             guard !Task.isCancelled, self?.hoverIntent.resolve(ownerID) == true else { return }
             self?.activationTask = nil
-            self?.activateImmediately(ownerID: ownerID)
+            self?.activateTransientImmediately(ownerID: ownerID)
         }
     }
 
-    func activateImmediately(ownerID: WindowPreviewOwnerID) {
+    func pin(ownerID: WindowPreviewOwnerID) {
         cancelDismissal()
         activationTask?.cancel()
         activationTask = nil
         hoverIntent.reset()
+        pinnedOwnerID = ownerID
+        installPinnedDismissalObservers()
+        activateSelection(ownerID: ownerID)
+    }
+
+    private func activateTransientImmediately(ownerID: WindowPreviewOwnerID) {
+        guard pinnedOwnerID == nil else { return }
+        activateSelection(ownerID: ownerID)
+    }
+
+    private func activateSelection(ownerID: WindowPreviewOwnerID) {
         var updatedSelection = selection
         updatedSelection.activate(ownerID)
         selection = updatedSelection
@@ -287,6 +304,7 @@ final class WindowPreviewPanelController: ObservableObject {
         ownerID: WindowPreviewOwnerID,
         onDismiss: @escaping @MainActor () -> Void
     ) {
+        guard pinnedOwnerID == nil else { return }
         if selection.activeOwnerID == nil {
             activationTask?.cancel()
             activationTask = nil
@@ -314,6 +332,7 @@ final class WindowPreviewPanelController: ObservableObject {
         activationTask = nil
         hoverIntent.reset()
         guard selection.activeOwnerID == ownerID else { return }
+        clearPinnedState()
         cancelDismissal()
         var updatedSelection = selection
         guard updatedSelection.dismiss(ownerID) else { return }
@@ -325,6 +344,7 @@ final class WindowPreviewPanelController: ObservableObject {
         activationTask?.cancel()
         activationTask = nil
         hoverIntent.reset()
+        clearPinnedState()
         cancelDismissal()
         if selection.activeOwnerID != nil {
             var updatedSelection = selection
@@ -382,6 +402,46 @@ final class WindowPreviewPanelController: ObservableObject {
     private func cancelDismissal() {
         dismissalTask?.cancel()
         dismissalTask = nil
+    }
+
+    private func installPinnedDismissalObservers() {
+        removePinnedDismissalObservers()
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] event in
+            guard let self, self.pinnedOwnerID != nil else { return event }
+            if let panel = self.panel, panel.frame.contains(NSEvent.mouseLocation) { return event }
+            self.dismissAll()
+            return event
+        }
+        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            Task { @MainActor in self?.dismissAll() }
+        }
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.dismissAll() }
+        }
+    }
+
+    private func clearPinnedState() {
+        pinnedOwnerID = nil
+        removePinnedDismissalObservers()
+    }
+
+    private func removePinnedDismissalObservers() {
+        if let localEventMonitor { NSEvent.removeMonitor(localEventMonitor) }
+        if let globalEventMonitor { NSEvent.removeMonitor(globalEventMonitor) }
+        if let workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver)
+        }
+        localEventMonitor = nil
+        globalEventMonitor = nil
+        workspaceObserver = nil
     }
 
     private func hidePanel() {

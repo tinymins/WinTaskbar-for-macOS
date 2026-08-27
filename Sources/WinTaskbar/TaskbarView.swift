@@ -729,7 +729,7 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
                     previewWindows = windows
                     taskbarJumpListController.dismiss()
                     windowPeekController.hideImmediately()
-                    windowPreviewPanelController.activateImmediately(ownerID: previewOwnerID)
+                    windowPreviewPanelController.pin(ownerID: previewOwnerID)
                     return
                 }
             }

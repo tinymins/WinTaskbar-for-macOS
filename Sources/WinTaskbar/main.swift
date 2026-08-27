@@ -874,12 +874,30 @@ func runSelfTest() async -> Int32 {
     let firstPreviewOwner = WindowPreviewOwnerID(displayID: 1, bundleIdentifier: "com.example.first")
     let secondPreviewOwner = WindowPreviewOwnerID(displayID: 1, bundleIdentifier: "com.example.second")
     let immediatePreviewController = WindowPreviewPanelController()
-    immediatePreviewController.activateImmediately(ownerID: firstPreviewOwner)
-    guard immediatePreviewController.activeOwnerID == firstPreviewOwner else {
-        fputs("SELF-TEST FAILED: immediate window preview activation mismatch\n", stderr)
+    immediatePreviewController.pin(ownerID: firstPreviewOwner)
+    immediatePreviewController.activate(ownerID: secondPreviewOwner)
+    var pinnedPreviewDismissed = false
+    immediatePreviewController.scheduleDismissal(ownerID: firstPreviewOwner) {
+        pinnedPreviewDismissed = true
+    }
+    guard immediatePreviewController.activeOwnerID == firstPreviewOwner,
+          immediatePreviewController.isPinned,
+          !pinnedPreviewDismissed else {
+        fputs("SELF-TEST FAILED: pinned window preview activation mismatch\n", stderr)
+        return 1
+    }
+    immediatePreviewController.pin(ownerID: secondPreviewOwner)
+    guard immediatePreviewController.activeOwnerID == secondPreviewOwner,
+          immediatePreviewController.isPinned else {
+        fputs("SELF-TEST FAILED: pinned window preview replacement mismatch\n", stderr)
         return 1
     }
     immediatePreviewController.dismissAll()
+    guard immediatePreviewController.activeOwnerID == nil,
+          !immediatePreviewController.isPinned else {
+        fputs("SELF-TEST FAILED: pinned window preview dismissal mismatch\n", stderr)
+        return 1
+    }
     let landscapePreviewWindow = WindowInfo(
         windowID: 1,
         title: "Landscape",
