@@ -84,6 +84,12 @@ enum QuickSettingsPanelPage: Equatable {
     case accessibility
 }
 
+enum QuickSettingsPanelOpeningPolicy {
+    static func shouldPresent(isVisible: Bool) -> Bool {
+        !isVisible
+    }
+}
+
 enum QuickSettingsPanelGeometry {
     static func frame(
         screenFrame: CGRect,
@@ -105,6 +111,25 @@ enum QuickSettingsPanelGeometry {
 @MainActor
 final class QuickSettingsPanelController: ObservableObject {
     private let panelController = TaskbarJumpListController()
+
+    var isVisible: Bool { panelController.isVisible }
+
+    func presentIfNeeded(
+        service: SystemStatusService,
+        actions: AppActions,
+        position: TaskbarPosition,
+        barHeight: CGFloat,
+        screen: NSScreen
+    ) {
+        guard QuickSettingsPanelOpeningPolicy.shouldPresent(isVisible: isVisible) else { return }
+        present(
+            service: service,
+            actions: actions,
+            position: position,
+            barHeight: barHeight,
+            screen: screen
+        )
+    }
 
     func toggle(
         service: SystemStatusService,
@@ -161,7 +186,8 @@ final class QuickSettingsPanelController: ObservableObject {
                 position: position,
                 barHeight: barHeight
             ),
-            appearance: NSAppearance(named: .darkAqua)
+            appearance: NSAppearance(named: .darkAqua),
+            preservesOnTrayItemMouseDown: true
         )
     }
 

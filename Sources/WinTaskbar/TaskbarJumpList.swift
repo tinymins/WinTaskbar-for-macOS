@@ -292,7 +292,9 @@ final class TaskbarJumpListController: ObservableObject {
               let contentView = window.contentView else { return false }
         let point = contentView.convert(event.locationInWindow, from: nil)
         guard let control = contentView.hitTest(point) as? WindowsTrayIconControl else { return false }
-        return control.dragIdentifier != nil || control.onDrop != nil
+        return control.preservesTransientPanelOnMouseDown
+            || control.dragIdentifier != nil
+            || control.onDrop != nil
     }
 }
 

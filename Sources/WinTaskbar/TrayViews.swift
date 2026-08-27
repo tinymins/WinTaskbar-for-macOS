@@ -41,7 +41,8 @@ struct WiFiTrayView: View {
     var body: some View {
         WindowsTrayIconButton(
             title: service.wifiSSID ?? (service.wifiPoweredOn ? "Not connected" : "Wi-Fi off"),
-            primaryAction: togglePanel
+            preservesTransientPanelOnMouseDown: true,
+            primaryAction: presentPanelIfNeeded
         ) {
             Image(systemName: service.wifiPoweredOn ? (service.wifiSSID == nil ? "wifi.exclamationmark" : "wifi") : "wifi.slash")
                 .font(.system(size: 15, weight: .regular))
@@ -50,8 +51,8 @@ struct WiFiTrayView: View {
         .frame(width: WindowsTrayIconMetrics.squareControlWidth, height: WindowsTrayIconMetrics.controlHeight)
     }
 
-    private func togglePanel() {
-        panelController.toggle(
+    private func presentPanelIfNeeded() {
+        panelController.presentIfNeeded(
             service: service,
             actions: actions,
             position: position,
@@ -70,7 +71,11 @@ struct VolumeTrayView: View {
     let screen: NSScreen
 
     var body: some View {
-        WindowsTrayIconButton(title: "Volume", primaryAction: togglePanel) {
+        WindowsTrayIconButton(
+            title: "Volume",
+            preservesTransientPanelOnMouseDown: true,
+            primaryAction: presentPanelIfNeeded
+        ) {
             Image(systemName: symbol)
                 .font(.system(size: 15, weight: .regular))
                 .frame(width: WindowsTrayIconMetrics.iconSize, height: WindowsTrayIconMetrics.iconSize)
@@ -85,8 +90,8 @@ struct VolumeTrayView: View {
         return "speaker.wave.3.fill"
     }
 
-    private func togglePanel() {
-        panelController.toggle(
+    private func presentPanelIfNeeded() {
+        panelController.presentIfNeeded(
             service: service,
             actions: actions,
             position: position,
@@ -111,7 +116,8 @@ struct BatteryTrayView: View {
             WindowsTrayIconButton(
                 title: title,
                 accessibilityLabel: service.isCharging ? "Battery charging, \(level)%" : "Battery, \(level)%",
-                primaryAction: togglePanel
+                preservesTransientPanelOnMouseDown: true,
+                primaryAction: presentPanelIfNeeded
             ) {
                 HStack(spacing: 3) {
                     WindowsBatteryIcon(
@@ -137,8 +143,8 @@ struct BatteryTrayView: View {
         )
     }
 
-    private func togglePanel() {
-        panelController.toggle(
+    private func presentPanelIfNeeded() {
+        panelController.presentIfNeeded(
             service: service,
             actions: actions,
             position: position,

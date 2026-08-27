@@ -64,6 +64,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     let accessibilityLabel: String
     let tooltipGap: CGFloat
     let visualStyle: WindowsTrayIconAppearance
+    let preservesTransientPanelOnMouseDown: Bool
     let primaryAction: (WindowsTrayIconControl) -> Void
     let contextAction: (() -> Void)?
     let dragIdentifier: String?
@@ -76,6 +77,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         accessibilityLabel: String? = nil,
         tooltipGap: CGFloat = WindowsTrayIconMetrics.tooltipGap,
         visualStyle: WindowsTrayIconAppearance = .standard,
+        preservesTransientPanelOnMouseDown: Bool = false,
         primaryAction: @escaping () -> Void,
         contextAction: (() -> Void)? = nil,
         dragIdentifier: String? = nil,
@@ -87,6 +89,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         self.accessibilityLabel = accessibilityLabel ?? title
         self.tooltipGap = tooltipGap
         self.visualStyle = visualStyle
+        self.preservesTransientPanelOnMouseDown = preservesTransientPanelOnMouseDown
         self.primaryAction = { _ in primaryAction() }
         self.contextAction = contextAction
         self.dragIdentifier = dragIdentifier
@@ -100,6 +103,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         accessibilityLabel: String? = nil,
         tooltipGap: CGFloat = WindowsTrayIconMetrics.tooltipGap,
         visualStyle: WindowsTrayIconAppearance = .standard,
+        preservesTransientPanelOnMouseDown: Bool = false,
         anchoredPrimaryAction: @escaping (WindowsTrayIconControl) -> Void,
         contextAction: (() -> Void)? = nil,
         dragIdentifier: String? = nil,
@@ -111,6 +115,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         self.accessibilityLabel = accessibilityLabel ?? title
         self.tooltipGap = tooltipGap
         self.visualStyle = visualStyle
+        self.preservesTransientPanelOnMouseDown = preservesTransientPanelOnMouseDown
         self.primaryAction = anchoredPrimaryAction
         self.contextAction = contextAction
         self.dragIdentifier = dragIdentifier
@@ -138,6 +143,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         control.hoverTitle = title
         control.tooltipGap = tooltipGap
         control.visualStyle = visualStyle
+        control.preservesTransientPanelOnMouseDown = preservesTransientPanelOnMouseDown
         control.onLeftActivate = { [weak control] in
             guard let control else { return }
             primaryAction(control)
@@ -166,6 +172,7 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     var hoverTitle = ""
     var tooltipGap = WindowsTrayIconMetrics.tooltipGap
     var visualStyle = WindowsTrayIconAppearance.standard
+    var preservesTransientPanelOnMouseDown = false
     var onLeftActivate: (() -> Void)?
     var onRightActivate: (() -> Void)?
     var dragIdentifier: String?

@@ -679,6 +679,8 @@ func runSelfTest() async -> Int32 {
           QuickSettingsPanelMetrics.accessibilityIconColumnWidth == 22,
           QuickSettingsPanelMetrics.accessibilityStatusColumnWidth == 24,
           QuickSettingsPanelMetrics.accessibilityToggleSize == CGSize(width: 40, height: 20),
+          QuickSettingsPanelOpeningPolicy.shouldPresent(isVisible: false),
+          !QuickSettingsPanelOpeningPolicy.shouldPresent(isVisible: true),
           WindowsVolumeSliderMetrics.trackHeight == 4,
           WindowsVolumeSliderMetrics.thumbDiameter == 20,
           WindowsVolumeSliderMetrics.normalIndicatorDiameter == 10,
