@@ -66,6 +66,26 @@ final class InputSourcePanelController: ObservableObject {
         )
     }
 
+    func show(
+        service: SystemStatusService,
+        position: TaskbarPosition,
+        barHeight: CGFloat,
+        screen: NSScreen,
+        appearance: NSAppearance?
+    ) {
+        present(
+            service: service,
+            position: position,
+            barHeight: barHeight,
+            screen: screen,
+            appearance: appearance
+        )
+    }
+
+    func advance(service: SystemStatusService) {
+        service.selectNextInputSource()
+    }
+
     private func present(
         service: SystemStatusService,
         position: TaskbarPosition,
@@ -75,8 +95,7 @@ final class InputSourcePanelController: ObservableObject {
     ) {
         let contentSize = InputSourcePanelMetrics.contentSize(inputSourceCount: service.inputSources.count)
         let rootView = InputSourcePanelView(
-            sources: service.inputSources,
-            selectedSourceID: service.inputSourceID,
+            service: service,
             onSelect: { [weak self, weak service] sourceID in
                 service?.selectInputSource(id: sourceID)
                 self?.dismiss()
@@ -116,8 +135,7 @@ private enum InputSourceSettings {
 }
 
 private struct InputSourcePanelView: View {
-    let sources: [InputSourceOption]
-    let selectedSourceID: String
+    @ObservedObject var service: SystemStatusService
     let onSelect: (String) -> Void
     let onOpenSettings: () -> Void
 
@@ -149,16 +167,16 @@ private struct InputSourcePanelView: View {
     private var sourceList: some View {
         ScrollView {
             LazyVStack(spacing: InputSourcePanelMetrics.rowSpacing) {
-                if sources.isEmpty {
+                if service.inputSources.isEmpty {
                     Text("No input sources")
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, minHeight: InputSourcePanelMetrics.rowHeight)
                 } else {
-                    ForEach(sources) { source in
+                    ForEach(service.inputSources) { source in
                         InputSourceRow(
                             source: source,
-                            isSelected: source.id == selectedSourceID,
+                            isSelected: source.id == service.inputSourceID,
                             action: { onSelect(source.id) }
                         )
                     }
@@ -168,7 +186,7 @@ private struct InputSourcePanelView: View {
             .padding(.vertical, InputSourcePanelMetrics.listVerticalPadding)
         }
         .scrollIndicators(.hidden)
-        .frame(height: InputSourcePanelMetrics.contentSize(inputSourceCount: sources.count).height
+        .frame(height: InputSourcePanelMetrics.contentSize(inputSourceCount: service.inputSources.count).height
             - InputSourcePanelMetrics.headerHeight
             - InputSourcePanelMetrics.footerHeight
             - InputSourcePanelMetrics.dividerHeight)

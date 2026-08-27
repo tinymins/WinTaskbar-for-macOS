@@ -71,6 +71,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         actions.fitWindowsHandler = { [weak self] in
             self?.windowFittingService.fitAllWindowsToFreeSpace()
         }
+        globalHotkeysService.onWindowsSpaceGesture = { [weak taskbar] action in
+            taskbar?.handleWindowsSpaceGesture(action)
+        }
         actions.showDesktopHandler = { [weak self] in self?.showDesktopService.toggle() }
         actions.powerHandler = { [weak self] action in self?.confirmAndPerform(action) }
 
@@ -452,6 +455,10 @@ func runSelfTest() async -> Int32 {
     guard InputSourcePresentation.abbreviation(languageCode: "en-US", fallbackName: "ABC") == "ENG",
           InputSourcePresentation.abbreviation(languageCode: "zh-Hans", fallbackName: "Pinyin") == "CHI",
           InputSourcePresentation.abbreviation(languageCode: nil, fallbackName: "ABC") == "ABC",
+          InputSourceCycling.nextID(sourceIDs: [], currentID: "missing") == nil,
+          InputSourceCycling.nextID(sourceIDs: ["abc", "pinyin"], currentID: "missing") == "abc",
+          InputSourceCycling.nextID(sourceIDs: ["abc", "pinyin"], currentID: "abc") == "pinyin",
+          InputSourceCycling.nextID(sourceIDs: ["abc", "pinyin"], currentID: "pinyin") == "abc",
           InputSourcePanelMetrics.contentSize(inputSourceCount: 2) == CGSize(width: 360, height: 215),
           InputSourcePanelMetrics.contentSize(inputSourceCount: 8)
             == InputSourcePanelMetrics.contentSize(inputSourceCount: 5),
@@ -1467,6 +1474,18 @@ func runSelfTest() async -> Int32 {
           !commandGesture.flagsChanged(to: [.option, .command]),
           !commandGesture.flagsChanged(to: [.option]) else {
         fputs("SELF-TEST FAILED: configurable Windows modifier gesture mismatch\n", stderr)
+        return 1
+    }
+
+    var windowsSpaceGesture = WindowsSpaceGestureState()
+    guard windowsSpaceGesture.press() == .present,
+          windowsSpaceGesture.flagsChanged(to: [.option]) == nil,
+          windowsSpaceGesture.press() == .advance,
+          windowsSpaceGesture.flagsChanged(to: []) == .dismiss,
+          windowsSpaceGesture.flagsChanged(to: []) == nil,
+          windowsSpaceGesture.press() == .present,
+          windowsSpaceGesture.reset() == .dismiss else {
+        fputs("SELF-TEST FAILED: Win+Space gesture lifecycle mismatch\n", stderr)
         return 1
     }
 

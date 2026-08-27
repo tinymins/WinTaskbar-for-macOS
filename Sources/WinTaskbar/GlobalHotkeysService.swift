@@ -62,6 +62,41 @@ struct WindowsKeyGestureState {
     }
 }
 
+enum WindowsSpaceGestureAction: Equatable {
+    case present
+    case advance
+    case dismiss
+}
+
+struct WindowsSpaceGestureState {
+    private let windowsModifier: NSEvent.ModifierFlags
+    private var isActive = false
+
+    init(windowsModifier: NSEvent.ModifierFlags = .option) {
+        self.windowsModifier = windowsModifier
+    }
+
+    mutating func press() -> WindowsSpaceGestureAction {
+        if isActive { return .advance }
+        isActive = true
+        return .present
+    }
+
+    mutating func flagsChanged(to rawFlags: NSEvent.ModifierFlags) -> WindowsSpaceGestureAction? {
+        guard isActive else { return nil }
+        let flags = rawFlags.intersection(.deviceIndependentFlagsMask)
+        guard !flags.contains(windowsModifier) else { return nil }
+        isActive = false
+        return .dismiss
+    }
+
+    mutating func reset() -> WindowsSpaceGestureAction? {
+        guard isActive else { return nil }
+        isActive = false
+        return .dismiss
+    }
+}
+
 private let windowsKeyEventTapHandler: CGEventTapCallBack = { _, eventType, event, userData in
     guard let userData else { return Unmanaged.passUnretained(event) }
     let service = Unmanaged<GlobalHotkeysService>.fromOpaque(userData).takeUnretainedValue()
@@ -96,6 +131,7 @@ final class GlobalHotkeysService: ObservableObject {
     static let shared = GlobalHotkeysService()
 
     var onInvoke: ((GlobalShortcutConfiguration) -> Void)?
+    var onWindowsSpaceGesture: ((WindowsSpaceGestureAction) -> Void)?
 
     @Published private(set) var registrationIssues: [String: String] = [:]
     @Published private(set) var windowsKeyIssue: String?
@@ -110,6 +146,8 @@ final class GlobalHotkeysService: ObservableObject {
     private var windowsKeyMapping: WindowsKeyMapping = .option
     private var windowsKeyOpensStart = true
     private var windowsKeyGesture = WindowsKeyGestureState()
+    private var windowsSpaceGesture = WindowsSpaceGestureState()
+    private var windowsSpaceTrackingEnabled = false
 
     private init() {
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -134,6 +172,7 @@ final class GlobalHotkeysService: ObservableObject {
         self.windowsKeyOpensStart = windowsKeyOpensStart
         unregisterAll()
         windowsKeyGesture = WindowsKeyGestureState(windowsModifier: windowsKeyMapping.eventModifier)
+        windowsSpaceGesture = WindowsSpaceGestureState(windowsModifier: windowsKeyMapping.eventModifier)
         var issues = Self.duplicateIssues(configurations: configurations, mapping: windowsKeyMapping)
         for configuration in configurations where configuration.isEnabled && issues[configuration.id] == nil {
             issues[configuration.id] = configuration.validationIssue
@@ -147,9 +186,13 @@ final class GlobalHotkeysService: ObservableObject {
                     issues[configuration.id] = issue
                 }
             }
-            if windowsKeyOpensStart, !installWindowsKeyEventTap() {
+            let tracksWindowsSpace = configurations.contains {
+                $0.isEnabled && $0.usesWindowsKey && $0.action == .toggleInputSources
+            }
+            if (windowsKeyOpensStart || tracksWindowsSpace), !installWindowsKeyEventTap() {
                 windowsKeyIssue = "Event monitoring unavailable"
             }
+            windowsSpaceTrackingEnabled = tracksWindowsSpace && windowsKeyEventTap != nil
         } else {
             removeWindowsKeyEventTap()
         }
@@ -182,6 +225,12 @@ final class GlobalHotkeysService: ObservableObject {
 
     fileprivate func handle(id: Int) {
         guard let configuration = configurationByHotKeyID[id] else { return }
+        if windowsSpaceTrackingEnabled,
+           configuration.usesWindowsKey,
+           configuration.action == .toggleInputSources {
+            onWindowsSpaceGesture?(windowsSpaceGesture.press())
+            return
+        }
         onInvoke?(configuration)
     }
 
@@ -207,9 +256,13 @@ final class GlobalHotkeysService: ObservableObject {
     }
 
     private func unregisterAll() {
+        if let action = windowsSpaceGesture.reset() {
+            onWindowsSpaceGesture?(action)
+        }
         hotKeys.forEach { _ = UnregisterEventHotKey($0) }
         hotKeys.removeAll()
         configurationByHotKeyID.removeAll()
+        windowsSpaceTrackingEnabled = false
         removeWindowsKeyEventTap()
     }
 
@@ -249,12 +302,19 @@ final class GlobalHotkeysService: ObservableObject {
     fileprivate func handleWindowsKeyEvent(_ eventType: CGEventType, rawFlags: UInt64) {
         if eventType == .tapDisabledByTimeout || eventType == .tapDisabledByUserInput {
             windowsKeyGesture.reset()
+            if let action = windowsSpaceGesture.reset() {
+                onWindowsSpaceGesture?(action)
+            }
             if let eventTap = windowsKeyEventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
             }
             return
         }
         let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(rawFlags))
+        if eventType == .flagsChanged,
+           let action = windowsSpaceGesture.flagsChanged(to: modifierFlags) {
+            onWindowsSpaceGesture?(action)
+        }
         if windowsKeyGesture.handle(eventType: eventType, modifierFlags: modifierFlags) {
             onInvoke?(GlobalShortcutConfiguration(
                 id: GlobalShortcutCatalog.startMenuID,

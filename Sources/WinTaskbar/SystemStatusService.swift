@@ -64,6 +64,14 @@ enum InputSourcePresentation {
     }
 }
 
+enum InputSourceCycling {
+    static func nextID(sourceIDs: [String], currentID: String) -> String? {
+        guard !sourceIDs.isEmpty else { return nil }
+        guard let currentIndex = sourceIDs.firstIndex(of: currentID) else { return sourceIDs.first }
+        return sourceIDs[(currentIndex + 1) % sourceIDs.count]
+    }
+}
+
 @MainActor
 final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var now = Date()
@@ -248,6 +256,14 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
         guard let source = inputSourceRefs[id] else { return }
         TISSelectInputSource(source)
         readInputSource()
+    }
+
+    func selectNextInputSource() {
+        guard let nextID = InputSourceCycling.nextID(
+            sourceIDs: inputSources.map(\.id),
+            currentID: inputSourceID
+        ) else { return }
+        selectInputSource(id: nextID)
     }
 
     private func readBattery() {

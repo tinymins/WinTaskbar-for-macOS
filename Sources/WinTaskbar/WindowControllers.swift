@@ -630,6 +630,23 @@ final class TaskbarWindowController {
         )
     }
 
+    func handleWindowsSpaceGesture(_ action: WindowsSpaceGestureAction) {
+        switch action {
+        case .present:
+            inputSourcePanelController.show(
+                service: status,
+                position: preferences.position,
+                barHeight: CGFloat(preferences.barHeight),
+                screen: activeScreen,
+                appearance: appearance
+            )
+        case .advance:
+            inputSourcePanelController.advance(service: status)
+        case .dismiss:
+            inputSourcePanelController.dismiss()
+        }
+    }
+
     func toggleCalendar() {
         clockCalendarPanelController.toggle(
             screen: activeScreen,
