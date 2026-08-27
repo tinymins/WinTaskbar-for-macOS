@@ -1,6 +1,19 @@
 import AppKit
 import SwiftUI
 
+enum SystemTrayItemID: String, CaseIterable {
+    case wifi = "wintaskbar.system.wifi"
+    case volume = "wintaskbar.system.volume"
+    case battery = "wintaskbar.system.battery"
+    case inputSource = "wintaskbar.system.inputSource"
+}
+
+struct TrayItemDragConfiguration {
+    let identifier: String
+    let dropAxis: WindowsTrayIconDropAxis
+    let onDrop: (String, Bool) -> Void
+}
+
 enum ClockTrayPresentation {
     static func time(
         _ date: Date,
@@ -37,12 +50,16 @@ struct WiFiTrayView: View {
     let position: TaskbarPosition
     let barHeight: CGFloat
     let screen: NSScreen
+    let dragConfiguration: TrayItemDragConfiguration
 
     var body: some View {
         WindowsTrayIconButton(
             title: service.wifiSSID ?? (service.wifiPoweredOn ? "Not connected" : "Wi-Fi off"),
             preservesTransientPanelOnMouseDown: true,
-            primaryAction: presentPanelIfNeeded
+            primaryAction: presentPanelIfNeeded,
+            dragIdentifier: dragConfiguration.identifier,
+            dropAxis: dragConfiguration.dropAxis,
+            dropAction: dragConfiguration.onDrop
         ) {
             Image(systemName: service.wifiPoweredOn ? (service.wifiSSID == nil ? "wifi.exclamationmark" : "wifi") : "wifi.slash")
                 .font(.system(size: 15, weight: .regular))
@@ -69,12 +86,16 @@ struct VolumeTrayView: View {
     let position: TaskbarPosition
     let barHeight: CGFloat
     let screen: NSScreen
+    let dragConfiguration: TrayItemDragConfiguration
 
     var body: some View {
         WindowsTrayIconButton(
             title: "Volume",
             preservesTransientPanelOnMouseDown: true,
-            primaryAction: presentPanelIfNeeded
+            primaryAction: presentPanelIfNeeded,
+            dragIdentifier: dragConfiguration.identifier,
+            dropAxis: dragConfiguration.dropAxis,
+            dropAction: dragConfiguration.onDrop
         ) {
             Image(systemName: symbol)
                 .font(.system(size: 15, weight: .regular))
@@ -109,6 +130,7 @@ struct BatteryTrayView: View {
     let barHeight: CGFloat
     let horizontal: Bool
     let screen: NSScreen
+    let dragConfiguration: TrayItemDragConfiguration
 
     var body: some View {
         if let level = service.batteryLevel {
@@ -117,7 +139,10 @@ struct BatteryTrayView: View {
                 title: title,
                 accessibilityLabel: service.isCharging ? "Battery charging, \(level)%" : "Battery, \(level)%",
                 preservesTransientPanelOnMouseDown: true,
-                primaryAction: presentPanelIfNeeded
+                primaryAction: presentPanelIfNeeded,
+                dragIdentifier: dragConfiguration.identifier,
+                dropAxis: dragConfiguration.dropAxis,
+                dropAction: dragConfiguration.onDrop
             ) {
                 HStack(spacing: 3) {
                     WindowsBatteryIcon(
@@ -160,12 +185,16 @@ struct InputSourceTrayView: View {
     let position: TaskbarPosition
     let barHeight: CGFloat
     let screen: NSScreen
+    let dragConfiguration: TrayItemDragConfiguration
 
     var body: some View {
         WindowsTrayIconButton(
             title: service.inputSource,
             accessibilityLabel: "Keyboard layout: \(service.inputSource)",
-            primaryAction: togglePanel
+            primaryAction: togglePanel,
+            dragIdentifier: dragConfiguration.identifier,
+            dropAxis: dragConfiguration.dropAxis,
+            dropAction: dragConfiguration.onDrop
         ) {
             Text(currentAbbreviation)
                 .font(.system(size: 15, weight: .medium))

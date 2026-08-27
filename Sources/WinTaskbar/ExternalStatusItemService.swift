@@ -26,11 +26,11 @@ struct ExternalStatusItemLayout: Equatable {
         self.hiddenIDs = hiddenIDs
     }
 
-    mutating func reconcile(discoveredIDs: [String]) {
+    mutating func reconcile(discoveredIDs: [String], beforeIDs: Set<String> = []) {
         var known = Set(orderedIDs)
-        for itemID in discoveredIDs where known.insert(itemID).inserted {
-            orderedIDs.append(itemID)
-        }
+        let newIDs = discoveredIDs.filter { known.insert($0).inserted }
+        let insertionIndex = orderedIDs.firstIndex(where: beforeIDs.contains) ?? orderedIDs.endIndex
+        orderedIDs.insert(contentsOf: newIDs, at: insertionIndex)
     }
 
     mutating func setHidden(_ hidden: Bool, itemID: String) {
@@ -58,9 +58,15 @@ struct ExternalStatusItemLayout: Equatable {
     }
 
     func ordered(_ items: [ExternalStatusItem]) -> [ExternalStatusItem] {
+        ordered(items, id: \ExternalStatusItem.id)
+    }
+
+    func ordered<Item>(_ items: [Item], id: (Item) -> String) -> [Item] {
         let rank = Dictionary(uniqueKeysWithValues: orderedIDs.enumerated().map { ($1, $0) })
         return items.sorted {
-            (rank[$0.id] ?? Int.max, $0.id) < (rank[$1.id] ?? Int.max, $1.id)
+            let lhsID = id($0)
+            let rhsID = id($1)
+            return (rank[lhsID] ?? Int.max, lhsID) < (rank[rhsID] ?? Int.max, rhsID)
         }
     }
 }
@@ -147,7 +153,13 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
     init(defaults: UserDefaults = .standard) {
         let layoutStore = ExternalStatusItemLayoutStore(defaults: defaults)
         self.layoutStore = layoutStore
-        layout = layoutStore.load()
+        var layout = layoutStore.load()
+        layout.reconcile(discoveredIDs: SystemTrayItemID.allCases.map(\.rawValue))
+        for item in SystemTrayItemID.allCases {
+            layout.setHidden(false, itemID: item.rawValue)
+        }
+        self.layout = layout
+        layoutStore.save(layout)
         super.init()
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
@@ -180,6 +192,14 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
 
     func allItems(on screen: NSScreen) -> [ExternalStatusItem] {
         items(on: screen, visibility: .visible) + items(on: screen, visibility: .hidden)
+    }
+
+    func orderedTrayItems<Item>(_ items: [Item], id: (Item) -> String) -> [Item] {
+        layout.ordered(items, id: id)
+    }
+
+    func isExternalItem(_ itemID: String) -> Bool {
+        items.contains { $0.id == itemID }
     }
 
     func isHidden(_ itemID: String) -> Bool {
@@ -481,7 +501,10 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         }
         items = sourceOrderedItems
         var nextLayout = layout
-        nextLayout.reconcile(discoveredIDs: sourceOrderedItems.map(\.id))
+        nextLayout.reconcile(
+            discoveredIDs: sourceOrderedItems.map(\.id),
+            beforeIDs: Set(SystemTrayItemID.allCases.map(\.rawValue))
+        )
         if nextLayout != layout {
             layout = nextLayout
             layoutStore.save(nextLayout)
@@ -754,6 +777,7 @@ struct ExternalStatusOverflowButton: View {
                 )
             },
             dropAxis: position.isHorizontal ? .horizontal : .vertical,
+            dropValidator: service.isExternalItem,
             dropAction: { itemID, _ in
                 service.toggleHidden(itemID: itemID)
                 if service.items(on: screen, visibility: .hidden).isEmpty {
@@ -787,9 +811,10 @@ private struct ExternalStatusOverflowPanelView: View {
     var body: some View {
         let items = service.items(on: screen, visibility: .hidden)
         ZStack {
-            ExternalStatusItemDropDestination { itemID in
-                service.setHidden(true, itemID: itemID)
-            }
+            ExternalStatusItemDropDestination(
+                dropValidator: service.isExternalItem,
+                onDrop: { itemID in service.setHidden(true, itemID: itemID) }
+            )
             LazyVGrid(
                 columns: Array(
                     repeating: GridItem(.fixed(ExternalStatusOverflowMetrics.cellSize), spacing: 0),
@@ -816,7 +841,7 @@ private struct ExternalStatusOverflowPanelView: View {
 }
 
 @MainActor
-private struct ExternalStatusItemButton: View {
+struct ExternalStatusItemButton: View {
     let item: ExternalStatusItem
     @ObservedObject var service: ExternalStatusItemService
     let visibility: ExternalStatusItemVisibility
@@ -834,6 +859,9 @@ private struct ExternalStatusItemButton: View {
             contextAction: { service.presentContextMenu(item) },
             dragIdentifier: item.id,
             dropAxis: horizontal ? .horizontal : .vertical,
+            dropValidator: { sourceID in
+                visibility == .visible || service.isExternalItem(sourceID)
+            },
             dropAction: { sourceID, after in
                 service.move(
                     itemID: sourceID,
@@ -858,21 +886,25 @@ private struct ExternalStatusItemButton: View {
 
 @MainActor
 private struct ExternalStatusItemDropDestination: NSViewRepresentable {
+    let dropValidator: (String) -> Bool
     let onDrop: (String) -> Void
 
     func makeNSView(context: Context) -> ExternalStatusItemDropView {
         let view = ExternalStatusItemDropView()
+        view.dropValidator = dropValidator
         view.onDrop = onDrop
         return view
     }
 
     func updateNSView(_ view: ExternalStatusItemDropView, context: Context) {
+        view.dropValidator = dropValidator
         view.onDrop = onDrop
     }
 }
 
 @MainActor
 private final class ExternalStatusItemDropView: NSView {
+    var dropValidator: ((String) -> Bool)?
     var onDrop: ((String) -> Void)?
     private var isTargeted = false
 
@@ -884,7 +916,7 @@ private final class ExternalStatusItemDropView: NSView {
     required init?(coder: NSCoder) { nil }
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        guard draggedIdentifier(from: sender) != nil else { return [] }
+        guard acceptsDrop(from: sender) else { return [] }
         isTargeted = true
         needsDisplay = true
         return .move
@@ -896,11 +928,11 @@ private final class ExternalStatusItemDropView: NSView {
     }
 
     override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        draggedIdentifier(from: sender) != nil
+        acceptsDrop(from: sender)
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        guard let itemID = draggedIdentifier(from: sender) else { return false }
+        guard acceptsDrop(from: sender), let itemID = draggedIdentifier(from: sender) else { return false }
         onDrop?(itemID)
         isTargeted = false
         needsDisplay = true
@@ -916,5 +948,10 @@ private final class ExternalStatusItemDropView: NSView {
 
     private func draggedIdentifier(from sender: any NSDraggingInfo) -> String? {
         sender.draggingPasteboard.string(forType: WindowsTrayIconControl.trayItemPasteboardType)
+    }
+
+    private func acceptsDrop(from sender: any NSDraggingInfo) -> Bool {
+        guard let identifier = draggedIdentifier(from: sender) else { return false }
+        return dropValidator?(identifier) ?? true
     }
 }

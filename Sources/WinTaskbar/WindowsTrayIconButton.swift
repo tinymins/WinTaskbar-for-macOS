@@ -69,6 +69,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     let contextAction: (() -> Void)?
     let dragIdentifier: String?
     let dropAxis: WindowsTrayIconDropAxis
+    let dropValidator: ((String) -> Bool)?
     let dropAction: ((String, Bool) -> Void)?
     private let content: Content
 
@@ -82,6 +83,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         contextAction: (() -> Void)? = nil,
         dragIdentifier: String? = nil,
         dropAxis: WindowsTrayIconDropAxis = .horizontal,
+        dropValidator: ((String) -> Bool)? = nil,
         dropAction: ((String, Bool) -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
@@ -94,6 +96,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         self.contextAction = contextAction
         self.dragIdentifier = dragIdentifier
         self.dropAxis = dropAxis
+        self.dropValidator = dropValidator
         self.dropAction = dropAction
         self.content = content()
     }
@@ -108,6 +111,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         contextAction: (() -> Void)? = nil,
         dragIdentifier: String? = nil,
         dropAxis: WindowsTrayIconDropAxis = .horizontal,
+        dropValidator: ((String) -> Bool)? = nil,
         dropAction: ((String, Bool) -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
@@ -120,6 +124,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         self.contextAction = contextAction
         self.dragIdentifier = dragIdentifier
         self.dropAxis = dropAxis
+        self.dropValidator = dropValidator
         self.dropAction = dropAction
         self.content = content()
     }
@@ -151,6 +156,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         control.onRightActivate = contextAction
         control.dragIdentifier = dragIdentifier
         control.dropAxis = dropAxis
+        control.dropValidator = dropValidator
         control.onDrop = dropAction
         control.setAccessibilityElement(true)
         control.setAccessibilityRole(.button)
@@ -177,6 +183,7 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     var onRightActivate: (() -> Void)?
     var dragIdentifier: String?
     var dropAxis = WindowsTrayIconDropAxis.horizontal
+    var dropValidator: ((String) -> Bool)?
     var onDrop: ((String, Bool) -> Void)? {
         didSet {
             unregisterDraggedTypes()
@@ -380,14 +387,14 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     }
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        guard draggedIdentifier(from: sender) != nil, onDrop != nil else { return [] }
+        guard acceptsDrop(from: sender) else { return [] }
         isDropTarget = true
         needsDisplay = true
         return .move
     }
 
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        draggedIdentifier(from: sender) != nil && onDrop != nil ? .move : []
+        acceptsDrop(from: sender) ? .move : []
     }
 
     override func draggingExited(_ sender: (any NSDraggingInfo)?) {
@@ -396,11 +403,13 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     }
 
     override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        draggedIdentifier(from: sender) != nil && onDrop != nil
+        acceptsDrop(from: sender)
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        guard let identifier = draggedIdentifier(from: sender), let onDrop else { return false }
+        guard acceptsDrop(from: sender),
+              let identifier = draggedIdentifier(from: sender),
+              let onDrop else { return false }
         let location = convert(sender.draggingLocation, from: nil)
         let after = dropAxis == .horizontal ? location.x >= bounds.midX : location.y >= bounds.midY
         onDrop(identifier, after)
@@ -416,6 +425,11 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
 
     private func draggedIdentifier(from sender: any NSDraggingInfo) -> String? {
         sender.draggingPasteboard.string(forType: Self.trayItemPasteboardType)
+    }
+
+    private func acceptsDrop(from sender: any NSDraggingInfo) -> Bool {
+        guard onDrop != nil, let identifier = draggedIdentifier(from: sender) else { return false }
+        return dropValidator?(identifier) ?? true
     }
 }
 

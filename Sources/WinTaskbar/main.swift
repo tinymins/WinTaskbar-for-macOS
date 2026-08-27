@@ -337,6 +337,19 @@ func runSelfTest() async -> Int32 {
     trayLayout.setHidden(true, itemID: "two")
     trayLayout.move(itemID: "three", relativeTo: "one", after: false, hidden: true)
     trayLayout.move(itemID: "two", relativeTo: "one", after: true, hidden: false)
+    var unifiedTrayLayout = ExternalStatusItemLayout(
+        orderedIDs: ["external-one"] + SystemTrayItemID.allCases.map(\.rawValue)
+    )
+    unifiedTrayLayout.reconcile(
+        discoveredIDs: ["external-two"],
+        beforeIDs: Set(SystemTrayItemID.allCases.map(\.rawValue))
+    )
+    unifiedTrayLayout.move(
+        itemID: SystemTrayItemID.inputSource.rawValue,
+        relativeTo: SystemTrayItemID.wifi.rawValue,
+        after: false,
+        hidden: false
+    )
     let trayLayoutStore = ExternalStatusItemLayoutStore(defaults: defaults)
     trayLayoutStore.save(trayLayout)
     let restoredTrayLayout = trayLayoutStore.load()
@@ -391,6 +404,14 @@ func runSelfTest() async -> Int32 {
           ),
           trayLayout.orderedIDs == ["three", "one", "two"],
           trayLayout.hiddenIDs == ["three"],
+          unifiedTrayLayout.orderedIDs == [
+              "external-one",
+              "external-two",
+              SystemTrayItemID.inputSource.rawValue,
+              SystemTrayItemID.wifi.rawValue,
+              SystemTrayItemID.volume.rawValue,
+              SystemTrayItemID.battery.rawValue,
+          ],
           restoredTrayLayout == trayLayout,
           ExternalStatusItemIdentity.make(
               ownerIdentifier: "com.example.StatusApp",

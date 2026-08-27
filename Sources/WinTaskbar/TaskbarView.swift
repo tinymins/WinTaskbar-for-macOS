@@ -54,6 +54,18 @@ private struct TaskbarDragPreviewContent {
     let icon: NSImage
 }
 
+private enum TaskbarTrayItem: Identifiable {
+    case external(ExternalStatusItem)
+    case system(SystemTrayItemID)
+
+    var id: String {
+        switch self {
+        case let .external(item): item.id
+        case let .system(item): item.rawValue
+        }
+    }
+}
+
 private final class TaskbarDragPreviewState: ObservableObject {
     @Published var content: TaskbarDragPreviewContent?
     @Published var center: CGPoint?
@@ -410,51 +422,8 @@ struct TaskbarView: View {
                 position: preferences.position
             )
         }
-        ExternalStatusItemsView(
-            service: externalStatusItems,
-            screen: screen,
-            horizontal: preferences.position.isHorizontal,
-            onActivate: { externalStatusOverflowPanelController.dismiss() }
-        )
-        if preferences.trayWifiEnabled {
-            WiFiTrayView(
-                service: status,
-                panelController: quickSettingsPanelController,
-                actions: actions,
-                position: preferences.position,
-                barHeight: CGFloat(preferences.barHeight),
-                screen: screen
-            )
-        }
-        if preferences.trayVolumeEnabled {
-            VolumeTrayView(
-                service: status,
-                panelController: quickSettingsPanelController,
-                actions: actions,
-                position: preferences.position,
-                barHeight: CGFloat(preferences.barHeight),
-                screen: screen
-            )
-        }
-        if preferences.trayBatteryEnabled {
-            BatteryTrayView(
-                service: status,
-                panelController: quickSettingsPanelController,
-                actions: actions,
-                position: preferences.position,
-                barHeight: CGFloat(preferences.barHeight),
-                horizontal: preferences.position.isHorizontal,
-                screen: screen
-            )
-        }
-        if preferences.trayInputSourceEnabled {
-            InputSourceTrayView(
-                service: status,
-                panelController: inputSourcePanelController,
-                position: preferences.position,
-                barHeight: CGFloat(preferences.barHeight),
-                screen: screen
-            )
+        ForEach(reorderableTrayItems) { item in
+            reorderableTrayItem(item)
         }
         if preferences.trayClockEnabled {
             ClockTrayView(
@@ -469,6 +438,85 @@ struct TaskbarView: View {
                 screen: screen
             )
         }
+    }
+
+    private var reorderableTrayItems: [TaskbarTrayItem] {
+        var items = externalStatusItems.items(on: screen).map(TaskbarTrayItem.external)
+        if preferences.trayWifiEnabled { items.append(.system(.wifi)) }
+        if preferences.trayVolumeEnabled { items.append(.system(.volume)) }
+        if preferences.trayBatteryEnabled { items.append(.system(.battery)) }
+        if preferences.trayInputSourceEnabled { items.append(.system(.inputSource)) }
+        return externalStatusItems.orderedTrayItems(items, id: \TaskbarTrayItem.id)
+    }
+
+    @ViewBuilder
+    private func reorderableTrayItem(_ item: TaskbarTrayItem) -> some View {
+        switch item {
+        case let .external(item):
+            ExternalStatusItemButton(
+                item: item,
+                service: externalStatusItems,
+                visibility: .visible,
+                horizontal: preferences.position.isHorizontal,
+                controlWidth: ExternalStatusItemsView.controlWidth(for: item.image),
+                onActivate: { externalStatusOverflowPanelController.dismiss() }
+            )
+        case .system(.wifi):
+            WiFiTrayView(
+                service: status,
+                panelController: quickSettingsPanelController,
+                actions: actions,
+                position: preferences.position,
+                barHeight: CGFloat(preferences.barHeight),
+                screen: screen,
+                dragConfiguration: trayDragConfiguration(for: .wifi)
+            )
+        case .system(.volume):
+            VolumeTrayView(
+                service: status,
+                panelController: quickSettingsPanelController,
+                actions: actions,
+                position: preferences.position,
+                barHeight: CGFloat(preferences.barHeight),
+                screen: screen,
+                dragConfiguration: trayDragConfiguration(for: .volume)
+            )
+        case .system(.battery):
+            BatteryTrayView(
+                service: status,
+                panelController: quickSettingsPanelController,
+                actions: actions,
+                position: preferences.position,
+                barHeight: CGFloat(preferences.barHeight),
+                horizontal: preferences.position.isHorizontal,
+                screen: screen,
+                dragConfiguration: trayDragConfiguration(for: .battery)
+            )
+        case .system(.inputSource):
+            InputSourceTrayView(
+                service: status,
+                panelController: inputSourcePanelController,
+                position: preferences.position,
+                barHeight: CGFloat(preferences.barHeight),
+                screen: screen,
+                dragConfiguration: trayDragConfiguration(for: .inputSource)
+            )
+        }
+    }
+
+    private func trayDragConfiguration(for item: SystemTrayItemID) -> TrayItemDragConfiguration {
+        TrayItemDragConfiguration(
+            identifier: item.rawValue,
+            dropAxis: preferences.position.isHorizontal ? .horizontal : .vertical,
+            onDrop: { sourceID, after in
+                externalStatusItems.move(
+                    itemID: sourceID,
+                    relativeTo: item.rawValue,
+                    after: after,
+                    visibility: .visible
+                )
+            }
+        )
     }
 
     private func visibleCapacity(length: CGFloat) -> Int {
