@@ -13,7 +13,7 @@ enum WindowsTrayIconMetrics {
     static let clockTooltipGap: CGFloat = 10
     static let showDesktopHitThickness: CGFloat = 8
     static let showDesktopVisibleThickness: CGFloat = 1
-    static let showDesktopIndicatorLength: CGFloat = 32
+    static let showDesktopIndicatorLength: CGFloat = 20
     static let showDesktopIndicatorEdgeInset: CGFloat = 4
 }
 
