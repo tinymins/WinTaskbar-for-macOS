@@ -39,19 +39,25 @@ struct WiFiTrayView: View {
     let screen: NSScreen
 
     var body: some View {
-        Button {
-            panelController.toggle(
-                service: service,
-                actions: actions,
-                position: position,
-                barHeight: barHeight,
-                screen: screen
-            )
-        } label: {
+        WindowsTrayIconButton(
+            title: service.wifiSSID ?? (service.wifiPoweredOn ? "Not connected" : "Wi-Fi off"),
+            primaryAction: togglePanel
+        ) {
             Image(systemName: service.wifiPoweredOn ? (service.wifiSSID == nil ? "wifi.exclamationmark" : "wifi") : "wifi.slash")
+                .font(.system(size: 15, weight: .regular))
+                .frame(width: WindowsTrayIconMetrics.iconSize, height: WindowsTrayIconMetrics.iconSize)
         }
-        .buttonStyle(.plain)
-        .help(service.wifiSSID ?? (service.wifiPoweredOn ? "Not connected" : "Wi-Fi off"))
+        .frame(width: WindowsTrayIconMetrics.squareControlWidth, height: WindowsTrayIconMetrics.controlHeight)
+    }
+
+    private func togglePanel() {
+        panelController.toggle(
+            service: service,
+            actions: actions,
+            position: position,
+            barHeight: barHeight,
+            screen: screen
+        )
     }
 }
 
@@ -64,17 +70,12 @@ struct VolumeTrayView: View {
     let screen: NSScreen
 
     var body: some View {
-        Button {
-            panelController.toggle(
-                service: service,
-                actions: actions,
-                position: position,
-                barHeight: barHeight,
-                screen: screen
-            )
-        } label: { Image(systemName: symbol) }
-            .buttonStyle(.plain)
-            .help("Volume")
+        WindowsTrayIconButton(title: "Volume", primaryAction: togglePanel) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .regular))
+                .frame(width: WindowsTrayIconMetrics.iconSize, height: WindowsTrayIconMetrics.iconSize)
+        }
+        .frame(width: WindowsTrayIconMetrics.squareControlWidth, height: WindowsTrayIconMetrics.controlHeight)
     }
 
     private var symbol: String {
@@ -82,6 +83,16 @@ struct VolumeTrayView: View {
         if service.volume < 0.35 { return "speaker.wave.1.fill" }
         if service.volume < 0.7 { return "speaker.wave.2.fill" }
         return "speaker.wave.3.fill"
+    }
+
+    private func togglePanel() {
+        panelController.toggle(
+            service: service,
+            actions: actions,
+            position: position,
+            barHeight: barHeight,
+            screen: screen
+        )
     }
 }
 
@@ -96,15 +107,12 @@ struct BatteryTrayView: View {
 
     var body: some View {
         if let level = service.batteryLevel {
-            Button {
-                panelController.toggle(
-                    service: service,
-                    actions: actions,
-                    position: position,
-                    barHeight: barHeight,
-                    screen: screen
-                )
-            } label: {
+            let title = service.isCharging ? "Battery charging: \(level)%" : "Battery: \(level)%"
+            WindowsTrayIconButton(
+                title: title,
+                accessibilityLabel: service.isCharging ? "Battery charging, \(level)%" : "Battery, \(level)%",
+                primaryAction: togglePanel
+            ) {
                 HStack(spacing: 3) {
                     WindowsBatteryIcon(
                         level: level,
@@ -114,9 +122,10 @@ struct BatteryTrayView: View {
                     if horizontal { Text("\(level)%").font(.caption2) }
                 }
             }
-            .buttonStyle(.plain)
-            .help(service.isCharging ? "Battery charging: \(level)%" : "Battery: \(level)%")
-            .accessibilityLabel(service.isCharging ? "Battery charging, \(level)%" : "Battery, \(level)%")
+            .frame(
+                width: horizontal ? WindowsTrayIconMetrics.batteryControlWidth : WindowsTrayIconMetrics.squareControlWidth,
+                height: WindowsTrayIconMetrics.controlHeight
+            )
         }
     }
 
@@ -125,6 +134,16 @@ struct BatteryTrayView: View {
             level: level,
             isCharging: service.isCharging,
             isLowPowerModeEnabled: service.isLowPowerModeEnabled
+        )
+    }
+
+    private func togglePanel() {
+        panelController.toggle(
+            service: service,
+            actions: actions,
+            position: position,
+            barHeight: barHeight,
+            screen: screen
         )
     }
 }
@@ -137,28 +156,31 @@ struct InputSourceTrayView: View {
     let screen: NSScreen
 
     var body: some View {
-        Button {
-            panelController.toggle(
-                service: service,
-                position: position,
-                barHeight: barHeight,
-                screen: screen,
-                appearance: NSApp.effectiveAppearance
-            )
-        } label: {
+        WindowsTrayIconButton(
+            title: service.inputSource,
+            accessibilityLabel: "Keyboard layout: \(service.inputSource)",
+            primaryAction: togglePanel
+        ) {
             Text(currentAbbreviation)
                 .font(.caption2.weight(.medium))
         }
-        .buttonStyle(.plain)
-        .fixedSize()
-        .help(service.inputSource)
-        .accessibilityLabel("Keyboard layout: \(service.inputSource)")
+        .frame(width: WindowsTrayIconMetrics.squareControlWidth, height: WindowsTrayIconMetrics.controlHeight)
         .onDisappear { panelController.dismiss() }
     }
 
     private var currentAbbreviation: String {
         service.inputSources.first(where: { $0.id == service.inputSourceID })?.abbreviation
             ?? String(service.inputSource.prefix(3)).uppercased()
+    }
+
+    private func togglePanel() {
+        panelController.toggle(
+            service: service,
+            position: position,
+            barHeight: barHeight,
+            screen: screen,
+            appearance: NSApp.effectiveAppearance
+        )
     }
 }
 

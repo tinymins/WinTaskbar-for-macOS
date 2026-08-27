@@ -164,12 +164,13 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         return true
     }
 
-    private func externalStatusItemControl(at screenPoint: CGPoint) -> ExternalStatusItemControl? {
+    private func externalStatusItemControl(at screenPoint: CGPoint) -> WindowsTrayIconControl? {
         for window in NSApp.windows where window.frame.contains(screenPoint) {
             guard let contentView = window.contentView else { continue }
             let windowPoint = window.convertPoint(fromScreen: screenPoint)
             let contentPoint = contentView.convert(windowPoint, from: nil)
-            if let control = contentView.hitTest(contentPoint) as? ExternalStatusItemControl {
+            if let control = contentView.hitTest(contentPoint) as? WindowsTrayIconControl,
+               control.onRightActivate != nil {
                 return control
             }
         }
@@ -493,257 +494,29 @@ struct ExternalStatusItemsView: View {
     @ViewBuilder
     private func buttons(_ items: [ExternalStatusItem]) -> some View {
         ForEach(items) { item in
-            ExternalStatusItemButton(
-                image: item.image,
-                label: item.accessibilityLabel,
+            WindowsTrayIconButton(
+                title: item.accessibilityLabel,
                 primaryAction: { service.performPrimaryAction(item) },
                 contextAction: { service.presentContextMenu(item) }
-            )
-            .frame(width: Self.controlWidth(for: item.image), height: 40)
+            ) {
+                Image(nsImage: item.image)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: Self.contentWidth(for: item.image), height: WindowsTrayIconMetrics.iconSize)
+            }
+            .frame(width: Self.controlWidth(for: item.image), height: WindowsTrayIconMetrics.controlHeight)
         }
     }
 
     static func controlWidth(for image: NSImage) -> CGFloat {
-        guard image.size.height > 0 else { return 32 }
-        let imageWidth = 18 * image.size.width / image.size.height
-        return min(max(imageWidth, 18), 40) + 14
-    }
-}
-
-@MainActor
-private struct ExternalStatusItemButton: NSViewRepresentable {
-    let image: NSImage
-    let label: String
-    let primaryAction: () -> Void
-    let contextAction: () -> Void
-
-    func makeNSView(context: Context) -> ExternalStatusItemControl {
-        let control = ExternalStatusItemControl()
-        update(control)
-        return control
+        guard image.size.height > 0 else { return WindowsTrayIconMetrics.squareControlWidth }
+        return contentWidth(for: image) + 2 * WindowsTrayIconMetrics.horizontalContentPadding
     }
 
-    func updateNSView(_ control: ExternalStatusItemControl, context: Context) {
-        update(control)
-    }
-
-    private func update(_ control: ExternalStatusItemControl) {
-        control.image = image
-        control.hoverTitle = label
-        control.onLeftActivate = primaryAction
-        control.onRightActivate = contextAction
-        control.setAccessibilityElement(true)
-        control.setAccessibilityRole(.button)
-        control.setAccessibilityLabel(label)
-    }
-}
-
-@MainActor
-private final class ExternalStatusItemControl: NSControl {
-    var image: NSImage? { didSet { needsDisplay = true } }
-    var hoverTitle = ""
-    var onLeftActivate: (() -> Void)?
-    var onRightActivate: (() -> Void)?
-    private var trackingAreaReference: NSTrackingArea?
-    private var isHovered = false
-    private var isPressed = false
-
-    override var isFlipped: Bool { true }
-
-    override func updateTrackingAreas() {
-        if let trackingAreaReference { removeTrackingArea(trackingAreaReference) }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.activeAlways, .mouseEnteredAndExited],
-            owner: self
-        )
-        addTrackingArea(area)
-        trackingAreaReference = area
-        super.updateTrackingAreas()
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHovered = true
-        needsDisplay = true
-        guard let window else { return }
-        let anchor = window.convertToScreen(convert(bounds, to: nil))
-        ExternalStatusItemTooltipController.shared.schedule(title: hoverTitle, anchor: anchor, owner: self)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHovered = false
-        needsDisplay = true
-        ExternalStatusItemTooltipController.shared.hide(owner: self)
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        activate(onLeftActivate)
-    }
-
-    override func rightMouseDown(with event: NSEvent) {
-        activate(onRightActivate)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        if isHovered || isPressed {
-            NSColor.labelColor.withAlphaComponent(isPressed ? 0.16 : 0.10).setFill()
-            NSBezierPath(
-                roundedRect: bounds,
-                xRadius: 4,
-                yRadius: 4
-            ).fill()
-        }
-        guard let image else { return }
-        let imageBounds = CGRect(
-            x: bounds.minX + 7,
-            y: bounds.midY - 9,
-            width: max(0, bounds.width - 14),
-            height: 18
-        )
-        image.draw(
-            in: aspectFitRect(for: image.size, inside: imageBounds),
-            from: .zero,
-            operation: .sourceOver,
-            fraction: 1,
-            respectFlipped: true,
-            hints: [.interpolation: NSImageInterpolation.high]
-        )
-    }
-
-    private func activate(_ action: (() -> Void)?) {
-        ExternalStatusItemTooltipController.shared.hide(owner: self)
-        isPressed = true
-        needsDisplay = true
-        displayIfNeeded()
-        action?()
-        isPressed = false
-        needsDisplay = true
-    }
-
-    private func aspectFitRect(for size: CGSize, inside bounds: CGRect) -> CGRect {
-        guard size.width > 0, size.height > 0 else { return bounds }
-        let scale = min(bounds.width / size.width, bounds.height / size.height)
-        let targetSize = CGSize(width: size.width * scale, height: size.height * scale)
-        return CGRect(
-            x: bounds.midX - targetSize.width / 2,
-            y: bounds.midY - targetSize.height / 2,
-            width: targetSize.width,
-            height: targetSize.height
-        )
-    }
-}
-
-@MainActor
-private final class ExternalStatusItemTooltipController {
-    static let shared = ExternalStatusItemTooltipController()
-
-    private let panel: ExternalStatusItemTooltipPanel
-    private let tooltipView = ExternalStatusItemTooltipView()
-    private var pendingWorkItem: DispatchWorkItem?
-    private weak var owner: ExternalStatusItemControl?
-
-    private init() {
-        panel = ExternalStatusItemTooltipPanel(
-            contentRect: .zero,
-            styleMask: .borderless,
-            backing: .buffered,
-            defer: false
-        )
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        panel.hasShadow = true
-        panel.ignoresMouseEvents = true
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 2)
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-
-        panel.contentView = tooltipView
-    }
-
-    func schedule(title: String, anchor: CGRect, owner: ExternalStatusItemControl) {
-        pendingWorkItem?.cancel()
-        panel.orderOut(nil)
-        self.owner = owner
-
-        let workItem = DispatchWorkItem { [weak self, weak owner] in
-            guard let self, let owner, self.owner === owner, owner.window != nil else { return }
-            self.show(title: title, anchor: anchor)
-        }
-        pendingWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(400), execute: workItem)
-    }
-
-    func hide(owner: ExternalStatusItemControl) {
-        guard self.owner === owner else { return }
-        pendingWorkItem?.cancel()
-        pendingWorkItem = nil
-        self.owner = nil
-        panel.orderOut(nil)
-    }
-
-    private func show(title: String, anchor: CGRect) {
-        tooltipView.title = title
-        let textWidth = ceil((title as NSString).size(withAttributes: [.font: tooltipView.font]).width)
-        let size = CGSize(width: min(max(textWidth + 20, 44), 280), height: 32)
-        guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) }) ?? NSScreen.main else { return }
-        panel.setFrame(Self.frame(size: size, anchor: anchor, screen: screen.frame), display: true)
-        panel.orderFrontRegardless()
-    }
-
-    static func frame(size: CGSize, anchor: CGRect, screen: CGRect) -> CGRect {
-        let distances = [
-            (side: 0, distance: abs(anchor.minY - screen.minY)),
-            (side: 1, distance: abs(screen.maxY - anchor.maxY)),
-            (side: 2, distance: abs(anchor.minX - screen.minX)),
-            (side: 3, distance: abs(screen.maxX - anchor.maxX))
-        ]
-        let side = distances.min(by: { $0.distance < $1.distance })?.side ?? 0
-        var origin: CGPoint
-        switch side {
-        case 1:
-            origin = CGPoint(x: anchor.midX - size.width / 2, y: anchor.minY - size.height - 4)
-        case 2:
-            origin = CGPoint(x: anchor.maxX + 4, y: anchor.midY - size.height / 2)
-        case 3:
-            origin = CGPoint(x: anchor.minX - size.width - 4, y: anchor.midY - size.height / 2)
-        default:
-            origin = CGPoint(x: anchor.midX - size.width / 2, y: anchor.maxY + 4)
-        }
-        origin.x = min(max(origin.x, screen.minX + 6), screen.maxX - size.width - 6)
-        origin.y = min(max(origin.y, screen.minY + 6), screen.maxY - size.height - 6)
-        return CGRect(origin: origin, size: size)
-    }
-}
-
-private final class ExternalStatusItemTooltipPanel: NSPanel {
-    override var canBecomeKey: Bool { false }
-    override var canBecomeMain: Bool { false }
-}
-
-private final class ExternalStatusItemTooltipView: NSView {
-    let font = NSFont.systemFont(ofSize: 11, weight: .regular)
-    var title = "" { didSet { needsDisplay = true } }
-
-    override var isFlipped: Bool { true }
-
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor(srgbRed: 31 / 255, green: 42 / 255, blue: 52 / 255, alpha: 0.98).setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3).fill()
-        NSColor(srgbRed: 58 / 255, green: 68 / 255, blue: 77 / 255, alpha: 1).setStroke()
-        let border = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 3, yRadius: 3)
-        border.lineWidth = 1
-        border.stroke()
-
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = .center
-        paragraph.lineBreakMode = .byTruncatingTail
-        (title as NSString).draw(
-            in: bounds.insetBy(dx: 10, dy: 8),
-            withAttributes: [
-                .font: font,
-                .foregroundColor: NSColor(srgbRed: 246 / 255, green: 247 / 255, blue: 247 / 255, alpha: 1),
-                .paragraphStyle: paragraph
-            ]
-        )
+    private static func contentWidth(for image: NSImage) -> CGFloat {
+        guard image.size.height > 0 else { return WindowsTrayIconMetrics.iconSize }
+        let imageWidth = WindowsTrayIconMetrics.iconSize * image.size.width / image.size.height
+        return min(max(imageWidth, WindowsTrayIconMetrics.iconSize), 40)
     }
 }

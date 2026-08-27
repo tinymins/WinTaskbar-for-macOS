@@ -390,9 +390,9 @@ struct TaskbarView: View {
     @ViewBuilder
     private var tray: some View {
         if preferences.position.isHorizontal {
-            HStack(spacing: 10) { trayContents }
+            HStack(spacing: 0) { trayContents }
         } else {
-            VStack(spacing: 10) { trayContents }
+            VStack(spacing: 0) { trayContents }
         }
     }
 
