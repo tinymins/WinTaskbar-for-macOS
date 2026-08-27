@@ -45,6 +45,9 @@ final class PreferencesStore: ObservableObject {
     @Published var globalShortcutConfigurations: [GlobalShortcutConfiguration] {
         didSet { Self.store(globalShortcutConfigurations, key: "wintaskbar.globalShortcutConfigurations", defaults: defaults) }
     }
+    @Published var customShortcutConfigurations: [CustomShortcutConfiguration] {
+        didSet { Self.store(customShortcutConfigurations, key: "wintaskbar.customShortcutConfigurations", defaults: defaults) }
+    }
     @Published var showRecentInMenu: Bool { didSet { defaults.set(showRecentInMenu, forKey: "wintaskbar.showRecentInMenu") } }
     @Published var showShortcutsInMenu: Bool { didSet { defaults.set(showShortcutsInMenu, forKey: "wintaskbar.showShortcutsInMenu") } }
     @Published var groupStartMenuByCategory: Bool { didSet { defaults.set(groupStartMenuByCategory, forKey: "wintaskbar.groupStartMenuByCategory") } }
@@ -112,6 +115,11 @@ final class PreferencesStore: ObservableObject {
         } else {
             globalShortcutConfigurations = GlobalShortcutCatalog.defaults(legacyShortcuts: legacyShortcuts)
         }
+        customShortcutConfigurations = Self.load(
+            [CustomShortcutConfiguration].self,
+            key: "wintaskbar.customShortcutConfigurations",
+            defaults: defaults
+        ) ?? []
         showRecentInMenu = defaults.object(forKey: "wintaskbar.showRecentInMenu") as? Bool ?? true
         showShortcutsInMenu = defaults.object(forKey: "wintaskbar.showShortcutsInMenu") as? Bool ?? true
         groupStartMenuByCategory = defaults.object(forKey: "wintaskbar.groupStartMenuByCategory") as? Bool ?? false
@@ -175,6 +183,7 @@ final class PreferencesStore: ObservableObject {
         globalShortcutConfigurations = GlobalShortcutCatalog.defaults(
             legacyShortcuts: GlobalShortcutCatalog.defaultLegacyShortcuts
         )
+        customShortcutConfigurations = []
         showRecentInMenu = true
         showShortcutsInMenu = true
         groupStartMenuByCategory = false

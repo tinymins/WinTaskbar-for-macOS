@@ -77,11 +77,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         globalHotkeysService.onInvoke = { [weak self] configuration in
             self?.performGlobalShortcut(configuration)
         }
+        let registeredShortcutConfigurations = preferences.$globalShortcutConfigurations
+            .combineLatest(preferences.$customShortcutConfigurations)
+            .map { builtIn, custom in
+                builtIn + custom.compactMap { $0.registrationConfiguration() }
+            }
         Publishers.CombineLatest4(
             preferences.$globalHotkeysEnabled,
             preferences.$windowsKeyMapping,
             preferences.$windowsKeyOpensStart,
-            preferences.$globalShortcutConfigurations
+            registeredShortcutConfigurations
         )
             .sink { [weak self] enabled, mapping, opensStart, configurations in
                 self?.globalHotkeysService.setConfiguration(
@@ -341,6 +346,7 @@ func runSelfTest() async -> Int32 {
           preferences.windowsKeyMapping == .option,
           preferences.windowsKeyOpensStart,
           preferences.globalShortcutConfigurations.count == 43,
+          preferences.customShortcutConfigurations.isEmpty,
           preferences.globalShortcutConfigurations.first(where: {
               $0.id == GlobalShortcutCatalog.fileManagerID
           })?.isEnabled == true,
@@ -382,11 +388,43 @@ func runSelfTest() async -> Int32 {
     var duplicateShortcuts = preferences.globalShortcutConfigurations
     duplicateShortcuts[1].shortcut = duplicateShortcuts[0].shortcut
     duplicateShortcuts[1].usesWindowsKey = duplicateShortcuts[0].usesWindowsKey
-    guard GlobalHotkeysService.duplicateIssues(
+    let duplicateIssues = GlobalHotkeysService.duplicateIssues(
         configurations: duplicateShortcuts,
         mapping: preferences.windowsKeyMapping
-    )[duplicateShortcuts[1].id] != nil else {
+    )
+    guard duplicateIssues[duplicateShortcuts[0].id]?.contains(duplicateShortcuts[1].title) == true,
+          duplicateIssues[duplicateShortcuts[1].id]?.contains(duplicateShortcuts[0].title) == true else {
         fputs("SELF-TEST FAILED: duplicate global shortcut was not detected\n", stderr)
+        return 1
+    }
+    var customShortcut = CustomShortcutConfiguration.makeNew()
+    guard customShortcut.registrationConfiguration() == nil else {
+        fputs("SELF-TEST FAILED: incomplete custom shortcut was registered\n", stderr)
+        return 1
+    }
+    customShortcut.shortcut = HotkeyShortcut(
+        keyCode: 0,
+        modifiers: UInt32(controlKey | optionKey),
+        keyLabel: "A"
+    )
+    customShortcut.action = .openApplication
+    guard let customRegistration = customShortcut.registrationConfiguration(),
+          customRegistration.validationIssue == "Choose an application" else {
+        fputs("SELF-TEST FAILED: custom shortcut extra validation mismatch\n", stderr)
+        return 1
+    }
+    customShortcut.shortcut = fileManagerShortcut.resolvedShortcut(mapping: .option)
+    guard let conflictingCustomRegistration = customShortcut.registrationConfiguration() else {
+        fputs("SELF-TEST FAILED: custom shortcut registration conversion mismatch\n", stderr)
+        return 1
+    }
+    let customConflictIssues = GlobalHotkeysService.duplicateIssues(
+        configurations: preferences.globalShortcutConfigurations + [conflictingCustomRegistration],
+        mapping: .option
+    )
+    guard customConflictIssues[fileManagerShortcut.id]?.contains(conflictingCustomRegistration.title) == true,
+          customConflictIssues[customShortcut.id]?.contains(fileManagerShortcut.title) == true else {
+        fputs("SELF-TEST FAILED: custom shortcut conflict was not reported on both bindings\n", stderr)
         return 1
     }
 
@@ -1548,6 +1586,7 @@ func runSelfTest() async -> Int32 {
     }
     storedShortcutConfigurations[storedShowDesktopIndex].shortcut = GlobalShortcutCatalog.defaultLegacyShortcuts[1]
     storedShortcutConfigurations[storedShowDesktopIndex].usesWindowsKey = false
+    storedShortcutConfigurations[storedShowDesktopIndex].action = .toggleCalendar
     storedShortcutConfigurations[storedPinnedIndex].shortcut = GlobalShortcutCatalog.defaultLegacyShortcuts[2]
     storedShortcutConfigurations[storedPinnedIndex].usesWindowsKey = false
     storedShortcutConfigurations[storedRunIndex].action = .openApplication
@@ -1556,6 +1595,7 @@ func runSelfTest() async -> Int32 {
         legacyShortcuts: GlobalShortcutCatalog.defaultLegacyShortcuts
     )
     guard mergedShortcutConfigurations[storedShowDesktopIndex].usesWindowsKey,
+          mergedShortcutConfigurations[storedShowDesktopIndex].action == .showDesktop,
           mergedShortcutConfigurations[storedPinnedIndex].usesWindowsKey,
           mergedShortcutConfigurations[storedRunIndex].action == .showRunDialog else {
         fputs("SELF-TEST FAILED: Windows shortcut trigger migration mismatch\n", stderr)
@@ -1575,6 +1615,8 @@ func runSelfTest() async -> Int32 {
         modifiers: UInt32(cmdKey),
         keyLabel: "A"
     )
+    customShortcut.action = .showDesktop
+    preferences.customShortcutConfigurations = [customShortcut]
     guard defaults.string(forKey: "wintaskbar.position") == "Left",
           defaults.double(forKey: "wintaskbar.barHeight") == 64,
           defaults.bool(forKey: "wintaskbar.feature.trayWifi") == false,
@@ -1582,6 +1624,7 @@ func runSelfTest() async -> Int32 {
           preferences.pinnedBundleIDs == ["two", "three", "one"],
           PreferencesStore(defaults: defaults).appFolders.first?.bundleIDs == ["one"],
           PreferencesStore(defaults: defaults).globalShortcutConfigurations.first?.shortcut.keyLabel == "A",
+          PreferencesStore(defaults: defaults).customShortcutConfigurations.first?.action == .showDesktop,
           DockBadgeService.parseStatusLabel("124 notifications") == "124",
           DockBadgeService.parseLSAppInfoOutput("\"StatusLabel\"={ \"label\"=\"124 notifications\" }") == "124",
           DockBadgeService.parseLSAppInfoOutput("\"StatusLabel\"=[ NULL ]") == nil else {

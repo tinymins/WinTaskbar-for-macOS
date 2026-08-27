@@ -135,6 +135,9 @@ final class GlobalHotkeysService: ObservableObject {
         unregisterAll()
         windowsKeyGesture = WindowsKeyGestureState(windowsModifier: windowsKeyMapping.eventModifier)
         var issues = Self.duplicateIssues(configurations: configurations, mapping: windowsKeyMapping)
+        for configuration in configurations where configuration.isEnabled && issues[configuration.id] == nil {
+            issues[configuration.id] = configuration.validationIssue
+        }
         windowsKeyIssue = nil
         if enabled {
             for (index, configuration) in configurations.enumerated() where configuration.isEnabled {
@@ -159,14 +162,19 @@ final class GlobalHotkeysService: ObservableObject {
         mapping: WindowsKeyMapping
     ) -> [String: String] {
         var issues: [String: String] = [:]
-        var registeredShortcuts: [String: String] = [:]
+        var configurationsByShortcut: [String: [GlobalShortcutConfiguration]] = [:]
         for configuration in configurations where configuration.isEnabled {
             let shortcut = configuration.resolvedShortcut(mapping: mapping)
             let shortcutKey = "\(shortcut.keyCode):\(shortcut.modifiers)"
-            if let duplicateTitle = registeredShortcuts[shortcutKey] {
-                issues[configuration.id] = "Duplicates \(duplicateTitle)"
-            } else {
-                registeredShortcuts[shortcutKey] = configuration.title
+            configurationsByShortcut[shortcutKey, default: []].append(configuration)
+        }
+        for group in configurationsByShortcut.values where group.count > 1 {
+            for configuration in group {
+                let conflictingTitles = group
+                    .filter { $0.id != configuration.id }
+                    .map(\.title)
+                    .joined(separator: ", ")
+                issues[configuration.id] = "Conflicts with \(conflictingTitles)"
             }
         }
         return issues

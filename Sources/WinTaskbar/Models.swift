@@ -306,6 +306,51 @@ struct GlobalShortcutConfiguration: Codable, Hashable, Identifiable {
     func displayValue(mapping: WindowsKeyMapping) -> String {
         resolvedShortcut(mapping: mapping).displayValue
     }
+
+    var validationIssue: String? {
+        if action == .openApplication, applicationTarget == nil {
+            return "Choose an application"
+        }
+        if let applicationTarget, applicationTarget.resolvedURL == nil {
+            return "Application not found"
+        }
+        return nil
+    }
+}
+
+struct CustomShortcutConfiguration: Codable, Hashable, Identifiable {
+    var id: String
+    var isEnabled: Bool
+    var shortcut: HotkeyShortcut?
+    var action: GlobalShortcutAction
+    var pinnedIndex: Int?
+    var applicationTarget: ShortcutApplicationTarget?
+
+    static func makeNew() -> CustomShortcutConfiguration {
+        CustomShortcutConfiguration(
+            id: "custom-\(UUID().uuidString)",
+            isEnabled: true,
+            shortcut: nil,
+            action: .toggleStartMenu,
+            pinnedIndex: nil,
+            applicationTarget: nil
+        )
+    }
+
+    func registrationConfiguration() -> GlobalShortcutConfiguration? {
+        guard let shortcut else { return nil }
+        return GlobalShortcutConfiguration(
+            id: id,
+            title: "Custom: \(action.title)",
+            windowsShortcutLabel: "Custom binding",
+            isEnabled: isEnabled,
+            shortcut: shortcut,
+            usesWindowsKey: false,
+            action: action,
+            pinnedIndex: pinnedIndex,
+            applicationTarget: applicationTarget
+        )
+    }
 }
 
 enum GlobalShortcutCatalog {
@@ -508,10 +553,12 @@ enum GlobalShortcutCatalog {
                 storedConfiguration.shortcut = defaultConfiguration.shortcut
                 storedConfiguration.usesWindowsKey = true
             }
-            if storedConfiguration.id == runID,
-               storedConfiguration.action == .openApplication,
-               storedConfiguration.applicationTarget == nil {
-                storedConfiguration.action = .showRunDialog
+            storedConfiguration.title = defaultConfiguration.title
+            storedConfiguration.windowsShortcutLabel = defaultConfiguration.windowsShortcutLabel
+            storedConfiguration.action = defaultConfiguration.action
+            storedConfiguration.pinnedIndex = defaultConfiguration.pinnedIndex
+            if !defaultConfiguration.action.supportsApplicationTarget {
+                storedConfiguration.applicationTarget = nil
             }
             return storedConfiguration
         }

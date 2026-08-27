@@ -268,18 +268,48 @@ struct SettingsView: View {
     }
 
     private var shortcutMappings: some View {
-        SettingsSection("Shortcut mappings") {
-            ForEach(Array(preferences.globalShortcutConfigurations.enumerated()), id: \.element.id) { index, configuration in
-                GlobalShortcutRow(
-                    configuration: configurationBinding(id: configuration.id),
-                    windowsKeyMapping: preferences.windowsKeyMapping,
-                    globalEnabled: preferences.globalHotkeysEnabled,
-                    registrationIssue: globalHotkeys.registrationIssues[configuration.id],
-                    onChooseApplication: { chooseApplication(for: configuration.id) },
-                    onResetTrigger: { resetTrigger(for: configuration.id) }
-                )
-                if index < preferences.globalShortcutConfigurations.count - 1 {
-                    Divider()
+        VStack(alignment: .leading, spacing: 22) {
+            SettingsSection("Built-in Windows shortcuts") {
+                ForEach(Array(preferences.globalShortcutConfigurations.enumerated()), id: \.element.id) { index, configuration in
+                    GlobalShortcutRow(
+                        configuration: configurationBinding(id: configuration.id),
+                        windowsKeyMapping: preferences.windowsKeyMapping,
+                        globalEnabled: preferences.globalHotkeysEnabled,
+                        registrationIssue: globalHotkeys.registrationIssues[configuration.id],
+                        onChooseApplication: {
+                            chooseApplication(for: configurationBinding(id: configuration.id).applicationTarget)
+                        },
+                        onResetTrigger: { resetTrigger(for: configuration.id) }
+                    )
+                    if index < preferences.globalShortcutConfigurations.count - 1 {
+                        Divider()
+                    }
+                }
+            }
+
+            SettingsSection("Custom bindings") {
+                if preferences.customShortcutConfigurations.isEmpty {
+                    Text("Add a binding to assign any key combination to an action.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(Array(preferences.customShortcutConfigurations.enumerated()), id: \.element.id) { index, configuration in
+                    CustomShortcutRow(
+                        configuration: customConfigurationBinding(id: configuration.id),
+                        globalEnabled: preferences.globalHotkeysEnabled,
+                        registrationIssue: globalHotkeys.registrationIssues[configuration.id],
+                        onChooseApplication: {
+                            chooseApplication(for: customConfigurationBinding(id: configuration.id).applicationTarget)
+                        },
+                        onDelete: { removeCustomConfiguration(id: configuration.id) }
+                    )
+                    if index < preferences.customShortcutConfigurations.count - 1 {
+                        Divider()
+                    }
+                }
+                Button {
+                    preferences.customShortcutConfigurations.append(.makeNew())
+                } label: {
+                    Label("Add Custom Binding", systemImage: "plus")
                 }
             }
         }
@@ -345,7 +375,20 @@ struct SettingsView: View {
         )
     }
 
-    private func chooseApplication(for id: String) {
+    private func customConfigurationBinding(id: String) -> Binding<CustomShortcutConfiguration> {
+        Binding(
+            get: {
+                preferences.customShortcutConfigurations.first { $0.id == id }
+                    ?? .makeNew()
+            },
+            set: { updated in
+                guard let index = preferences.customShortcutConfigurations.firstIndex(where: { $0.id == id }) else { return }
+                preferences.customShortcutConfigurations[index] = updated
+            }
+        )
+    }
+
+    private func chooseApplication(for target: Binding<ShortcutApplicationTarget?>) {
         let panel = NSOpenPanel()
         panel.title = "Choose Application"
         panel.prompt = "Choose"
@@ -356,9 +399,12 @@ struct SettingsView: View {
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK,
               let url = panel.url,
-              let target = ShortcutApplicationTarget(url: url),
-              let index = preferences.globalShortcutConfigurations.firstIndex(where: { $0.id == id }) else { return }
-        preferences.globalShortcutConfigurations[index].applicationTarget = target
+              let applicationTarget = ShortcutApplicationTarget(url: url) else { return }
+        target.wrappedValue = applicationTarget
+    }
+
+    private func removeCustomConfiguration(id: String) {
+        preferences.customShortcutConfigurations.removeAll { $0.id == id }
     }
 
     private func resetTrigger(for id: String) {
@@ -414,10 +460,80 @@ private struct GlobalShortcutRow: View {
                 }
                 Spacer()
                 GlobalHotkeyRecorder(
-                    configuration: $configuration,
-                    windowsKeyMapping: windowsKeyMapping,
+                    displayValue: configuration.displayValue(mapping: windowsKeyMapping),
+                    resetTitle: "Restore default shortcut",
+                    onCapture: { shortcut in
+                        configuration.shortcut = shortcut
+                        configuration.usesWindowsKey = false
+                    },
                     onResetTrigger: onResetTrigger
                 )
+            }
+
+            if configuration.action.supportsApplicationTarget || visibleIssue != nil {
+                HStack(spacing: 8) {
+                    if configuration.action.supportsApplicationTarget {
+                        Text("Application")
+                            .foregroundStyle(.secondary)
+                        Button(applicationTargetTitle, action: onChooseApplication)
+                            .contextMenu {
+                                if configuration.applicationTarget != nil {
+                                    Button(configuration.action.defaultApplicationName == nil ? "Clear Application" : "Use Default") {
+                                        configuration.applicationTarget = nil
+                                    }
+                                }
+                            }
+                    }
+                    Spacer()
+                    if let visibleIssue {
+                        Label(visibleIssue, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+                .padding(.leading, 30)
+            }
+        }
+        .opacity(globalEnabled ? 1 : 0.65)
+    }
+
+    private var visibleIssue: String? {
+        guard globalEnabled, configuration.isEnabled else { return nil }
+        return registrationIssue
+    }
+
+    private var applicationTargetTitle: String {
+        configuration.applicationTarget?.name
+            ?? configuration.action.defaultApplicationName
+            ?? "Choose Application…"
+    }
+}
+
+private struct CustomShortcutRow: View {
+    @Binding var configuration: CustomShortcutConfiguration
+    let globalEnabled: Bool
+    let registrationIssue: String?
+    let onChooseApplication: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 10) {
+                Toggle("", isOn: $configuration.isEnabled)
+                    .labelsHidden()
+                Text("Custom binding")
+                Spacer()
+                GlobalHotkeyRecorder(
+                    displayValue: configuration.shortcut?.displayValue ?? "Set shortcut",
+                    resetTitle: "Clear shortcut",
+                    onCapture: { configuration.shortcut = $0 },
+                    onResetTrigger: { configuration.shortcut = nil }
+                )
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .help("Delete custom binding")
             }
 
             HStack(spacing: 8) {
@@ -426,17 +542,10 @@ private struct GlobalShortcutRow: View {
                         Text(action.title).tag(action)
                     }
                 }
-                if configuration.action == .launchPinned {
-                    Picker("Pinned app", selection: pinnedIndexBinding) {
-                        ForEach(0..<9, id: \.self) { index in
-                            Text("#\(index + 1)").tag(index)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 64)
-                }
+                .frame(maxWidth: 330)
+
                 if configuration.action.supportsApplicationTarget {
-                    Button(applicationTargetTitle, action: onChooseApplication)
+                    Button("Extra: \(applicationTargetTitle)", action: onChooseApplication)
                         .contextMenu {
                             if configuration.applicationTarget != nil {
                                 Button(configuration.action.defaultApplicationName == nil ? "Clear Application" : "Use Default") {
@@ -445,14 +554,24 @@ private struct GlobalShortcutRow: View {
                             }
                         }
                 }
-                Spacer()
-                if let effectiveIssue, globalEnabled, configuration.isEnabled {
-                    Text(effectiveIssue)
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                if configuration.action == .launchPinned {
+                    Picker("Extra", selection: pinnedIndexBinding) {
+                        ForEach(0..<9, id: \.self) { index in
+                            Text("Pinned app #\(index + 1)").tag(index)
+                        }
+                    }
+                    .frame(width: 180)
                 }
+                Spacer()
             }
             .padding(.leading, 30)
+
+            if let visibleIssue {
+                Label(visibleIssue, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(.leading, 30)
+            }
         }
         .opacity(globalEnabled ? 1 : 0.65)
     }
@@ -462,9 +581,13 @@ private struct GlobalShortcutRow: View {
             get: { configuration.action },
             set: { action in
                 configuration.action = action
-                configuration.applicationTarget = nil
+                if !action.supportsApplicationTarget {
+                    configuration.applicationTarget = nil
+                }
                 if action == .launchPinned, configuration.pinnedIndex == nil {
                     configuration.pinnedIndex = 0
+                } else if action != .launchPinned {
+                    configuration.pinnedIndex = nil
                 }
             }
         )
@@ -477,13 +600,9 @@ private struct GlobalShortcutRow: View {
         )
     }
 
-    private var effectiveIssue: String? {
-        if configuration.action == .openApplication, configuration.applicationTarget == nil {
-            return "Choose an application"
-        }
-        if let target = configuration.applicationTarget, target.resolvedURL == nil {
-            return "Application not found"
-        }
+    private var visibleIssue: String? {
+        guard globalEnabled, configuration.isEnabled else { return nil }
+        if configuration.shortcut == nil { return "Set a shortcut" }
         return registrationIssue
     }
 
@@ -495,23 +614,23 @@ private struct GlobalShortcutRow: View {
 }
 
 private struct GlobalHotkeyRecorder: View {
-    @Binding var configuration: GlobalShortcutConfiguration
-    let windowsKeyMapping: WindowsKeyMapping
+    let displayValue: String
+    let resetTitle: String
+    let onCapture: (HotkeyShortcut) -> Void
     let onResetTrigger: () -> Void
     @State private var isRecording = false
 
     var body: some View {
-        Button(isRecording ? "Type shortcut" : configuration.displayValue(mapping: windowsKeyMapping)) {
+        Button(isRecording ? "Type shortcut" : displayValue) {
             isRecording = true
         }
         .font(.system(.body, design: .monospaced))
         .contextMenu {
-            Button("Restore default shortcut", action: onResetTrigger)
+            Button(resetTitle, action: onResetTrigger)
         }
         .background(ShortcutCaptureView(isRecording: isRecording) { captured in
             if let captured {
-                configuration.shortcut = captured
-                configuration.usesWindowsKey = false
+                onCapture(captured)
             }
             isRecording = false
         })

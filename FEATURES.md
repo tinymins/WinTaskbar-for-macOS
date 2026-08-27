@@ -21,7 +21,7 @@
 | Volume | Live volume/mute, slider and mute toggle | Live taskbar + build |
 | Input source | Current source plus selectable installed input sources | Live current source + build |
 | Wi-Fi | Power, scan, list, join/password, disconnect, rescan | Live popover; SSIDs require Location permission |
-| Global hotkeys | Windows-key mapping, configurable Windows shortcut catalog, Run dialog, snap layouts, task view, clipboard history, Spaces, system panels, and pinned apps | Live settings + migration self-test + build |
+| Global hotkeys | Fixed-action Windows mappings, custom key/action/extra bindings, two-sided conflict detection, Run dialog, snap layouts, task view, clipboard history, Spaces, system panels, and pinned apps | Live settings + migration/conflict self-test + build |
 | Dock control | Hide/restore Dock and orientation sync | Code path + build |
 | Login item | ServiceManagement registration and status | Code path + build |
 | Permissions | Accessibility, Screen Recording, Automation status/actions | Onboarding + settings UI |
