@@ -604,6 +604,8 @@ final class TaskbarWindowController {
     private let taskbarJumpListController = TaskbarJumpListController()
     private let startButtonContextMenuController = TaskbarJumpListController()
     private let startButtonPowerMenuController = TaskbarJumpListController()
+    private let taskbarContextMenuController = TaskbarJumpListController()
+    private let taskbarContextSubmenuController = TaskbarJumpListController()
     private let quickSettingsPanelController = QuickSettingsPanelController()
     private let inputSourcePanelController = InputSourcePanelController()
     private let clockCalendarPanelController = ClockCalendarPanelController()
@@ -621,6 +623,7 @@ final class TaskbarWindowController {
     private var taskbarCycleIndex: Int?
     private var keepsTransientSurfacesVisibleForSettings = false
     private var isStartMenuPresented = false
+    private var activeTaskbarContextSection: TaskbarContextMenuSection?
     private var localPointerMonitor: Any?
     private var globalPointerMonitor: Any?
     private var menuTrackingObservers: [NSObjectProtocol] = []
@@ -665,6 +668,13 @@ final class TaskbarWindowController {
         actions.toggleQuickLinkMenuHandler = { [weak self] screen in
             self?.toggleQuickLinkMenu(on: screen)
         }
+        taskbarContextMenuController.onDismiss = { [weak self] in
+            self?.taskbarContextSubmenuController.dismiss()
+            self?.activeTaskbarContextSection = nil
+        }
+        taskbarContextMenuController.preservesOutsideMouseDown = { [weak self] in
+            self?.taskbarContextSubmenuController.containsMouseLocation == true
+        }
         installPointerMonitors()
         installMenuTrackingObservers()
     }
@@ -679,6 +689,8 @@ final class TaskbarWindowController {
         taskbarJumpListController.dismiss()
         startButtonContextMenuController.dismiss()
         startButtonPowerMenuController.dismiss()
+        taskbarContextMenuController.dismiss()
+        taskbarContextSubmenuController.dismiss()
         quickSettingsPanelController.dismiss()
         inputSourcePanelController.dismiss()
         clockCalendarPanelController.dismiss(animated: false)
@@ -692,6 +704,8 @@ final class TaskbarWindowController {
         taskbarJumpListController.setKeepsVisibleForSettings(enabled)
         startButtonContextMenuController.setKeepsVisibleForSettings(enabled)
         startButtonPowerMenuController.setKeepsVisibleForSettings(enabled)
+        taskbarContextMenuController.setKeepsVisibleForSettings(enabled)
+        taskbarContextSubmenuController.setKeepsVisibleForSettings(enabled)
         quickSettingsPanelController.setKeepsVisibleForSettings(enabled)
         inputSourcePanelController.setKeepsVisibleForSettings(enabled)
         clockCalendarPanelController.setKeepsVisibleForSettings(enabled)
@@ -708,6 +722,47 @@ final class TaskbarWindowController {
             position: preferences.position,
             barHeight: CGFloat(preferences.barHeight),
             screen: activeScreen
+        )
+    }
+
+    func toggleTaskbarContextMenu(at clickPoint: CGPoint, in taskbarWindow: NSWindow) {
+        if taskbarContextMenuController.isVisible {
+            dismissTaskbarContextMenus()
+            return
+        }
+
+        let screen = taskbarWindow.screen ?? activeScreen
+        actions.closeStartMenu()
+        dismissTransientSurfaces()
+        revealTaskbar(on: screen)
+
+        let frame = TaskbarContextMenuGeometry.rootFrame(
+            clickPoint: clickPoint,
+            taskbarFrame: taskbarWindow.frame,
+            contentSize: TaskbarContextMenuMetrics.rootSize,
+            position: preferences.position,
+            screenFrame: screen.frame
+        )
+        let rootView = TaskbarContextMenuView(
+            onShowSection: { [weak self] section in
+                self?.showTaskbarContextSubmenu(
+                    section,
+                    parentFrame: frame,
+                    screenFrame: screen.frame
+                )
+            },
+            onCommand: { [weak self] command in
+                self?.performTaskbarContextCommand(command)
+            },
+            onDismissSubmenu: { [weak self] in
+                self?.dismissTaskbarContextSubmenu()
+            }
+        )
+        .frame(width: frame.width, height: frame.height)
+        taskbarContextMenuController.show(
+            rootView: AnyView(rootView),
+            frame: frame,
+            appearance: taskbarWindow.appearance
         )
     }
 
@@ -866,6 +921,8 @@ final class TaskbarWindowController {
             taskbarJumpListController.dismiss()
             startButtonContextMenuController.dismiss()
             startButtonPowerMenuController.dismiss()
+            taskbarContextMenuController.dismiss()
+            taskbarContextSubmenuController.dismiss()
         }
         let expectedCount = preferences.displayMode == .primary ? min(1, NSScreen.screens.count) : NSScreen.screens.count
         guard panels.count == expectedCount else {
@@ -940,7 +997,10 @@ final class TaskbarWindowController {
             externalStatusOverflowPanelController: externalStatusOverflowPanelController,
             shortcutEditorController: shortcutEditorController,
             recentDocuments: recentDocuments,
-            screen: screen
+            screen: screen,
+            showTaskbarContextMenu: { [weak self] point, window in
+                self?.toggleTaskbarContextMenu(at: point, in: window)
+            }
         ))
         applyAppearance(to: panel)
         return panel
@@ -1108,6 +1168,8 @@ final class TaskbarWindowController {
             || taskbarJumpListController.isVisible
             || startButtonContextMenuController.isVisible
             || startButtonPowerMenuController.isVisible
+            || taskbarContextMenuController.isVisible
+            || taskbarContextSubmenuController.isVisible
             || quickSettingsPanelController.isVisible
             || inputSourcePanelController.isVisible
             || clockCalendarPanelController.isVisible
@@ -1141,6 +1203,84 @@ final class TaskbarWindowController {
             frame: frame,
             appearance: appearance
         )
+    }
+
+    private func showTaskbarContextSubmenu(
+        _ section: TaskbarContextMenuSection,
+        parentFrame: CGRect,
+        screenFrame: CGRect
+    ) {
+        guard activeTaskbarContextSection != section || !taskbarContextSubmenuController.isVisible else {
+            return
+        }
+        activeTaskbarContextSection = section
+        let windows = taskbarWindowMenuEntries
+        let rowCount: Int
+        switch section {
+        case .terminal: rowCount = 2
+        case .goTo: rowCount = 6
+        case .apps: rowCount = 5
+        case .windows:
+            rowCount = min(max(windows.count, 1), TaskbarContextMenuMetrics.maximumWindowRows)
+        }
+        let size = TaskbarContextMenuMetrics.submenuSize(rowCount: rowCount)
+        let frame = TaskbarContextMenuGeometry.submenuFrame(
+            parentFrame: parentFrame,
+            rowIndex: section.rowIndex,
+            contentSize: size,
+            screenFrame: screenFrame
+        )
+        let submenu = TaskbarContextSubmenuView(
+            section: section,
+            windows: windows,
+            actions: actions,
+            onOpenWindow: { [weak self] window in
+                self?.windowActivator.raise(window: window)
+            },
+            onDismiss: { [weak self] in
+                self?.dismissTaskbarContextMenus()
+            }
+        )
+        .frame(width: size.width, height: size.height)
+        taskbarContextSubmenuController.show(
+            rootView: AnyView(submenu),
+            frame: frame,
+            appearance: appearance
+        )
+    }
+
+    private func performTaskbarContextCommand(_ command: TaskbarContextMenuCommand) {
+        dismissTaskbarContextMenus()
+        switch command {
+        case .desktop: actions.showDesktop()
+        case .settings: actions.open(.systemSettings)
+        case .taskManager: actions.open(.activityMonitor)
+        case .taskbarSettings: actions.openSettings(page: .taskbar)
+        }
+    }
+
+    private func dismissTaskbarContextMenus() {
+        taskbarContextMenuController.dismiss()
+        taskbarContextSubmenuController.dismiss()
+        activeTaskbarContextSection = nil
+    }
+
+    private func dismissTaskbarContextSubmenu() {
+        taskbarContextSubmenuController.dismiss()
+        activeTaskbarContextSection = nil
+    }
+
+    private var taskbarWindowMenuEntries: [TaskbarWindowMenuEntry] {
+        apps.taskbarItems(
+            pinnedBundleIDs: preferences.pinnedBundleIDs,
+            badges: [:],
+            showFinder: preferences.showFinder
+        ).flatMap { item -> [TaskbarWindowMenuEntry] in
+            guard let pid = item.processIdentifier else { return [] }
+            return windowsService.windows(forPID: pid).map {
+                TaskbarWindowMenuEntry(window: $0, appName: item.name, icon: item.icon)
+            }
+        }
     }
 
     private func dismissStartButtonContextMenus() {
@@ -1517,6 +1657,7 @@ enum StartMenuGeometry {
 @MainActor
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     var onVisibilityChanged: ((Bool) -> Void)?
+    private let navigation = SettingsNavigationState()
 
     init(preferences: PreferencesStore) {
         let window = NSWindow(
@@ -1528,14 +1669,18 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.title = "WinTaskbar Settings"
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 720, height: 540)
-        window.contentView = NSHostingView(rootView: SettingsView(preferences: preferences))
+        window.contentView = NSHostingView(rootView: SettingsView(
+            preferences: preferences,
+            navigation: navigation
+        ))
         super.init(window: window)
         window.delegate = self
     }
 
     required init?(coder: NSCoder) { nil }
 
-    func show() {
+    func show(page: SettingsPage? = nil) {
+        if let page { navigation.selectedPage = page }
         onVisibilityChanged?(true)
         NSApp.activate(ignoringOtherApps: true)
         window?.center()

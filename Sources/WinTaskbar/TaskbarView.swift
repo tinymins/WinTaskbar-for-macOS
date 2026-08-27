@@ -105,6 +105,7 @@ struct TaskbarView: View {
     let shortcutEditorController: ShortcutEditorController
     @ObservedObject var recentDocuments: RecentDocumentsService
     let screen: NSScreen
+    let showTaskbarContextMenu: @MainActor (CGPoint, NSWindow) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var dragGeometry = TaskbarDragGeometryState()
     @State private var dragPreviewState = TaskbarDragPreviewState()
@@ -154,7 +155,14 @@ struct TaskbarView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: contentAlignment)
-            .background(panelBackground)
+            .background {
+                panelBackground
+                    .overlay {
+                        TaskbarEmptyAreaContextClickAnchor(
+                            onContextClick: showTaskbarContextMenu
+                        )
+                    }
+            }
             .preferredColorScheme(preferredColorScheme)
             .coordinateSpace(name: TaskbarDragCoordinateSpace.name)
             .onPreferenceChange(TaskbarItemFramePreferenceKey.self) { dragGeometry.itemFrames = $0 }

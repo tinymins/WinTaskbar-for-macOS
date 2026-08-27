@@ -63,7 +63,7 @@ enum SystemQuickAccess {
 final class AppActions: ObservableObject {
     var toggleStartMenuHandler: ((NSScreen?) -> Void)?
     var toggleQuickLinkMenuHandler: ((NSScreen?) -> Void)?
-    var openSettingsHandler: (() -> Void)?
+    var openSettingsHandler: ((SettingsPage?) -> Void)?
     var closeStartMenuHandler: (() -> Void)?
     var fitWindowsHandler: (() -> Void)?
     var showDesktopHandler: (() -> Void)?
@@ -71,7 +71,7 @@ final class AppActions: ObservableObject {
 
     func toggleStartMenu(on screen: NSScreen? = nil) { toggleStartMenuHandler?(screen) }
     func toggleQuickLinkMenu(on screen: NSScreen? = nil) { toggleQuickLinkMenuHandler?(screen) }
-    func openSettings() { openSettingsHandler?() }
+    func openSettings(page: SettingsPage? = nil) { openSettingsHandler?(page) }
     func closeStartMenu() { closeStartMenuHandler?() }
     func fitWindows() { fitWindowsHandler?() }
     func showDesktop() { showDesktopHandler?() }
@@ -88,6 +88,10 @@ final class AppActions: ObservableObject {
             guard let url = URL(string: "x-apple.systempreferences:\(identifier)") else { return }
             NSWorkspace.shared.open(url)
         }
+    }
+
+    func openFolder(_ url: URL) {
+        NSWorkspace.shared.open(url)
     }
 
     func showForceQuitApplications() {

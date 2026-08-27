@@ -29,19 +29,24 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     }
 }
 
+@MainActor
+final class SettingsNavigationState: ObservableObject {
+    @Published var selectedPage: SettingsPage = .general
+}
+
 struct SettingsView: View {
     @ObservedObject var preferences: PreferencesStore
+    @ObservedObject var navigation: SettingsNavigationState
     @ObservedObject private var dockToggle = DockToggleService.shared
     @ObservedObject private var loginItem = LoginItemService.shared
     @ObservedObject private var globalHotkeys = GlobalHotkeysService.shared
-    @State private var selectedPage = SettingsPage.general
     @State private var showsDateTimeFormat = false
     @State private var editingAdditionalClockIndex: Int?
     @State private var additionalClockDraft = AdditionalClockConfiguration.defaults[0]
 
     var body: some View {
         HStack(spacing: 0) {
-            List(SettingsPage.allCases, selection: $selectedPage) { page in
+            List(SettingsPage.allCases, selection: $navigation.selectedPage) { page in
                 Label(LocalizedStringKey(page.rawValue), systemImage: page.symbol)
                     .tag(page)
             }
@@ -52,20 +57,20 @@ struct SettingsView: View {
 
             VStack(spacing: 0) {
                 HStack(spacing: 10) {
-                    if selectedPage == .dateTime, showsDateTimeFormat {
+                    if navigation.selectedPage == .dateTime, showsDateTimeFormat {
                         SettingsBackButton {
                             withAnimation(.easeInOut(duration: 0.24)) {
                                 showsDateTimeFormat = false
                             }
                         }
                     }
-                    Image(systemName: selectedPage.symbol)
+                    Image(systemName: navigation.selectedPage.symbol)
                         .foregroundStyle(.secondary)
-                    if selectedPage == .dateTime, showsDateTimeFormat {
+                    if navigation.selectedPage == .dateTime, showsDateTimeFormat {
                         Text("Date & time > Format")
                             .font(.title2.weight(.semibold))
                     } else {
-                        Text(LocalizedStringKey(selectedPage.rawValue))
+                        Text(LocalizedStringKey(navigation.selectedPage.rawValue))
                             .font(.title2.weight(.semibold))
                     }
                     Spacer()
@@ -79,7 +84,7 @@ struct SettingsView: View {
         .onAppear {
             loginItem.refresh()
         }
-        .onChange(of: selectedPage) { _ in showsDateTimeFormat = false }
+        .onChange(of: navigation.selectedPage) { _ in showsDateTimeFormat = false }
         .sheet(isPresented: Binding(
             get: { editingAdditionalClockIndex != nil },
             set: { if !$0 { editingAdditionalClockIndex = nil } }
@@ -94,7 +99,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var selectedPageContent: some View {
-        switch selectedPage {
+        switch navigation.selectedPage {
         case .general: settingsPage(general)
         case .appearance: settingsPage(appearance)
         case .startMenu: settingsPage(startMenu)

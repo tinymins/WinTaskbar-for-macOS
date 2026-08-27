@@ -69,7 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             startMenu?.setSettingsObservationMode(visible)
             taskbar?.setSettingsObservationMode(visible)
         }
-        actions.openSettingsHandler = { [weak settings] in settings?.show() }
+        actions.openSettingsHandler = { [weak settings] page in settings?.show(page: page) }
         actions.fitWindowsHandler = { [weak self] in
             self?.windowFittingService.fitAllWindowsToFreeSpace()
         }
@@ -1211,6 +1211,50 @@ func runSelfTest() async -> Int32 {
               position: .bottom,
               screenFrame: jumpListScreen
           ).minX == 8,
+          TaskbarContextMenuMetrics.rootSize == CGSize(width: 200, height: 340),
+          TaskbarContextMenuSection.allCases.map(\.title) == [
+              "Terminal", "Go To", "Apps", "Windows"
+          ],
+          TaskbarContextMenuGeometry.rootFrame(
+              clickPoint: CGPoint(x: 700, y: 24),
+              taskbarFrame: CGRect(x: 0, y: 0, width: 1200, height: 48),
+              contentSize: TaskbarContextMenuMetrics.rootSize,
+              position: .bottom,
+              screenFrame: jumpListScreen
+          ) == CGRect(x: 600, y: 56, width: 200, height: 340),
+          TaskbarContextMenuGeometry.rootFrame(
+              clickPoint: CGPoint(x: 700, y: 776),
+              taskbarFrame: CGRect(x: 0, y: 752, width: 1200, height: 48),
+              contentSize: TaskbarContextMenuMetrics.rootSize,
+              position: .top,
+              screenFrame: jumpListScreen
+          ) == CGRect(x: 600, y: 404, width: 200, height: 340),
+          TaskbarContextMenuGeometry.rootFrame(
+              clickPoint: CGPoint(x: 24, y: 400),
+              taskbarFrame: CGRect(x: 0, y: 0, width: 48, height: 800),
+              contentSize: TaskbarContextMenuMetrics.rootSize,
+              position: .left,
+              screenFrame: jumpListScreen
+          ) == CGRect(x: 56, y: 230, width: 200, height: 340),
+          TaskbarContextMenuGeometry.rootFrame(
+              clickPoint: CGPoint(x: 1176, y: 400),
+              taskbarFrame: CGRect(x: 1152, y: 0, width: 48, height: 800),
+              contentSize: TaskbarContextMenuMetrics.rootSize,
+              position: .right,
+              screenFrame: jumpListScreen
+          ) == CGRect(x: 944, y: 230, width: 200, height: 340),
+          TaskbarContextMenuGeometry.submenuFrame(
+              parentFrame: CGRect(x: 600, y: 56, width: 200, height: 340),
+              rowIndex: 0,
+              contentSize: TaskbarContextMenuMetrics.submenuSize(rowCount: 2),
+              screenFrame: jumpListScreen
+          ) == CGRect(x: 808, y: 329, width: 200, height: 84),
+          TaskbarContextMenuGeometry.submenuFrame(
+              parentFrame: CGRect(x: 992, y: 56, width: 200, height: 340),
+              rowIndex: 0,
+              contentSize: TaskbarContextMenuMetrics.submenuSize(rowCount: 2),
+              screenFrame: jumpListScreen
+          ) == CGRect(x: 784, y: 329, width: 200, height: 84),
           TaskbarJumpListInteractionPolicy.shouldDismissMenuOnAppHover(hovering: true),
           !TaskbarJumpListInteractionPolicy.shouldDismissMenuOnAppHover(hovering: false),
           ShortcutEditorMetrics.contentSize(shortcutCount: 0) == CGSize(width: 540, height: 206),

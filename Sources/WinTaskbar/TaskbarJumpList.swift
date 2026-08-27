@@ -130,7 +130,13 @@ final class TaskbarJumpListController: ObservableObject {
     private var keepsVisibleForSettings = false
     private var preservesOnTrayItemMouseDown = false
 
+    var onDismiss: (() -> Void)?
+    var preservesOutsideMouseDown: (() -> Bool)?
+
     var isVisible: Bool { panel?.isVisible == true }
+    var containsMouseLocation: Bool {
+        panel?.isVisible == true && panel?.frame.contains(NSEvent.mouseLocation) == true
+    }
 
     init() {
         backdrop.material = .popover
@@ -197,6 +203,7 @@ final class TaskbarJumpListController: ObservableObject {
         panel?.orderOut(nil)
         preservesOnTrayItemMouseDown = false
         removeEventMonitors()
+        onDismiss?()
     }
 
     func updateFrame(
@@ -258,6 +265,7 @@ final class TaskbarJumpListController: ObservableObject {
                ),
                let panel,
                !panel.frame.contains(NSEvent.mouseLocation) {
+                if preservesOutsideMouseDown?() == true { return event }
                 if preservesOnTrayItemMouseDown, isTrayItemMouseDown(event) { return event }
                 dismiss()
             }
@@ -436,6 +444,7 @@ struct TaskbarJumpListRow: View {
     var trailingSystemImage: String?
     var reservesIconSpace = true
     var isEnabled = true
+    var onHoverChanged: ((Bool) -> Void)?
     let action: () -> Void
     @State private var isHovering = false
 
@@ -478,6 +487,9 @@ struct TaskbarJumpListRow: View {
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
-        .onHover { isHovering = $0 }
+        .onHover {
+            isHovering = $0
+            onHoverChanged?($0)
+        }
     }
 }
