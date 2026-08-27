@@ -111,6 +111,7 @@ struct TaskbarView: View {
     @State private var taskbarOrderRevision = 0
     @State private var dragGrabOffset = CGSize.zero
     @State private var dragFixedCrossAxisPosition: CGFloat?
+    @ObservedObject private var trayDragSession = WindowsTrayDragSessionState.shared
 
     var body: some View {
         GeometryReader { geometry in
@@ -407,14 +408,25 @@ struct TaskbarView: View {
     private var tray: some View {
         if preferences.position.isHorizontal {
             HStack(spacing: 0) { trayContents }
+                .animation(
+                    reduceMotion ? nil : TaskbarDragMotion.reorder,
+                    value: reorderableTrayItems.map(\.id)
+                )
         } else {
             VStack(spacing: 0) { trayContents }
+                .animation(
+                    reduceMotion ? nil : TaskbarDragMotion.reorder,
+                    value: reorderableTrayItems.map(\.id)
+                )
         }
     }
 
     @ViewBuilder
     private var trayContents: some View {
-        if !externalStatusItems.allItems(on: screen).isEmpty {
+        if ExternalStatusOverflowVisibilityPolicy.shouldShowButton(
+            hiddenItemCount: externalStatusItems.items(on: screen, visibility: .hidden).count,
+            isDragging: trayDragSession.draggedItemID != nil
+        ) {
             ExternalStatusOverflowButton(
                 service: externalStatusItems,
                 panelController: externalStatusOverflowPanelController,

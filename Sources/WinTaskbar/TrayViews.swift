@@ -59,6 +59,7 @@ struct WiFiTrayView: View {
             primaryAction: presentPanelIfNeeded,
             dragIdentifier: dragConfiguration.identifier,
             dropAxis: dragConfiguration.dropAxis,
+            dropHoverAction: dragConfiguration.onDrop,
             dropAction: dragConfiguration.onDrop
         ) {
             Image(systemName: service.wifiPoweredOn ? (service.wifiSSID == nil ? "wifi.exclamationmark" : "wifi") : "wifi.slash")
@@ -95,6 +96,7 @@ struct VolumeTrayView: View {
             primaryAction: presentPanelIfNeeded,
             dragIdentifier: dragConfiguration.identifier,
             dropAxis: dragConfiguration.dropAxis,
+            dropHoverAction: dragConfiguration.onDrop,
             dropAction: dragConfiguration.onDrop
         ) {
             Image(systemName: symbol)
@@ -142,6 +144,7 @@ struct BatteryTrayView: View {
                 primaryAction: presentPanelIfNeeded,
                 dragIdentifier: dragConfiguration.identifier,
                 dropAxis: dragConfiguration.dropAxis,
+                dropHoverAction: dragConfiguration.onDrop,
                 dropAction: dragConfiguration.onDrop
             ) {
                 HStack(spacing: 3) {
@@ -194,6 +197,7 @@ struct InputSourceTrayView: View {
             primaryAction: togglePanel,
             dragIdentifier: dragConfiguration.identifier,
             dropAxis: dragConfiguration.dropAxis,
+            dropHoverAction: dragConfiguration.onDrop,
             dropAction: dragConfiguration.onDrop
         ) {
             Text(currentAbbreviation)

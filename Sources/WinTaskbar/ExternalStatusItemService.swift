@@ -697,6 +697,12 @@ enum ExternalStatusOverflowMetrics {
     }
 }
 
+enum ExternalStatusOverflowVisibilityPolicy {
+    static func shouldShowButton(hiddenItemCount: Int, isDragging: Bool) -> Bool {
+        hiddenItemCount > 0 || isDragging
+    }
+}
+
 @MainActor
 final class ExternalStatusOverflowPanelController: ObservableObject {
     private let panelController = TaskbarJumpListController()
@@ -779,11 +785,12 @@ struct ExternalStatusOverflowButton: View {
             dropAxis: position.isHorizontal ? .horizontal : .vertical,
             dropValidator: service.isExternalItem,
             dropAction: { itemID, _ in
-                service.toggleHidden(itemID: itemID)
+                service.setHidden(true, itemID: itemID)
                 if service.items(on: screen, visibility: .hidden).isEmpty {
                     panelController.dismiss()
                 }
-            }
+            },
+            dropTipSymbolName: "pin.slash"
         ) {
             Image(systemName: chevronName)
                 .font(.system(size: 12, weight: .semibold))
@@ -861,6 +868,14 @@ struct ExternalStatusItemButton: View {
             dropAxis: horizontal ? .horizontal : .vertical,
             dropValidator: { sourceID in
                 visibility == .visible || service.isExternalItem(sourceID)
+            },
+            dropHoverAction: { sourceID, after in
+                service.move(
+                    itemID: sourceID,
+                    relativeTo: item.id,
+                    after: after,
+                    visibility: visibility
+                )
             },
             dropAction: { sourceID, after in
                 service.move(
