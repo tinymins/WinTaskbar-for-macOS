@@ -173,12 +173,18 @@ final class WindowsService {
     private let thumbnailCache = WindowThumbnailCache()
 
     func windows(forPID pid: pid_t) -> [WindowInfo] {
-        let minimizedWindowFrames = minimizedWindowFrames(forPID: pid)
+        windows(forPIDs: [pid])[pid] ?? []
+    }
+
+    func windows(forPIDs pids: [pid_t]) -> [pid_t: [WindowInfo]] {
+        let requestedPIDs = Set(pids)
+        guard !requestedPIDs.isEmpty else { return [:] }
         guard let raw = CGWindowListCopyWindowInfo(WindowPreviewWindowPolicy.listOptions, kCGNullWindowID)
-                as? [[String: Any]] else { return [] }
-        return raw.compactMap { info in
+                as? [[String: Any]] else { return [:] }
+        let candidates: [(pid: pid_t, windowID: CGWindowID, title: String, frame: CGRect, isOnScreen: Bool)]
+        candidates = raw.compactMap { info in
             guard let ownerPID = info[kCGWindowOwnerPID as String] as? pid_t,
-                  ownerPID == pid,
+                  requestedPIDs.contains(ownerPID),
                   let windowID = info[kCGWindowNumber as String] as? CGWindowID,
                   let bounds = info[kCGWindowBounds as String] as? [String: CGFloat],
                   (info[kCGWindowLayer as String] as? Int ?? 0) == 0 else { return nil }
@@ -191,19 +197,29 @@ final class WindowsService {
             )
             guard frame.width > 80, frame.height > 50 else { return nil }
             let isOnScreen = info[kCGWindowIsOnscreen as String] as? Bool ?? false
-            guard WindowPreviewWindowPolicy.shouldInclude(
-                isOnScreen: isOnScreen,
-                frame: frame,
-                minimizedWindowFrames: minimizedWindowFrames
-            ) else { return nil }
-            return WindowInfo(
-                windowID: windowID,
-                title: title,
-                ownerPID: ownerPID,
-                frame: frame,
-                isMinimized: !isOnScreen
-            )
+            return (ownerPID, windowID, title, frame, isOnScreen)
         }
+
+        let pidsWithOffscreenCandidates = Set(candidates.lazy.filter { !$0.isOnScreen }.map(\.pid))
+        let minimizedFramesByPID = Dictionary(uniqueKeysWithValues: pidsWithOffscreenCandidates.map {
+            ($0, minimizedWindowFrames(forPID: $0))
+        })
+        var windowsByPID: [pid_t: [WindowInfo]] = [:]
+        for candidate in candidates {
+            guard WindowPreviewWindowPolicy.shouldInclude(
+                isOnScreen: candidate.isOnScreen,
+                frame: candidate.frame,
+                minimizedWindowFrames: minimizedFramesByPID[candidate.pid] ?? []
+            ) else { continue }
+            windowsByPID[candidate.pid, default: []].append(WindowInfo(
+                windowID: candidate.windowID,
+                title: candidate.title,
+                ownerPID: candidate.pid,
+                frame: candidate.frame,
+                isMinimized: !candidate.isOnScreen
+            ))
+        }
+        return windowsByPID
     }
 
     func cacheThumbnails(forPID pid: pid_t) {

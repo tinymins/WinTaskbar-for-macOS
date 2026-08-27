@@ -1217,6 +1217,7 @@ func runSelfTest() async -> Int32 {
           TaskbarContextMenuSection.allCases.map(\.title) == [
               "Terminal", "Go To", "Apps", "Windows"
           ],
+          TaskbarContextMenuSection.allCases.filter(\.usesWindowEntries) == [.windows],
           TaskbarContextMenuGeometry.rootFrame(
               clickPoint: CGPoint(x: 700, y: 24),
               taskbarFrame: CGRect(x: 0, y: 0, width: 1200, height: 48),

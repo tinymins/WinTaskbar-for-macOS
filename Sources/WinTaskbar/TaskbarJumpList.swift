@@ -165,7 +165,8 @@ final class TaskbarJumpListController: ObservableObject {
         position: TaskbarPosition,
         preservesOnTrayItemMouseDown: Bool = false,
         cornerRadius: CGFloat = 10,
-        showsBorder: Bool = true
+        showsBorder: Bool = true,
+        makesKey: Bool = true
     ) {
         guard let anchorWindow = anchorView.window else { return }
         let windowRect = anchorView.convert(anchorView.bounds, to: nil)
@@ -184,7 +185,8 @@ final class TaskbarJumpListController: ObservableObject {
             appearance: anchorWindow.appearance,
             preservesOnTrayItemMouseDown: preservesOnTrayItemMouseDown,
             cornerRadius: cornerRadius,
-            showsBorder: showsBorder
+            showsBorder: showsBorder,
+            makesKey: makesKey
         )
     }
 
@@ -194,17 +196,25 @@ final class TaskbarJumpListController: ObservableObject {
         appearance: NSAppearance?,
         preservesOnTrayItemMouseDown: Bool = false,
         cornerRadius: CGFloat = 10,
-        showsBorder: Bool = true
+        showsBorder: Bool = true,
+        makesKey: Bool = true
     ) {
         let panel = panel ?? makePanel()
+        let wasVisible = panel.isVisible
         self.preservesOnTrayItemMouseDown = preservesOnTrayItemMouseDown
         hostingView.rootView = rootView
         backdrop.layer?.cornerRadius = cornerRadius
         backdrop.layer?.borderWidth = showsBorder ? 0.5 : 0
         panel.appearance = appearance
         panel.setFrame(frame, display: true)
-        panel.makeKeyAndOrderFront(nil)
-        installEventMonitors()
+        if !wasVisible {
+            if makesKey {
+                panel.makeKeyAndOrderFront(nil)
+            } else {
+                panel.orderFront(nil)
+            }
+            installEventMonitors()
+        }
     }
 
     func dismiss() {

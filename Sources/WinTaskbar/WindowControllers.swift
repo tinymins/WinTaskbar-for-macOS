@@ -624,6 +624,7 @@ final class TaskbarWindowController {
     private var keepsTransientSurfacesVisibleForSettings = false
     private var isStartMenuPresented = false
     private var activeTaskbarContextSection: TaskbarContextMenuSection?
+    private var taskbarContextWindowEntriesCache: [TaskbarWindowMenuEntry]?
     private var localPointerMonitor: Any?
     private var globalPointerMonitor: Any?
     private var menuTrackingObservers: [NSObjectProtocol] = []
@@ -671,6 +672,7 @@ final class TaskbarWindowController {
         taskbarContextMenuController.onDismiss = { [weak self] in
             self?.taskbarContextSubmenuController.dismiss()
             self?.activeTaskbarContextSection = nil
+            self?.taskbarContextWindowEntriesCache = nil
         }
         taskbarContextMenuController.preservesOutsideMouseDown = { [weak self] in
             self?.taskbarContextSubmenuController.containsMouseLocation == true
@@ -732,6 +734,7 @@ final class TaskbarWindowController {
         }
 
         let screen = taskbarWindow.screen ?? activeScreen
+        taskbarContextWindowEntriesCache = nil
         actions.closeStartMenu()
         dismissTransientSurfaces()
         revealTaskbar(on: screen)
@@ -1216,7 +1219,18 @@ final class TaskbarWindowController {
             return
         }
         activeTaskbarContextSection = section
-        let windows = taskbarWindowMenuEntries
+        let windows: [TaskbarWindowMenuEntry]
+        if section.usesWindowEntries {
+            if let taskbarContextWindowEntriesCache {
+                windows = taskbarContextWindowEntriesCache
+            } else {
+                let entries = taskbarWindowMenuEntries
+                taskbarContextWindowEntriesCache = entries
+                windows = entries
+            }
+        } else {
+            windows = []
+        }
         let rowCount: Int
         switch section {
         case .terminal: rowCount = 2
@@ -1249,7 +1263,8 @@ final class TaskbarWindowController {
             frame: frame,
             appearance: appearance,
             cornerRadius: TaskbarContextMenuMetrics.cornerRadius,
-            showsBorder: false
+            showsBorder: false,
+            makesKey: false
         )
     }
 
@@ -1267,6 +1282,7 @@ final class TaskbarWindowController {
         taskbarContextMenuController.dismiss()
         taskbarContextSubmenuController.dismiss()
         activeTaskbarContextSection = nil
+        taskbarContextWindowEntriesCache = nil
     }
 
     private func dismissTaskbarContextSubmenu() {
@@ -1275,13 +1291,15 @@ final class TaskbarWindowController {
     }
 
     private var taskbarWindowMenuEntries: [TaskbarWindowMenuEntry] {
-        apps.taskbarItems(
+        let items = apps.taskbarItems(
             pinnedBundleIDs: preferences.pinnedBundleIDs,
             badges: [:],
             showFinder: preferences.showFinder
-        ).flatMap { item -> [TaskbarWindowMenuEntry] in
+        )
+        let windowsByPID = windowsService.windows(forPIDs: items.compactMap(\.processIdentifier))
+        return items.flatMap { item -> [TaskbarWindowMenuEntry] in
             guard let pid = item.processIdentifier else { return [] }
-            return windowsService.windows(forPID: pid).map {
+            return (windowsByPID[pid] ?? []).map {
                 TaskbarWindowMenuEntry(window: $0, appName: item.name, icon: item.icon)
             }
         }

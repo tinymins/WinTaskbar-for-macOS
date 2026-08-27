@@ -33,6 +33,8 @@ enum TaskbarContextMenuSection: CaseIterable {
         case .windows: 3
         }
     }
+
+    var usesWindowEntries: Bool { self == .windows }
 }
 
 enum TaskbarContextMenuCommand {
