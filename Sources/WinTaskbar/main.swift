@@ -1122,7 +1122,7 @@ func runSelfTest() async -> Int32 {
           ) == .dismiss,
           WindowPreviewThumbnailGeometry.thumbnailSize(
               for: CGSize(width: 1920, height: 1080)
-          ) == CGSize(width: 176, height: 99),
+          ) == CGSize(width: 177, height: 100),
           WindowPreviewThumbnailGeometry.thumbnailSize(
               for: CGSize(width: 1200, height: 900)
           ) == CGSize(width: 133, height: 100),
@@ -1131,7 +1131,7 @@ func runSelfTest() async -> Int32 {
           ) == CGSize(width: 56, height: 100),
           WindowPreviewThumbnailGeometry.thumbnailSize(
               for: CGSize(width: 3200, height: 900)
-          ) == CGSize(width: 176, height: 49),
+          ) == CGSize(width: 355, height: 100),
           WindowPreviewThumbnailGeometry.contentWidth(
               for: CGSize(width: 1080, height: 1920)
           ) == 120,
@@ -1141,16 +1141,16 @@ func runSelfTest() async -> Int32 {
           WindowPreviewThumbnailGeometry.horizontalInset(
               for: CGSize(width: 1920, height: 1080)
           ) == 0,
-          WindowPreviewContentGeometry.itemSize(for: landscapePreviewWindow) == CGSize(width: 192, height: 140),
+          WindowPreviewContentGeometry.itemSize(for: landscapePreviewWindow) == CGSize(width: 193, height: 141),
           WindowPreviewContentGeometry.itemSize(for: portraitPreviewWindow) == CGSize(width: 136, height: 141),
           WindowPreviewContentGeometry.contentSize(
               windows: [landscapePreviewWindow, portraitPreviewWindow],
               position: .bottom
-          ) == CGSize(width: 328, height: 141),
+          ) == CGSize(width: 329, height: 141),
           WindowPreviewContentGeometry.contentSize(
               windows: [landscapePreviewWindow, portraitPreviewWindow],
               position: .left
-          ) == CGSize(width: 192, height: 281),
+          ) == CGSize(width: 193, height: 282),
           WindowPreviewContentGeometry.contentSize(windows: [], position: .bottom)
               == WindowPreviewMetrics.emptySize,
           WindowPreviewPanelGeometry.frame(

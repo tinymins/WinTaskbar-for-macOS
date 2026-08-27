@@ -615,18 +615,16 @@ struct WindowPreviewHoverPolicy {
 }
 
 struct WindowPreviewThumbnailGeometry {
-    static let maximumSize = CGSize(width: 176, height: 100)
+    static let height: CGFloat = 100
+    static let fallbackSize = CGSize(width: 176, height: height)
     static let minimumContentWidth: CGFloat = 120
 
     static func thumbnailSize(for sourceSize: CGSize) -> CGSize {
-        guard sourceSize.width > 0, sourceSize.height > 0 else { return maximumSize }
-        let scale = min(
-            maximumSize.width / sourceSize.width,
-            maximumSize.height / sourceSize.height
-        )
+        guard sourceSize.width > 0, sourceSize.height > 0 else { return fallbackSize }
+        let width = sourceSize.width / sourceSize.height * height
         return CGSize(
-            width: (sourceSize.width * scale).rounded(.down),
-            height: (sourceSize.height * scale).rounded(.down)
+            width: width.rounded(.down),
+            height: height
         )
     }
 
