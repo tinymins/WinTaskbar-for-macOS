@@ -154,6 +154,12 @@ final class WindowThumbnailCache {
 
     func image(for windowID: CGWindowID, capture: () -> NSImage?) -> NSImage? {
         let key = NSNumber(value: windowID)
+        if let image = images.object(forKey: key) { return image }
+        return refreshImage(for: windowID, capture: capture)
+    }
+
+    func refreshImage(for windowID: CGWindowID, capture: () -> NSImage?) -> NSImage? {
+        let key = NSNumber(value: windowID)
         if let image = capture() {
             images.setObject(image, forKey: key)
             return image
@@ -202,21 +208,27 @@ final class WindowsService {
 
     func cacheThumbnails(forPID pid: pid_t) {
         for window in windows(forPID: pid) {
-            _ = thumbnail(for: window)
+            _ = thumbnailCache.refreshImage(for: window.windowID) {
+                captureThumbnail(for: window)
+            }
         }
     }
 
     func thumbnail(for window: WindowInfo) -> NSImage? {
         thumbnailCache.image(for: window.windowID) {
-            guard !window.isMinimized else { return nil }
-            guard let image = CGWindowListCreateImage(
-                .null,
-                .optionIncludingWindow,
-                window.windowID,
-                [.boundsIgnoreFraming, .bestResolution]
-            ) else { return nil }
-            return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
+            captureThumbnail(for: window)
         }
+    }
+
+    private func captureThumbnail(for window: WindowInfo) -> NSImage? {
+        guard !window.isMinimized else { return nil }
+        guard let image = CGWindowListCreateImage(
+            .null,
+            .optionIncludingWindow,
+            window.windowID,
+            [.boundsIgnoreFraming, .bestResolution]
+        ) else { return nil }
+        return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
     }
 
     private func minimizedWindowFrames(forPID pid: pid_t) -> [CGRect] {

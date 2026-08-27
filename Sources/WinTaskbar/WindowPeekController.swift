@@ -192,10 +192,13 @@ final class WindowPeekController {
         currentWindowID = window.windowID
         reconcilePanels(window: window, image: image)
         for panel in panels.values {
-            if !panel.isVisible {
-                panel.alphaValue = 0
-                panel.orderFrontRegardless()
+            if panel.isVisible {
+                panel.alphaValue = 1
+                panel.contentView?.displayIfNeeded()
+                continue
             }
+            panel.alphaValue = 0
+            panel.orderFrontRegardless()
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.12
                 context.timingFunction = CAMediaTimingFunction(name: .easeOut)

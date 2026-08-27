@@ -1520,9 +1520,21 @@ func runSelfTest() async -> Int32 {
     let thumbnailCache = WindowThumbnailCache()
     let capturedThumbnail = NSImage(size: NSSize(width: 320, height: 180))
     let refreshedThumbnail = NSImage(size: NSSize(width: 640, height: 360))
-    guard thumbnailCache.image(for: 101, capture: { capturedThumbnail }) === capturedThumbnail,
-          thumbnailCache.image(for: 101, capture: { nil }) === capturedThumbnail,
-          thumbnailCache.image(for: 101, capture: { refreshedThumbnail }) === refreshedThumbnail,
+    var thumbnailCaptureCount = 0
+    guard thumbnailCache.image(for: 101, capture: {
+        thumbnailCaptureCount += 1
+        return capturedThumbnail
+    }) === capturedThumbnail,
+          thumbnailCache.image(for: 101, capture: {
+              thumbnailCaptureCount += 1
+              return refreshedThumbnail
+          }) === capturedThumbnail,
+          thumbnailCaptureCount == 1,
+          thumbnailCache.refreshImage(for: 101, capture: {
+              thumbnailCaptureCount += 1
+              return refreshedThumbnail
+          }) === refreshedThumbnail,
+          thumbnailCaptureCount == 2,
           thumbnailCache.image(for: 202, capture: { nil }) == nil else {
         fputs("SELF-TEST FAILED: window thumbnail cache mismatch\n", stderr)
         return 1
