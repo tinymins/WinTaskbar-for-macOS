@@ -526,6 +526,9 @@ final class TaskbarWindowController {
                 self?.applyLayout()
             }
         }
+        actions.toggleQuickLinkMenuHandler = { [weak self] screen in
+            self?.toggleQuickLinkMenu(on: screen)
+        }
     }
 
     func show() {
@@ -550,6 +553,43 @@ final class TaskbarWindowController {
             position: preferences.position,
             barHeight: CGFloat(preferences.barHeight),
             screen: activeScreen
+        )
+    }
+
+    func toggleQuickLinkMenu(on requestedScreen: NSScreen? = nil) {
+        if startButtonContextMenuController.isVisible {
+            dismissStartButtonContextMenus()
+            return
+        }
+
+        actions.closeStartMenu()
+        windowPreviewPanelController.dismissAll()
+        windowPeekController.hideImmediately()
+        taskbarJumpListController.dismiss()
+        startButtonPowerMenuController.dismiss()
+
+        let screen = requestedScreen ?? activeScreen
+        let frame = StartMenuGeometry.anchoredFrame(
+            screenFrame: screen.frame,
+            visibleFrame: screen.visibleFrame,
+            position: preferences.position,
+            barHeight: CGFloat(preferences.barHeight),
+            contentSize: StartButtonContextMenuMetrics.rootSize,
+            oppositeEnd: preferences.startButtonAtEnd || preferences.menuButtonPlacement != .standard
+        )
+        let rootView = StartButtonContextMenuView(
+            actions: actions,
+            onDismiss: { [weak self] in self?.dismissStartButtonContextMenus() },
+            onShowPower: { [weak self] in
+                self?.showStartButtonPowerMenu(parentFrame: frame, screenFrame: screen.frame)
+            }
+        )
+        .frame(width: frame.width, height: frame.height)
+
+        startButtonContextMenuController.show(
+            rootView: AnyView(rootView),
+            frame: frame,
+            appearance: appearance
         )
     }
 
@@ -645,6 +685,29 @@ final class TaskbarWindowController {
             radius: preferences.transparencyEnabled ? Int(preferences.panelBlurRadius.rounded()) : 0,
             to: panel
         )
+    }
+
+    private func showStartButtonPowerMenu(parentFrame: CGRect, screenFrame: CGRect) {
+        let frame = StartButtonPowerMenuGeometry.frame(
+            parentFrame: parentFrame,
+            contentSize: StartButtonContextMenuMetrics.powerSize,
+            screenFrame: screenFrame
+        )
+        let rootView = StartButtonPowerMenuView(
+            actions: actions,
+            onDismiss: { [weak self] in self?.dismissStartButtonContextMenus() }
+        )
+        .frame(width: frame.width, height: frame.height)
+        startButtonPowerMenuController.show(
+            rootView: AnyView(rootView),
+            frame: frame,
+            appearance: appearance
+        )
+    }
+
+    private func dismissStartButtonContextMenus() {
+        startButtonPowerMenuController.dismiss()
+        startButtonContextMenuController.dismiss()
     }
 
     private var appearance: NSAppearance? {

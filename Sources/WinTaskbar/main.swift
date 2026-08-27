@@ -128,6 +128,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch configuration.action {
         case .toggleStartMenu:
             startMenuController?.toggle()
+        case .toggleQuickLinkMenu:
+            taskbarController?.toggleQuickLinkMenu()
         case .showDesktop:
             showDesktopService.toggle()
         case .openFileManager:
@@ -255,10 +257,13 @@ func runSelfTest() async -> Int32 {
           preferences.menuButtonPlacement == .standard,
           preferences.windowsKeyMapping == .option,
           preferences.windowsKeyOpensStart,
-          preferences.globalShortcutConfigurations.count == 19,
+          preferences.globalShortcutConfigurations.count == 20,
           preferences.globalShortcutConfigurations.first(where: {
               $0.id == GlobalShortcutCatalog.fileManagerID
-          })?.isEnabled == true else {
+          })?.isEnabled == true,
+          preferences.globalShortcutConfigurations.first(where: {
+              $0.id == GlobalShortcutCatalog.quickLinkMenuID
+          })?.action == .toggleQuickLinkMenu else {
         fputs("SELF-TEST FAILED: default values mismatch\n", stderr)
         return 1
     }
@@ -1405,6 +1410,9 @@ func runSelfTest() async -> Int32 {
     guard migratedHotkeyPreferences.globalShortcutConfigurations.first?.shortcut.keyLabel == "A",
           migratedHotkeyPreferences.globalShortcutConfigurations.contains(where: {
               $0.id == GlobalShortcutCatalog.fileManagerID && $0.isEnabled
+          }),
+          migratedHotkeyPreferences.globalShortcutConfigurations.contains(where: {
+              $0.id == GlobalShortcutCatalog.quickLinkMenuID
           }) else {
         fputs("SELF-TEST FAILED: legacy hotkey migration mismatch\n", stderr)
         return 1

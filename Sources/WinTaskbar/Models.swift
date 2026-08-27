@@ -193,6 +193,7 @@ struct ShortcutApplicationTarget: Codable, Hashable {
 
 enum GlobalShortcutAction: String, Codable, CaseIterable, Identifiable {
     case toggleStartMenu
+    case toggleQuickLinkMenu
     case showDesktop
     case openFileManager
     case openSystemSettings
@@ -209,6 +210,7 @@ enum GlobalShortcutAction: String, Codable, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .toggleStartMenu: "Toggle Start Menu"
+        case .toggleQuickLinkMenu: "Toggle Quick Link Menu"
         case .showDesktop: "Show Desktop"
         case .openFileManager: "Open File Manager"
         case .openSystemSettings: "Open System Settings"
@@ -260,6 +262,7 @@ struct GlobalShortcutConfiguration: Codable, Hashable, Identifiable {
 
 enum GlobalShortcutCatalog {
     static let startMenuID = "start-menu"
+    static let quickLinkMenuID = "quick-link-menu"
     static let showDesktopID = "show-desktop"
     static let fileManagerID = "file-manager"
     static let quickSettingsID = "quick-settings"
@@ -288,6 +291,15 @@ enum GlobalShortcutCatalog {
                 enabled: true,
                 shortcut: legacy[1],
                 action: .showDesktop
+            ),
+            configuration(
+                id: quickLinkMenuID,
+                title: "Quick Link Menu",
+                windowsLabel: "Win+X",
+                enabled: false,
+                shortcut: HotkeyShortcut(keyCode: 7, modifiers: 0, keyLabel: "X"),
+                usesWindowsKey: true,
+                action: .toggleQuickLinkMenu
             ),
             configuration(
                 id: fileManagerID,

@@ -62,6 +62,7 @@ enum SystemQuickAccess {
 @MainActor
 final class AppActions: ObservableObject {
     var toggleStartMenuHandler: ((NSScreen?) -> Void)?
+    var toggleQuickLinkMenuHandler: ((NSScreen?) -> Void)?
     var openSettingsHandler: (() -> Void)?
     var closeStartMenuHandler: (() -> Void)?
     var fitWindowsHandler: (() -> Void)?
@@ -69,6 +70,7 @@ final class AppActions: ObservableObject {
     var powerHandler: ((PowerAction) -> Void)?
 
     func toggleStartMenu(on screen: NSScreen? = nil) { toggleStartMenuHandler?(screen) }
+    func toggleQuickLinkMenu(on screen: NSScreen? = nil) { toggleQuickLinkMenuHandler?(screen) }
     func openSettings() { openSettingsHandler?() }
     func closeStartMenu() { closeStartMenuHandler?() }
     func fitWindows() { fitWindowsHandler?() }

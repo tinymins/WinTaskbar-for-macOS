@@ -184,68 +184,9 @@ struct TaskbarView: View {
         .accessibilityLabel("Open menu")
         .overlay {
             TaskbarContextClickAnchor { anchorView in
-                showStartButtonContextMenu(relativeTo: anchorView)
+                actions.toggleQuickLinkMenu(on: anchorView.window?.screen ?? screen)
             }
         }
-    }
-
-    private func showStartButtonContextMenu(relativeTo anchorView: NSView) {
-        guard let anchorWindow = anchorView.window else { return }
-        actions.closeStartMenu()
-        windowPreviewPanelController.dismissAll()
-        windowPeekController.hideImmediately()
-        taskbarJumpListController.dismiss()
-        startButtonPowerMenuController.dismiss()
-
-        let screen = anchorWindow.screen ?? self.screen
-        let frame = StartMenuGeometry.anchoredFrame(
-            screenFrame: screen.frame,
-            visibleFrame: screen.visibleFrame,
-            position: preferences.position,
-            barHeight: CGFloat(preferences.barHeight),
-            contentSize: StartButtonContextMenuMetrics.rootSize,
-            oppositeEnd: preferences.startButtonAtEnd || preferences.menuButtonPlacement != .standard
-        )
-        let rootView = StartButtonContextMenuView(
-            actions: actions,
-            onDismiss: dismissStartButtonContextMenus,
-            onShowPower: {
-                showStartButtonPowerMenu(
-                    parentFrame: frame,
-                    screenFrame: screen.frame,
-                    appearance: anchorWindow.appearance
-                )
-            }
-        )
-        .frame(width: frame.width, height: frame.height)
-
-        startButtonContextMenuController.show(
-            rootView: AnyView(rootView),
-            frame: frame,
-            appearance: anchorWindow.appearance
-        )
-    }
-
-    private func showStartButtonPowerMenu(
-        parentFrame: CGRect,
-        screenFrame: CGRect,
-        appearance: NSAppearance?
-    ) {
-        let frame = StartButtonPowerMenuGeometry.frame(
-            parentFrame: parentFrame,
-            contentSize: StartButtonContextMenuMetrics.powerSize,
-            screenFrame: screenFrame
-        )
-        let rootView = StartButtonPowerMenuView(
-            actions: actions,
-            onDismiss: dismissStartButtonContextMenus
-        )
-        .frame(width: frame.width, height: frame.height)
-        startButtonPowerMenuController.show(
-            rootView: AnyView(rootView),
-            frame: frame,
-            appearance: appearance
-        )
     }
 
     private func dismissStartButtonContextMenus() {
