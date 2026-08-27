@@ -35,14 +35,16 @@ struct SettingsView: View {
     @State private var selectedPage = SettingsPage.general
 
     var body: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
             List(SettingsPage.allCases, selection: $selectedPage) { page in
                 Label(page.rawValue, systemImage: page.symbol)
                     .tag(page)
             }
             .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 220)
-        } detail: {
+            .frame(width: 190)
+
+            Divider()
+
             VStack(spacing: 0) {
                 HStack(spacing: 10) {
                     Image(systemName: selectedPage.symbol)
@@ -57,7 +59,6 @@ struct SettingsView: View {
                 selectedPageContent
             }
         }
-        .navigationSplitViewStyle(.balanced)
         .onAppear {
             loginItem.refresh()
         }
