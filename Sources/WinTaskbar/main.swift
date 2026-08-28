@@ -1018,24 +1018,35 @@ func runSelfTest() async -> Int32 {
         isEnabled: true,
         pointerIsInsideTaskbar: false,
         hasVisibleSurface: false,
+        hasPendingAttention: false,
         isMouseButtonPressed: false
     ),
     !TaskbarAutoHidePolicy.shouldHide(
         isEnabled: true,
         pointerIsInsideTaskbar: true,
         hasVisibleSurface: false,
+        hasPendingAttention: false,
         isMouseButtonPressed: false
     ),
     !TaskbarAutoHidePolicy.shouldHide(
         isEnabled: true,
         pointerIsInsideTaskbar: false,
         hasVisibleSurface: true,
+        hasPendingAttention: false,
         isMouseButtonPressed: false
     ),
     !TaskbarAutoHidePolicy.shouldHide(
         isEnabled: true,
         pointerIsInsideTaskbar: false,
         hasVisibleSurface: false,
+        hasPendingAttention: true,
+        isMouseButtonPressed: false
+    ),
+    !TaskbarAutoHidePolicy.shouldHide(
+        isEnabled: true,
+        pointerIsInsideTaskbar: false,
+        hasVisibleSurface: false,
+        hasPendingAttention: false,
         isMouseButtonPressed: true
     ) else {
         fputs("SELF-TEST FAILED: taskbar auto-hide geometry or policy mismatch\n", stderr)

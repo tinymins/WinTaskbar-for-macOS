@@ -74,9 +74,14 @@ enum TaskbarAutoHidePolicy {
         isEnabled: Bool,
         pointerIsInsideTaskbar: Bool,
         hasVisibleSurface: Bool,
+        hasPendingAttention: Bool,
         isMouseButtonPressed: Bool
     ) -> Bool {
-        isEnabled && !pointerIsInsideTaskbar && !hasVisibleSurface && !isMouseButtonPressed
+        isEnabled
+            && !pointerIsInsideTaskbar
+            && !hasVisibleSurface
+            && !hasPendingAttention
+            && !isMouseButtonPressed
     }
 }
 
@@ -621,6 +626,7 @@ final class TaskbarWindowController {
     private let systemShortcuts: SystemShortcutService
     private var panels: [TaskbarPanel] = []
     private var cancellable: AnyCancellable?
+    private var attentionCancellable: AnyCancellable?
     private var taskbarCycleIndex: Int?
     private var keepsTransientSurfacesVisibleForSettings = false
     private var isStartMenuPresented = false
@@ -673,6 +679,14 @@ final class TaskbarWindowController {
                 self?.applyLayout()
             }
         }
+        attentionCancellable = dockBadges.$attentionStates
+            .map { !$0.isEmpty }
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.updateAutoHideState()
+                }
+            }
         actions.toggleQuickLinkMenuHandler = { [weak self] screen in
             self?.toggleQuickLinkMenu(on: screen)
         }
@@ -1110,7 +1124,13 @@ final class TaskbarWindowController {
 
         let pointer = NSEvent.mouseLocation
         let isMouseButtonPressed = NSEvent.pressedMouseButtons != 0
+        let hasPendingAttention = !dockBadges.attentionStates.isEmpty
         for (panel, screen) in zip(panels, selectedScreens) {
+            if hasPendingAttention {
+                show(panel, on: screen, animated: true)
+                continue
+            }
+
             let revealZone = TaskbarAutoHideGeometry.revealZone(
                 screenFrame: screen.frame,
                 visibleFrame: screen.visibleFrame,
@@ -1126,6 +1146,7 @@ final class TaskbarWindowController {
                 isEnabled: true,
                 pointerIsInsideTaskbar: pointerIsInsideTaskbar,
                 hasVisibleSurface: hasVisibleTransientSurface,
+                hasPendingAttention: hasPendingAttention,
                 isMouseButtonPressed: isMouseButtonPressed
             ) {
                 scheduleHide(panel, on: screen)
@@ -1147,6 +1168,7 @@ final class TaskbarWindowController {
                 isEnabled: self.preferences.autoHideTaskbar,
                 pointerIsInsideTaskbar: panel.frame.contains(pointer),
                 hasVisibleSurface: self.hasVisibleTransientSurface,
+                hasPendingAttention: !self.dockBadges.attentionStates.isEmpty,
                 isMouseButtonPressed: NSEvent.pressedMouseButtons != 0
             ) else { return }
             self.hide(panel, on: screen)
