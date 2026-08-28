@@ -2,6 +2,22 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.17] - 2026-08-28
+
+### Added
+
+- Recreate the Windows 11 clock and calendar flyout with animated navigation, Chinese lunar dates, holidays, system events, and a Fluent-style event editor.
+- Add Windows 11-style quick settings and input source panels with paged detail views for audio, battery, accessibility, and related controls.
+- Add configurable Windows shortcut bindings, the Win+X quick-link suite, a standalone paged settings window, and Windows-style clock and date formatting options.
+- Mirror third-party macOS status items into the taskbar tray with persistent overflow organization, draggable system items, and Windows-style hover titles.
+- Add Windows-style taskbar auto-hide, Show Desktop strip behavior, and an expanded empty-area context menu.
+
+### Fixed
+
+- Stabilize window preview animation, sizing, click pinning, and Aero Peek switching while reducing unnecessary thumbnail and panel work.
+- Refresh external status items incrementally off the main thread, forward composite item clicks reliably, and support wide labels without app-specific handling.
+- Preserve attention indicators while auto-hidden, unmute audio when adjusting volume, retain terminal menu entries, and align Windows input-source switching behavior.
+
 ## [0.0.16] - 2026-08-26
 
 ### Fixed
