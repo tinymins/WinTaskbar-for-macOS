@@ -418,6 +418,21 @@ func runSelfTest() async -> Int32 {
               frame: CGRect(x: 100, y: 2, width: 24, height: 24),
               ownProcessIdentifier: 202
           ),
+          ExternalStatusItemPolicy.shouldInspectApplication(
+              processIdentifier: 101,
+              bundleIdentifier: "com.example.StatusApp",
+              ownProcessIdentifier: 202
+          ),
+          !ExternalStatusItemPolicy.shouldInspectApplication(
+              processIdentifier: 101,
+              bundleIdentifier: "com.apple.WebKit.WebContent",
+              ownProcessIdentifier: 202
+          ),
+          !ExternalStatusItemPolicy.shouldInspectApplication(
+              processIdentifier: 202,
+              bundleIdentifier: "com.example.StatusApp",
+              ownProcessIdentifier: 202
+          ),
           trayLayout.orderedIDs == ["three", "one", "two"],
           trayLayout.hiddenIDs == ["three"],
           unifiedTrayLayout.orderedIDs == [

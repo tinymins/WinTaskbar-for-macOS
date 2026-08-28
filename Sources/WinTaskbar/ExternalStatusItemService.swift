@@ -1,5 +1,5 @@
 import AppKit
-import ApplicationServices
+@preconcurrency import ApplicationServices
 import Combine
 import SwiftUI
 
@@ -122,6 +122,15 @@ private final class ExternalStatusMenuAction: NSObject {
 }
 
 enum ExternalStatusItemPolicy {
+    static func shouldInspectApplication(
+        processIdentifier: pid_t,
+        bundleIdentifier: String?,
+        ownProcessIdentifier: pid_t
+    ) -> Bool {
+        processIdentifier != ownProcessIdentifier
+            && bundleIdentifier?.hasPrefix("com.apple.") != true
+    }
+
     static func shouldInclude(
         processIdentifier: pid_t,
         bundleIdentifier: String?,
@@ -129,14 +138,234 @@ enum ExternalStatusItemPolicy {
         frame: CGRect,
         ownProcessIdentifier: pid_t
     ) -> Bool {
-        guard processIdentifier != ownProcessIdentifier,
-              bundleIdentifier?.hasPrefix("com.apple.") != true,
+        guard shouldInspectApplication(
+                  processIdentifier: processIdentifier,
+                  bundleIdentifier: bundleIdentifier,
+                  ownProcessIdentifier: ownProcessIdentifier
+              ),
               role == kAXMenuBarItemRole as String,
               frame.width >= 8,
               frame.width <= 160,
               frame.height >= 8,
               frame.height <= 64 else { return false }
         return true
+    }
+}
+
+private struct ExternalStatusApplicationSnapshot: Sendable {
+    let processIdentifier: pid_t
+    let bundleIdentifier: String?
+    let bundleURL: URL?
+    let localizedName: String?
+}
+
+private struct ExternalStatusItemSnapshot: Sendable {
+    let id: String
+    let processIdentifier: pid_t
+    let accessibilityLabel: String
+    let sourceFrame: CGRect
+    let capturedImage: CGImage?
+    let fallbackURL: URL?
+    let element: AXUIElement
+}
+
+private enum ExternalStatusItemDiscovery {
+    static func discover(
+        applications: [ExternalStatusApplicationSnapshot],
+        controlCenterProcessIdentifier: pid_t?,
+        canCapture: Bool,
+        ownProcessIdentifier: pid_t
+    ) -> [ExternalStatusItemSnapshot] {
+        let statusItemWindows = canCapture
+            ? visibleStatusItemWindows(controlCenterProcessIdentifier: controlCenterProcessIdentifier)
+            : []
+        var items: [ExternalStatusItemSnapshot] = []
+
+        for application in applications {
+            let root = AXUIElementCreateApplication(application.processIdentifier)
+            AXUIElementSetMessagingTimeout(root, 0.1)
+            guard let extrasMenuBar = element(root, attribute: kAXExtrasMenuBarAttribute) else { continue }
+            AXUIElementSetMessagingTimeout(extrasMenuBar, 0.1)
+            guard let children: [AXUIElement] = attribute(extrasMenuBar, kAXChildrenAttribute) else { continue }
+
+            let ownerName = application.localizedName ?? application.bundleIdentifier ?? "App"
+            let ownerIdentifier = application.bundleIdentifier
+                ?? application.bundleURL?.path
+                ?? ownerName
+            var identifierOccurrences: [String: Int] = [:]
+
+            for (childIndex, child) in children.enumerated() {
+                AXUIElementSetMessagingTimeout(child, 0.1)
+                guard let frame = frame(of: child),
+                      ExternalStatusItemPolicy.shouldInclude(
+                          processIdentifier: application.processIdentifier,
+                          bundleIdentifier: application.bundleIdentifier,
+                          role: attribute(child, kAXRoleAttribute),
+                          frame: frame,
+                          ownProcessIdentifier: ownProcessIdentifier
+                      ) else { continue }
+
+                let baseItemID = ExternalStatusItemIdentity.make(
+                    ownerIdentifier: ownerIdentifier,
+                    accessibilityIdentifier: attribute(child, kAXIdentifierAttribute),
+                    childIndex: childIndex
+                )
+                let occurrence = identifierOccurrences[baseItemID, default: 0]
+                identifierOccurrences[baseItemID] = occurrence + 1
+                let itemID = occurrence == 0 ? baseItemID : "\(baseItemID)#\(occurrence)"
+                let label = firstNonemptyString(
+                    attribute(child, kAXHelpAttribute),
+                    attribute(child, kAXDescriptionAttribute),
+                    attribute(child, kAXTitleAttribute),
+                    ownerName
+                )
+                items.append(ExternalStatusItemSnapshot(
+                    id: itemID,
+                    processIdentifier: application.processIdentifier,
+                    accessibilityLabel: label,
+                    sourceFrame: frame,
+                    capturedImage: capturedImage(frame: frame, windows: statusItemWindows),
+                    fallbackURL: application.bundleURL,
+                    element: child
+                ))
+            }
+        }
+
+        return items.sorted { lhs, rhs in
+            if lhs.sourceFrame.minY != rhs.sourceFrame.minY {
+                return lhs.sourceFrame.minY < rhs.sourceFrame.minY
+            }
+            return lhs.sourceFrame.minX < rhs.sourceFrame.minX
+        }
+    }
+
+    private static func visibleStatusItemWindows(
+        controlCenterProcessIdentifier: pid_t?
+    ) -> [StatusItemWindow] {
+        guard let controlCenterProcessIdentifier,
+              let rawWindows = CGWindowListCopyWindowInfo(
+                  [.optionOnScreenOnly, .excludeDesktopElements],
+                  kCGNullWindowID
+              ) as? [[String: Any]] else { return [] }
+
+        return rawWindows.compactMap { window in
+            guard window[kCGWindowOwnerPID as String] as? pid_t == controlCenterProcessIdentifier,
+                  window[kCGWindowLayer as String] as? Int == 25,
+                  let id = window[kCGWindowNumber as String] as? CGWindowID,
+                  let bounds = window[kCGWindowBounds as String] as? NSDictionary,
+                  let frame = CGRect(dictionaryRepresentation: bounds),
+                  frame.width >= 8,
+                  frame.height >= 20,
+                  frame.height <= 50 else { return nil }
+            return StatusItemWindow(id: id, frame: frame)
+        }
+    }
+
+    private static func capturedImage(
+        frame: CGRect,
+        windows: [StatusItemWindow]
+    ) -> CGImage? {
+        guard let window = windows
+            .filter({ $0.frame.minX <= frame.midX && $0.frame.maxX >= frame.midX })
+            .min(by: { $0.frame.width < $1.frame.width }),
+              let image = CGWindowListCreateImage(
+                  .null,
+                  .optionIncludingWindow,
+                  window.id,
+                  [.boundsIgnoreFraming, .bestResolution]
+              ) else { return nil }
+        return transparentContentImage(image)
+    }
+
+    private static func transparentContentImage(_ image: CGImage) -> CGImage? {
+        let width = image.width
+        let height = image.height
+        guard width > 0, height > 0 else { return nil }
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let drewImage = pixels.withUnsafeMutableBytes { bytes -> Bool in
+            guard let context = CGContext(
+                data: bytes.baseAddress,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drewImage else { return nil }
+
+        var transparentPixels = 0
+        var visiblePixels = 0
+        var minimumX = width
+        var minimumY = height
+        var maximumX = -1
+        var maximumY = -1
+        for y in 0..<height {
+            for x in 0..<width {
+                let offset = (y * width + x) * 4
+                let alpha = pixels[offset + 3]
+                if alpha < 245 { transparentPixels += 1 }
+                if alpha > 10 {
+                    visiblePixels += 1
+                    minimumX = min(minimumX, x)
+                    minimumY = min(minimumY, y)
+                    maximumX = max(maximumX, x)
+                    maximumY = max(maximumY, y)
+                }
+            }
+        }
+        let pixelCount = width * height
+        guard transparentPixels > pixelCount / 20,
+              visiblePixels > pixelCount / 100,
+              maximumX >= minimumX,
+              maximumY >= minimumY else { return nil }
+
+        let padding = 2
+        let cropMinimumX = max(0, minimumX - padding)
+        let cropMaximumX = min(width - 1, maximumX + padding)
+        let normalizedMinimumY = max(0, height - 1 - maximumY - padding)
+        let normalizedMaximumY = min(height - 1, height - 1 - minimumY + padding)
+        return image.cropping(to: CGRect(
+            x: cropMinimumX,
+            y: normalizedMinimumY,
+            width: cropMaximumX - cropMinimumX + 1,
+            height: normalizedMaximumY - normalizedMinimumY + 1
+        ))
+    }
+
+    private static func frame(of element: AXUIElement) -> CGRect? {
+        guard let positionValue: AXValue = attribute(element, kAXPositionAttribute),
+              let sizeValue: AXValue = attribute(element, kAXSizeAttribute) else { return nil }
+        var position = CGPoint.zero
+        var size = CGSize.zero
+        guard AXValueGetValue(positionValue, .cgPoint, &position),
+              AXValueGetValue(sizeValue, .cgSize, &size) else { return nil }
+        return CGRect(origin: position, size: size)
+    }
+
+    private static func element(_ element: AXUIElement, attribute name: String) -> AXUIElement? {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, name as CFString, &raw) == .success,
+              let raw,
+              CFGetTypeID(raw) == AXUIElementGetTypeID() else { return nil }
+        return (raw as! AXUIElement)
+    }
+
+    private static func attribute<T>(_ element: AXUIElement, _ name: String) -> T? {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, name as CFString, &raw) == .success else { return nil }
+        return raw as? T
+    }
+
+    private static func firstNonemptyString(_ values: String?...) -> String {
+        values.compactMap { value -> String? in
+            guard let value,
+                  !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return value
+        }.first ?? "App"
     }
 }
 
@@ -148,6 +377,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
     private var elements: [String: AXUIElement] = [:]
     private let layoutStore: ExternalStatusItemLayoutStore
     private var timer: Timer?
+    private var refreshTask: Task<Void, Never>?
     private var presentedMenu: NSMenu?
 
     init(defaults: UserDefaults = .standard) {
@@ -167,6 +397,11 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
                 self?.refresh()
             }
         }
+    }
+
+    isolated deinit {
+        timer?.invalidate()
+        refreshTask?.cancel()
     }
 
     func items(
@@ -433,76 +668,78 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
 
     private func refresh() {
         guard AXIsProcessTrusted() else {
+            refreshTask?.cancel()
+            refreshTask = nil
             items = []
             elements = [:]
             return
         }
+        guard refreshTask == nil else { return }
 
+        let ownProcessIdentifier = ProcessInfo.processInfo.processIdentifier
+        let applications: [ExternalStatusApplicationSnapshot] = NSWorkspace.shared.runningApplications.compactMap {
+            application in
+            guard ExternalStatusItemPolicy.shouldInspectApplication(
+                processIdentifier: application.processIdentifier,
+                bundleIdentifier: application.bundleIdentifier,
+                ownProcessIdentifier: ownProcessIdentifier
+            ) else { return nil }
+            return ExternalStatusApplicationSnapshot(
+                processIdentifier: application.processIdentifier,
+                bundleIdentifier: application.bundleIdentifier,
+                bundleURL: application.bundleURL,
+                localizedName: application.localizedName
+            )
+        }
+        let canCapture = CGPreflightScreenCaptureAccess()
+        let controlCenterProcessIdentifier = NSWorkspace.shared.runningApplications.first(where: {
+            $0.bundleIdentifier == "com.apple.controlcenter"
+        })?.processIdentifier
+        refreshTask = Task { [weak self] in
+            let snapshots = await Task.detached(priority: .utility) {
+                ExternalStatusItemDiscovery.discover(
+                    applications: applications,
+                    controlCenterProcessIdentifier: controlCenterProcessIdentifier,
+                    canCapture: canCapture,
+                    ownProcessIdentifier: ownProcessIdentifier
+                )
+            }.value
+            guard let self, !Task.isCancelled else { return }
+            apply(snapshots)
+            refreshTask = nil
+        }
+    }
+
+    private func apply(_ snapshots: [ExternalStatusItemSnapshot]) {
         var nextItems: [ExternalStatusItem] = []
         var nextElements: [String: AXUIElement] = [:]
-        let ownProcessIdentifier = ProcessInfo.processInfo.processIdentifier
-        let canCapture = CGPreflightScreenCaptureAccess()
-        let statusItemWindows = canCapture ? visibleStatusItemWindows() : []
-
-        for application in NSWorkspace.shared.runningApplications {
-            let root = AXUIElementCreateApplication(application.processIdentifier)
-            AXUIElementSetMessagingTimeout(root, 0.1)
-            guard let extrasMenuBar = element(root, attribute: kAXExtrasMenuBarAttribute),
-                  let children: [AXUIElement] = attribute(extrasMenuBar, kAXChildrenAttribute) else { continue }
-
-            let ownerName = application.localizedName ?? application.bundleIdentifier ?? "App"
-            let ownerIdentifier = application.bundleIdentifier
-                ?? application.bundleURL?.path
-                ?? ownerName
-            let fallbackImage = application.bundleURL.map { NSWorkspace.shared.icon(forFile: $0.path) }
-
-            var identifierOccurrences: [String: Int] = [:]
-            for (childIndex, child) in children.enumerated() {
-                guard let frame = frame(of: child),
-                      ExternalStatusItemPolicy.shouldInclude(
-                          processIdentifier: application.processIdentifier,
-                          bundleIdentifier: application.bundleIdentifier,
-                          role: attribute(child, kAXRoleAttribute),
-                          frame: frame,
-                          ownProcessIdentifier: ownProcessIdentifier
-                      ),
-                      let image = capturedImage(frame: frame, windows: statusItemWindows) ?? fallbackImage else { continue }
-
-                let baseItemID = ExternalStatusItemIdentity.make(
-                    ownerIdentifier: ownerIdentifier,
-                    accessibilityIdentifier: attribute(child, kAXIdentifierAttribute),
-                    childIndex: childIndex
+        for snapshot in snapshots {
+            let image: NSImage?
+            if let capturedImage = snapshot.capturedImage {
+                image = NSImage(
+                    cgImage: capturedImage,
+                    size: NSSize(width: capturedImage.width, height: capturedImage.height)
                 )
-                let occurrence = identifierOccurrences[baseItemID, default: 0]
-                identifierOccurrences[baseItemID] = occurrence + 1
-                let itemID = occurrence == 0 ? baseItemID : "\(baseItemID)#\(occurrence)"
-                let label = firstNonemptyString(
-                    attribute(child, kAXHelpAttribute),
-                    attribute(child, kAXDescriptionAttribute),
-                    attribute(child, kAXTitleAttribute),
-                    ownerName
-                )
-                nextItems.append(ExternalStatusItem(
-                    id: itemID,
-                    processIdentifier: application.processIdentifier,
-                    accessibilityLabel: label,
-                    sourceFrame: frame,
-                    image: image
-                ))
-                nextElements[itemID] = child
+            } else if let fallbackURL = snapshot.fallbackURL {
+                image = NSWorkspace.shared.icon(forFile: fallbackURL.path)
+            } else {
+                image = nil
             }
+            guard let image else { continue }
+            nextItems.append(ExternalStatusItem(
+                id: snapshot.id,
+                processIdentifier: snapshot.processIdentifier,
+                accessibilityLabel: snapshot.accessibilityLabel,
+                sourceFrame: snapshot.sourceFrame,
+                image: image
+            ))
+            nextElements[snapshot.id] = snapshot.element
         }
 
-        let sourceOrderedItems = nextItems.sorted { lhs, rhs in
-            if lhs.sourceFrame.minY != rhs.sourceFrame.minY {
-                return lhs.sourceFrame.minY < rhs.sourceFrame.minY
-            }
-            return lhs.sourceFrame.minX < rhs.sourceFrame.minX
-        }
-        items = sourceOrderedItems
+        items = nextItems
         var nextLayout = layout
         nextLayout.reconcile(
-            discoveredIDs: sourceOrderedItems.map(\.id),
+            discoveredIDs: nextItems.map(\.id),
             beforeIDs: Set(SystemTrayItemID.allCases.map(\.rawValue))
         )
         if nextLayout != layout {
@@ -512,133 +749,12 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         elements = nextElements
     }
 
-    private func visibleStatusItemWindows() -> [StatusItemWindow] {
-        guard let controlCenterPID = NSWorkspace.shared.runningApplications.first(where: {
-            $0.bundleIdentifier == "com.apple.controlcenter"
-        })?.processIdentifier,
-        let rawWindows = CGWindowListCopyWindowInfo(
-            [.optionOnScreenOnly, .excludeDesktopElements],
-            kCGNullWindowID
-        ) as? [[String: Any]] else { return [] }
-
-        return rawWindows.compactMap { window in
-            guard window[kCGWindowOwnerPID as String] as? pid_t == controlCenterPID,
-                  window[kCGWindowLayer as String] as? Int == 25,
-                  let id = window[kCGWindowNumber as String] as? CGWindowID,
-                  let bounds = window[kCGWindowBounds as String] as? NSDictionary,
-                  let frame = CGRect(dictionaryRepresentation: bounds),
-                  frame.width >= 8,
-                  frame.height >= 20,
-                  frame.height <= 50 else { return nil }
-            return StatusItemWindow(id: id, frame: frame)
-        }
-    }
-
-    private func capturedImage(frame: CGRect, windows: [StatusItemWindow]) -> NSImage? {
-        guard let window = windows
-            .filter({ $0.frame.minX <= frame.midX && $0.frame.maxX >= frame.midX })
-            .min(by: { $0.frame.width < $1.frame.width }),
-              let image = CGWindowListCreateImage(
-            .null,
-            .optionIncludingWindow,
-            window.id,
-            [.boundsIgnoreFraming, .bestResolution]
-        ), let trimmedImage = transparentContentImage(image) else { return nil }
-        return NSImage(
-            cgImage: trimmedImage,
-            size: NSSize(width: trimmedImage.width, height: trimmedImage.height)
-        )
-    }
-
-    private func transparentContentImage(_ image: CGImage) -> CGImage? {
-        let width = image.width
-        let height = image.height
-        guard width > 0, height > 0 else { return nil }
-        var pixels = [UInt8](repeating: 0, count: width * height * 4)
-        let drewImage = pixels.withUnsafeMutableBytes { bytes -> Bool in
-            guard let context = CGContext(
-                data: bytes.baseAddress,
-                width: width,
-                height: height,
-                bitsPerComponent: 8,
-                bytesPerRow: width * 4,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            ) else { return false }
-            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-            return true
-        }
-        guard drewImage else { return nil }
-
-        var transparentPixels = 0
-        var visiblePixels = 0
-        var minimumX = width
-        var minimumY = height
-        var maximumX = -1
-        var maximumY = -1
-        for y in 0..<height {
-            for x in 0..<width {
-                let alpha = pixels[(y * width + x) * 4 + 3]
-                if alpha < 245 { transparentPixels += 1 }
-                if alpha > 10 {
-                    visiblePixels += 1
-                    minimumX = min(minimumX, x)
-                    minimumY = min(minimumY, y)
-                    maximumX = max(maximumX, x)
-                    maximumY = max(maximumY, y)
-                }
-            }
-        }
-        let pixelCount = width * height
-        guard transparentPixels > pixelCount / 20,
-              visiblePixels > pixelCount / 100,
-              maximumX >= minimumX,
-              maximumY >= minimumY else { return nil }
-
-        let padding = 2
-        let cropMinimumX = max(0, minimumX - padding)
-        let cropMaximumX = min(width - 1, maximumX + padding)
-        let normalizedMinimumY = max(0, height - 1 - maximumY - padding)
-        let normalizedMaximumY = min(height - 1, height - 1 - minimumY + padding)
-        return image.cropping(to: CGRect(
-            x: cropMinimumX,
-            y: normalizedMinimumY,
-            width: cropMaximumX - cropMinimumX + 1,
-            height: normalizedMaximumY - normalizedMinimumY + 1
-        ))
-    }
-
-    private func frame(of element: AXUIElement) -> CGRect? {
-        guard let positionValue: AXValue = attribute(element, kAXPositionAttribute),
-              let sizeValue: AXValue = attribute(element, kAXSizeAttribute) else { return nil }
-        var position = CGPoint.zero
-        var size = CGSize.zero
-        guard AXValueGetValue(positionValue, .cgPoint, &position),
-              AXValueGetValue(sizeValue, .cgSize, &size) else { return nil }
-        return CGRect(origin: position, size: size)
-    }
-
-    private func element(_ element: AXUIElement, attribute name: String) -> AXUIElement? {
-        var raw: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, name as CFString, &raw) == .success,
-              let raw,
-              CFGetTypeID(raw) == AXUIElementGetTypeID() else { return nil }
-        return (raw as! AXUIElement)
-    }
-
     private func attribute<T>(_ element: AXUIElement, _ name: String) -> T? {
         var raw: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, name as CFString, &raw) == .success else { return nil }
         return raw as? T
     }
 
-    private func firstNonemptyString(_ values: String?...) -> String {
-        let nonemptyValues: [String] = values.compactMap { value -> String? in
-            guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-            return value
-        }
-        return nonemptyValues.first ?? "App"
-    }
 }
 
 @MainActor
