@@ -455,6 +455,11 @@ func runSelfTest() async -> Int32 {
               ownProcessIdentifier: 202
           ),
           !ExternalStatusItemPolicy.shouldInspectApplication(
+              processIdentifier: 101,
+              bundleIdentifier: "com.tencent.QQMusicMac",
+              ownProcessIdentifier: 202
+          ),
+          !ExternalStatusItemPolicy.shouldInspectApplication(
               processIdentifier: 202,
               bundleIdentifier: "com.example.StatusApp",
               ownProcessIdentifier: 202
