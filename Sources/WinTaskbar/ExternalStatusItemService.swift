@@ -153,7 +153,6 @@ enum ExternalStatusItemPolicy {
     ) -> Bool {
         processIdentifier != ownProcessIdentifier
             && bundleIdentifier?.hasPrefix("com.apple.") != true
-            && bundleIdentifier != "com.tencent.QQMusicMac"
     }
 
     static func shouldInclude(
