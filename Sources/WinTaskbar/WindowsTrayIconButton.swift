@@ -86,6 +86,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     let preservesTransientPanelOnMouseDown: Bool
     let primaryAction: (WindowsTrayIconControl) -> Void
     let contextAction: (() -> Void)?
+    let pointerAction: ((WindowsTrayIconControl, CGPoint?) -> Void)?
     let dragIdentifier: String?
     let dropAxis: WindowsTrayIconDropAxis
     let dropValidator: ((String) -> Bool)?
@@ -102,6 +103,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         preservesTransientPanelOnMouseDown: Bool = false,
         primaryAction: @escaping () -> Void,
         contextAction: (() -> Void)? = nil,
+        pointerAction: ((WindowsTrayIconControl, CGPoint?) -> Void)? = nil,
         dragIdentifier: String? = nil,
         dropAxis: WindowsTrayIconDropAxis = .horizontal,
         dropValidator: ((String) -> Bool)? = nil,
@@ -117,6 +119,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         self.preservesTransientPanelOnMouseDown = preservesTransientPanelOnMouseDown
         self.primaryAction = { _ in primaryAction() }
         self.contextAction = contextAction
+        self.pointerAction = pointerAction
         self.dragIdentifier = dragIdentifier
         self.dropAxis = dropAxis
         self.dropValidator = dropValidator
@@ -134,6 +137,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         preservesTransientPanelOnMouseDown: Bool = false,
         anchoredPrimaryAction: @escaping (WindowsTrayIconControl) -> Void,
         contextAction: (() -> Void)? = nil,
+        pointerAction: ((WindowsTrayIconControl, CGPoint?) -> Void)? = nil,
         dragIdentifier: String? = nil,
         dropAxis: WindowsTrayIconDropAxis = .horizontal,
         dropValidator: ((String) -> Bool)? = nil,
@@ -149,6 +153,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
         self.preservesTransientPanelOnMouseDown = preservesTransientPanelOnMouseDown
         self.primaryAction = anchoredPrimaryAction
         self.contextAction = contextAction
+        self.pointerAction = pointerAction
         self.dragIdentifier = dragIdentifier
         self.dropAxis = dropAxis
         self.dropValidator = dropValidator
@@ -183,6 +188,10 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
             primaryAction(control)
         }
         control.onRightActivate = contextAction
+        control.onPointerMove = { [weak control] location in
+            guard let control else { return }
+            pointerAction?(control, location)
+        }
         control.dragIdentifier = dragIdentifier
         control.dropAxis = dropAxis
         control.dropValidator = dropValidator
@@ -203,6 +212,7 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     static let trackingAreaOptions: NSTrackingArea.Options = [
         .activeAlways,
         .mouseEnteredAndExited,
+        .mouseMoved,
         .inVisibleRect,
     ]
 
@@ -212,6 +222,7 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     var preservesTransientPanelOnMouseDown = false
     var onLeftActivate: (() -> Void)?
     var onRightActivate: (() -> Void)?
+    var onPointerMove: ((CGPoint?) -> Void)?
     var dragIdentifier: String?
     var dropAxis = WindowsTrayIconDropAxis.horizontal
     var dropValidator: ((String) -> Bool)?
@@ -271,6 +282,7 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     override func mouseEntered(with event: NSEvent) {
         isHovered = true
         needsDisplay = true
+        onPointerMove?(convert(event.locationInWindow, from: nil))
         guard !hoverTitle.isEmpty, let window else { return }
         let anchor = window.convertToScreen(convert(bounds, to: nil))
         WindowsTrayTooltipController.shared.schedule(
@@ -284,7 +296,12 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     override func mouseExited(with event: NSEvent) {
         isHovered = false
         needsDisplay = true
+        onPointerMove?(nil)
         WindowsTrayTooltipController.shared.hide(owner: self)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        onPointerMove?(convert(event.locationInWindow, from: nil))
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -349,6 +366,7 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window == nil {
+            onPointerMove?(nil)
             WindowsTrayTooltipController.shared.hide(owner: self)
         }
     }

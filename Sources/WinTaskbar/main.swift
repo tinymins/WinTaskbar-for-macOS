@@ -387,6 +387,7 @@ func runSelfTest() async -> Int32 {
         processIdentifier: 101,
         accessibilityLabel: "Status App",
         sourceFrame: CGRect(x: 100, y: 2, width: 24, height: 24),
+        captureWindowID: 301,
         imageFingerprint: unchangedTrayImage,
         fallbackPath: nil
     )
@@ -395,6 +396,7 @@ func runSelfTest() async -> Int32 {
         processIdentifier: unchangedTrayPresentation.processIdentifier,
         accessibilityLabel: unchangedTrayPresentation.accessibilityLabel,
         sourceFrame: unchangedTrayPresentation.sourceFrame,
+        captureWindowID: unchangedTrayPresentation.captureWindowID,
         imageFingerprint: changedTrayImage,
         fallbackPath: nil
     )
@@ -511,6 +513,14 @@ func runSelfTest() async -> Int32 {
           ),
           unchangedTrayImage != changedTrayImage,
           [unchangedTrayPresentation] != [changedTrayPresentation],
+          ExternalStatusItemLiveCapturePolicy.framesPerSecond == 25,
+          ExternalStatusItemLiveCapturePolicy.interval == 0.04,
+          ExternalStatusItemLiveCapturePolicy.shouldRefresh(
+              sourceFrame: compositeTraySourceFrame
+          ),
+          !ExternalStatusItemLiveCapturePolicy.shouldRefresh(
+              sourceFrame: CGRect(x: 100, y: 2, width: 24, height: 24)
+          ),
           compositeTrayCenterPoint == CGPoint(x: 1048, y: 15),
           ExternalStatusItemClickMapper.sourcePoint(
               activationLocation: CGPoint(x: 6, y: 20),
@@ -541,6 +551,7 @@ func runSelfTest() async -> Int32 {
           WindowsTrayIconMetrics.showDesktopIndicatorLength < WindowsTrayIconMetrics.controlHeight,
           WindowsTrayIconMetrics.pressedFillOpacity > WindowsTrayIconMetrics.hoverFillOpacity,
           WindowsTrayIconControl.trackingAreaOptions.contains(.inVisibleRect),
+          WindowsTrayIconControl.trackingAreaOptions.contains(.mouseMoved),
           WindowsTrayTooltipMetrics.size(for: "QQ音乐").height == 32,
           WindowsTrayTooltipMetrics.size(for: "Thursday, August 27, 2026\n\nThu 14:35:49 (Local time)").height > 32,
           preferences.menuButtonPlacement == .standard,
