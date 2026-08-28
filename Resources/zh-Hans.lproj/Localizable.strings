@@ -258,6 +258,8 @@
 	<string>显示桌面</string>
 	<key>Show Finder in running apps</key>
 	<string>在运行的应用中显示访达</string>
+	<key>Show third-party tray icons</key>
+	<string>显示第三方托盘图标</string>
 	<key>Show app labels under icons</key>
 	<string>在图标下显示应用名称</string>
 	<key>Show in Finder</key>

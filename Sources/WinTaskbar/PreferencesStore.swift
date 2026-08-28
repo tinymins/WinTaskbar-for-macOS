@@ -38,6 +38,7 @@ final class PreferencesStore: ObservableObject {
     @Published var trayVolumeEnabled: Bool { didSet { defaults.set(trayVolumeEnabled, forKey: "wintaskbar.feature.trayVolume") } }
     @Published var trayWifiEnabled: Bool { didSet { defaults.set(trayWifiEnabled, forKey: "wintaskbar.feature.trayWifi") } }
     @Published var trayInputSourceEnabled: Bool { didSet { defaults.set(trayInputSourceEnabled, forKey: "wintaskbar.feature.trayInputSource") } }
+    @Published var externalStatusItemsEnabled: Bool { didSet { defaults.set(externalStatusItemsEnabled, forKey: "wintaskbar.feature.externalStatusItems") } }
     @Published var trayClockEnabled: Bool { didSet { defaults.set(trayClockEnabled, forKey: "wintaskbar.feature.trayClock") } }
     @Published var trayClockShowsSeconds: Bool { didSet { defaults.set(trayClockShowsSeconds, forKey: "wintaskbar.feature.trayClockShowsSeconds") } }
     @Published var dateTimeCalendarKind: DateTimeCalendarKind { didSet { defaults.set(dateTimeCalendarKind.rawValue, forKey: "wintaskbar.dateTime.calendar") } }
@@ -114,6 +115,7 @@ final class PreferencesStore: ObservableObject {
         trayVolumeEnabled = defaults.object(forKey: "wintaskbar.feature.trayVolume") as? Bool ?? true
         trayWifiEnabled = defaults.object(forKey: "wintaskbar.feature.trayWifi") as? Bool ?? true
         trayInputSourceEnabled = defaults.object(forKey: "wintaskbar.feature.trayInputSource") as? Bool ?? true
+        externalStatusItemsEnabled = defaults.object(forKey: "wintaskbar.feature.externalStatusItems") as? Bool ?? false
         trayClockEnabled = defaults.object(forKey: "wintaskbar.feature.trayClock") as? Bool ?? true
         trayClockShowsSeconds = defaults.object(forKey: "wintaskbar.feature.trayClockShowsSeconds") as? Bool ?? true
         dateTimeCalendarKind = DateTimeCalendarKind(
@@ -259,6 +261,7 @@ final class PreferencesStore: ObservableObject {
         trayVolumeEnabled = true
         trayWifiEnabled = true
         trayInputSourceEnabled = true
+        externalStatusItemsEnabled = false
         trayClockEnabled = true
         trayClockShowsSeconds = true
         dateTimeCalendarKind = .gregorian

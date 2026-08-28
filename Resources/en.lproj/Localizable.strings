@@ -248,6 +248,8 @@
 	<string>Show Desktop</string>
 	<key>Show Finder in running apps</key>
 	<string>Show Finder in running apps</string>
+	<key>Show third-party tray icons</key>
+	<string>Show third-party tray icons</string>
 	<key>Show app labels under icons</key>
 	<string>Show app labels under icons</string>
 	<key>Show in Finder</key>

@@ -411,6 +411,7 @@ private enum ExternalStatusItemDiscovery {
 final class ExternalStatusItemService: NSObject, ObservableObject {
     @Published private(set) var items: [ExternalStatusItem] = []
     @Published private(set) var layout: ExternalStatusItemLayout
+    private(set) var isEnabled = false
 
     private var elements: [String: AXUIElement] = [:]
     private var refreshStates: [ExternalStatusItemRefreshState] = []
@@ -430,17 +431,33 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         self.layout = layout
         layoutStore.save(layout)
         super.init()
-        refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.refresh()
-            }
-        }
     }
 
     isolated deinit {
         timer?.invalidate()
         refreshTask?.cancel()
+    }
+
+    func setEnabled(_ enabled: Bool) {
+        guard enabled != isEnabled else { return }
+        isEnabled = enabled
+        if enabled {
+            refresh()
+            timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.refresh()
+                }
+            }
+            return
+        }
+
+        timer?.invalidate()
+        timer = nil
+        refreshTask?.cancel()
+        refreshTask = nil
+        items = []
+        elements = [:]
+        refreshStates = []
     }
 
     func items(
@@ -706,11 +723,13 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
     }
 
     private func refresh() {
+        guard isEnabled else { return }
         guard AXIsProcessTrusted() else {
             refreshTask?.cancel()
             refreshTask = nil
             items = []
             elements = [:]
+            refreshStates = []
             return
         }
         guard refreshTask == nil else { return }

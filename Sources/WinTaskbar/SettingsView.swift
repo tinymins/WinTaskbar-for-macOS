@@ -291,6 +291,7 @@ struct SettingsView: View {
                 Toggle("Shortcuts", isOn: $preferences.showShortcutsInMenu)
             }
             SettingsSection("System Tray") {
+                Toggle("Show third-party tray icons", isOn: $preferences.externalStatusItemsEnabled)
                 Toggle("Battery", isOn: $preferences.trayBatteryEnabled)
                 Toggle("Input source", isOn: $preferences.trayInputSourceEnabled)
                 Toggle("Volume", isOn: $preferences.trayVolumeEnabled)

@@ -124,6 +124,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.status.setClockShowsSeconds(clockEnabled && showsSeconds)
             }
             .store(in: &cancellables)
+        preferences.$externalStatusItemsEnabled
+            .removeDuplicates()
+            .sink { [weak self] enabled in
+                self?.externalStatusItems.setEnabled(enabled)
+            }
+            .store(in: &cancellables)
         preferences.$position
             .removeDuplicates()
             .dropFirst()
@@ -421,6 +427,7 @@ func runSelfTest() async -> Int32 {
           preferences.panelBlurRadius == 20,
           preferences.trayClockEnabled,
           preferences.trayClockShowsSeconds,
+          !preferences.externalStatusItemsEnabled,
           preferences.dateTimeCalendarKind == .gregorian,
           preferences.dateTimeFirstDayOfWeek == .sunday,
           preferences.dateTimeShortDatePattern == "M/d/yyyy",
@@ -2128,6 +2135,7 @@ func runSelfTest() async -> Int32 {
     preferences.showFlashingOnTaskbarApps = false
     preferences.barHeight = 64
     preferences.trayWifiEnabled = false
+    preferences.externalStatusItemsEnabled = true
     preferences.trayClockShowsSeconds = false
     preferences.dateTimeFirstDayOfWeek = .monday
     preferences.dateTimeShortDatePattern = "yyyy-MM-dd"
@@ -2158,6 +2166,7 @@ func runSelfTest() async -> Int32 {
           defaults.bool(forKey: "wintaskbar.showFlashingOnTaskbarApps") == false,
           defaults.double(forKey: "wintaskbar.barHeight") == 64,
           defaults.bool(forKey: "wintaskbar.feature.trayWifi") == false,
+          PreferencesStore(defaults: defaults).externalStatusItemsEnabled,
           !PreferencesStore(defaults: defaults).trayClockShowsSeconds,
           PreferencesStore(defaults: defaults).dateTimeFirstDayOfWeek == .monday,
           PreferencesStore(defaults: defaults).dateTimeShortDatePattern == "yyyy-MM-dd",
