@@ -65,20 +65,33 @@ struct WindowsKeyGestureState {
 enum WindowsSpaceGestureAction: Equatable {
     case present
     case advance
+    case retreat
     case dismiss
 }
 
 struct WindowsSpaceGestureState {
+    static let presentationDelayMilliseconds = 300
+
     private let windowsModifier: NSEvent.ModifierFlags
     private var isActive = false
+    private var isPresented = false
+    private var pendingCycleAction = WindowsSpaceGestureAction.advance
 
     init(windowsModifier: NSEvent.ModifierFlags = .option) {
         self.windowsModifier = windowsModifier
     }
 
-    mutating func press() -> WindowsSpaceGestureAction {
-        if isActive { return .advance }
+    mutating func press(reverse: Bool = false) -> WindowsSpaceGestureAction? {
+        let cycleAction = reverse ? WindowsSpaceGestureAction.retreat : .advance
+        if isActive { return cycleAction }
         isActive = true
+        pendingCycleAction = cycleAction
+        return nil
+    }
+
+    mutating func presentationDelayElapsed() -> WindowsSpaceGestureAction? {
+        guard isActive, !isPresented else { return nil }
+        isPresented = true
         return .present
     }
 
@@ -86,14 +99,20 @@ struct WindowsSpaceGestureState {
         guard isActive else { return nil }
         let flags = rawFlags.intersection(.deviceIndependentFlagsMask)
         guard !flags.contains(windowsModifier) else { return nil }
+        let action: WindowsSpaceGestureAction = isPresented ? .dismiss : pendingCycleAction
         isActive = false
-        return .dismiss
+        isPresented = false
+        pendingCycleAction = .advance
+        return action
     }
 
     mutating func reset() -> WindowsSpaceGestureAction? {
         guard isActive else { return nil }
+        let action: WindowsSpaceGestureAction? = isPresented ? .dismiss : nil
         isActive = false
-        return .dismiss
+        isPresented = false
+        pendingCycleAction = .advance
+        return action
     }
 }
 
@@ -143,10 +162,13 @@ final class GlobalHotkeysService: ObservableObject {
     private var windowsKeyEventTapSource: CFRunLoopSource?
     private(set) var isEnabled = false
     private var configurations: [GlobalShortcutConfiguration] = []
+    private var reverseWindowsSpaceHotKeyIDs: Set<Int> = []
     private var windowsKeyMapping: WindowsKeyMapping = .option
     private var windowsKeyOpensStart = true
     private var windowsKeyGesture = WindowsKeyGestureState()
     private var windowsSpaceGesture = WindowsSpaceGestureState()
+    private var windowsSpacePresentationWorkItem: DispatchWorkItem?
+    private var windowsSpacePresentationGeneration = 0
     private var windowsSpaceTrackingEnabled = false
 
     private init() {
@@ -186,6 +208,25 @@ final class GlobalHotkeysService: ObservableObject {
                     issues[configuration.id] = issue
                 }
             }
+            for (index, configuration) in configurations.enumerated() where configuration.isEnabled {
+                guard configuration.usesWindowsKey,
+                      configuration.action == .toggleInputSources,
+                      issues[configuration.id] == nil,
+                      configurationByHotKeyID[index + 1] != nil,
+                      let reverseShortcut = Self.reverseWindowsSpaceShortcut(
+                          for: configuration.resolvedShortcut(mapping: windowsKeyMapping)
+                      ) else { continue }
+                let reverseID = configurations.count + index + 1
+                if let issue = register(
+                    id: reverseID,
+                    shortcut: reverseShortcut,
+                    configuration: configuration
+                ) {
+                    issues[configuration.id] = "Reverse shortcut \(issue.lowercased())"
+                } else {
+                    reverseWindowsSpaceHotKeyIDs.insert(reverseID)
+                }
+            }
             let tracksWindowsSpace = configurations.contains {
                 $0.isEnabled && $0.usesWindowsKey && $0.action == .toggleInputSources
             }
@@ -223,12 +264,23 @@ final class GlobalHotkeysService: ObservableObject {
         return issues
     }
 
+    static func reverseWindowsSpaceShortcut(for shortcut: HotkeyShortcut) -> HotkeyShortcut? {
+        guard shortcut.modifiers & UInt32(shiftKey) == 0 else { return nil }
+        var reverseShortcut = shortcut
+        reverseShortcut.modifiers |= UInt32(shiftKey)
+        return reverseShortcut
+    }
+
     fileprivate func handle(id: Int) {
         guard let configuration = configurationByHotKeyID[id] else { return }
         if windowsSpaceTrackingEnabled,
            configuration.usesWindowsKey,
            configuration.action == .toggleInputSources {
-            onWindowsSpaceGesture?(windowsSpaceGesture.press())
+            if let action = windowsSpaceGesture.press(reverse: reverseWindowsSpaceHotKeyIDs.contains(id)) {
+                onWindowsSpaceGesture?(action)
+            } else {
+                scheduleWindowsSpacePresentation()
+            }
             return
         }
         onInvoke?(configuration)
@@ -256,14 +308,39 @@ final class GlobalHotkeysService: ObservableObject {
     }
 
     private func unregisterAll() {
+        cancelWindowsSpacePresentation()
         if let action = windowsSpaceGesture.reset() {
             onWindowsSpaceGesture?(action)
         }
         hotKeys.forEach { _ = UnregisterEventHotKey($0) }
         hotKeys.removeAll()
         configurationByHotKeyID.removeAll()
+        reverseWindowsSpaceHotKeyIDs.removeAll()
         windowsSpaceTrackingEnabled = false
         removeWindowsKeyEventTap()
+    }
+
+    private func scheduleWindowsSpacePresentation() {
+        cancelWindowsSpacePresentation()
+        let generation = windowsSpacePresentationGeneration
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self,
+                  self.windowsSpacePresentationGeneration == generation,
+                  let action = self.windowsSpaceGesture.presentationDelayElapsed() else { return }
+            self.windowsSpacePresentationWorkItem = nil
+            self.onWindowsSpaceGesture?(action)
+        }
+        windowsSpacePresentationWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + .milliseconds(WindowsSpaceGestureState.presentationDelayMilliseconds),
+            execute: workItem
+        )
+    }
+
+    private func cancelWindowsSpacePresentation() {
+        windowsSpacePresentationWorkItem?.cancel()
+        windowsSpacePresentationWorkItem = nil
+        windowsSpacePresentationGeneration += 1
     }
 
     private func installWindowsKeyEventTap() -> Bool {
@@ -301,6 +378,7 @@ final class GlobalHotkeysService: ObservableObject {
 
     fileprivate func handleWindowsKeyEvent(_ eventType: CGEventType, rawFlags: UInt64) {
         if eventType == .tapDisabledByTimeout || eventType == .tapDisabledByUserInput {
+            cancelWindowsSpacePresentation()
             windowsKeyGesture.reset()
             if let action = windowsSpaceGesture.reset() {
                 onWindowsSpaceGesture?(action)
@@ -313,6 +391,7 @@ final class GlobalHotkeysService: ObservableObject {
         let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(rawFlags))
         if eventType == .flagsChanged,
            let action = windowsSpaceGesture.flagsChanged(to: modifierFlags) {
+            cancelWindowsSpacePresentation()
             onWindowsSpaceGesture?(action)
         }
         if windowsKeyGesture.handle(eventType: eventType, modifierFlags: modifierFlags) {

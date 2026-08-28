@@ -71,6 +71,12 @@ enum InputSourceCycling {
         guard let currentIndex = sourceIDs.firstIndex(of: currentID) else { return sourceIDs.first }
         return sourceIDs[(currentIndex + 1) % sourceIDs.count]
     }
+
+    static func previousID(sourceIDs: [String], currentID: String) -> String? {
+        guard !sourceIDs.isEmpty else { return nil }
+        guard let currentIndex = sourceIDs.firstIndex(of: currentID) else { return sourceIDs.last }
+        return sourceIDs[(currentIndex - 1 + sourceIDs.count) % sourceIDs.count]
+    }
 }
 
 @MainActor
@@ -277,6 +283,14 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
             currentID: inputSourceID
         ) else { return }
         selectInputSource(id: nextID)
+    }
+
+    func selectPreviousInputSource() {
+        guard let previousID = InputSourceCycling.previousID(
+            sourceIDs: inputSources.map(\.id),
+            currentID: inputSourceID
+        ) else { return }
+        selectInputSource(id: previousID)
     }
 
     private func readBattery() {

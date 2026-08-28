@@ -859,6 +859,8 @@ final class TaskbarWindowController {
             )
         case .advance:
             inputSourcePanelController.advance(service: status)
+        case .retreat:
+            inputSourcePanelController.retreat(service: status)
         case .dismiss:
             inputSourcePanelController.dismiss()
         }

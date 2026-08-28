@@ -597,6 +597,10 @@ func runSelfTest() async -> Int32 {
           InputSourceCycling.nextID(sourceIDs: ["abc", "pinyin"], currentID: "missing") == "abc",
           InputSourceCycling.nextID(sourceIDs: ["abc", "pinyin"], currentID: "abc") == "pinyin",
           InputSourceCycling.nextID(sourceIDs: ["abc", "pinyin"], currentID: "pinyin") == "abc",
+          InputSourceCycling.previousID(sourceIDs: [], currentID: "missing") == nil,
+          InputSourceCycling.previousID(sourceIDs: ["abc", "pinyin"], currentID: "missing") == "pinyin",
+          InputSourceCycling.previousID(sourceIDs: ["abc", "pinyin"], currentID: "abc") == "pinyin",
+          InputSourceCycling.previousID(sourceIDs: ["abc", "pinyin"], currentID: "pinyin") == "abc",
           InputSourcePanelMetrics.contentSize(inputSourceCount: 2) == CGSize(width: 360, height: 215),
           InputSourcePanelMetrics.contentSize(inputSourceCount: 8)
             == InputSourcePanelMetrics.contentSize(inputSourceCount: 5),
@@ -1899,14 +1903,40 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
-    var windowsSpaceGesture = WindowsSpaceGestureState()
-    guard windowsSpaceGesture.press() == .present,
-          windowsSpaceGesture.flagsChanged(to: [.option]) == nil,
-          windowsSpaceGesture.press() == .advance,
-          windowsSpaceGesture.flagsChanged(to: []) == .dismiss,
-          windowsSpaceGesture.flagsChanged(to: []) == nil,
-          windowsSpaceGesture.press() == .present,
-          windowsSpaceGesture.reset() == .dismiss else {
+    let forwardWindowsSpaceShortcut = HotkeyShortcut(
+        keyCode: 49,
+        modifiers: UInt32(optionKey),
+        keyLabel: "Space"
+    )
+    let reverseWindowsSpaceShortcut = GlobalHotkeysService.reverseWindowsSpaceShortcut(
+        for: forwardWindowsSpaceShortcut
+    )
+    var quickWindowsSpaceGesture = WindowsSpaceGestureState()
+    var quickReverseWindowsSpaceGesture = WindowsSpaceGestureState()
+    var heldWindowsSpaceGesture = WindowsSpaceGestureState()
+    var interruptedWindowsSpaceGesture = WindowsSpaceGestureState()
+    guard let reverseWindowsSpaceShortcut,
+          reverseWindowsSpaceShortcut.keyCode == forwardWindowsSpaceShortcut.keyCode,
+          reverseWindowsSpaceShortcut.modifiers == UInt32(optionKey | shiftKey),
+          GlobalHotkeysService.reverseWindowsSpaceShortcut(for: reverseWindowsSpaceShortcut) == nil,
+          WindowsSpaceGestureState.presentationDelayMilliseconds == 300,
+          quickWindowsSpaceGesture.press() == nil,
+          quickWindowsSpaceGesture.flagsChanged(to: [.option]) == nil,
+          quickWindowsSpaceGesture.flagsChanged(to: []) == .advance,
+          quickWindowsSpaceGesture.presentationDelayElapsed() == nil,
+          quickReverseWindowsSpaceGesture.press(reverse: true) == nil,
+          quickReverseWindowsSpaceGesture.flagsChanged(to: []) == .retreat,
+          heldWindowsSpaceGesture.press() == nil,
+          heldWindowsSpaceGesture.presentationDelayElapsed() == .present,
+          heldWindowsSpaceGesture.press() == .advance,
+          heldWindowsSpaceGesture.press(reverse: true) == .retreat,
+          heldWindowsSpaceGesture.flagsChanged(to: []) == .dismiss,
+          heldWindowsSpaceGesture.flagsChanged(to: []) == nil,
+          heldWindowsSpaceGesture.press() == nil,
+          heldWindowsSpaceGesture.reset() == nil,
+          interruptedWindowsSpaceGesture.press() == nil,
+          interruptedWindowsSpaceGesture.presentationDelayElapsed() == .present,
+          interruptedWindowsSpaceGesture.reset() == .dismiss else {
         fputs("SELF-TEST FAILED: Win+Space gesture lifecycle mismatch\n", stderr)
         return 1
     }

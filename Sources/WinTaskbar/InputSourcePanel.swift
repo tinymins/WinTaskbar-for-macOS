@@ -88,6 +88,10 @@ final class InputSourcePanelController: ObservableObject {
         service.selectNextInputSource()
     }
 
+    func retreat(service: SystemStatusService) {
+        service.selectPreviousInputSource()
+    }
+
     private func present(
         service: SystemStatusService,
         position: TaskbarPosition,
