@@ -388,6 +388,7 @@ func runSelfTest() async -> Int32 {
         accessibilityLabel: "Status App",
         sourceFrame: CGRect(x: 100, y: 2, width: 24, height: 24),
         captureWindowID: 301,
+        captureFrame: CGRect(x: 95, y: 2, width: 34, height: 24),
         imageFingerprint: unchangedTrayImage,
         fallbackPath: nil
     )
@@ -397,6 +398,7 @@ func runSelfTest() async -> Int32 {
         accessibilityLabel: unchangedTrayPresentation.accessibilityLabel,
         sourceFrame: unchangedTrayPresentation.sourceFrame,
         captureWindowID: unchangedTrayPresentation.captureWindowID,
+        captureFrame: unchangedTrayPresentation.captureFrame,
         imageFingerprint: changedTrayImage,
         fallbackPath: nil
     )

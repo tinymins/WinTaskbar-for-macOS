@@ -10,6 +10,9 @@ struct ExternalStatusItem: Identifiable {
     let sourceFrame: CGRect
     let image: NSImage
     let captureWindowID: CGWindowID?
+    let captureFrame: CGRect?
+
+    var interactionFrame: CGRect { captureFrame ?? sourceFrame }
 }
 
 enum ExternalStatusItemVisibility {
@@ -139,6 +142,7 @@ struct ExternalStatusItemRefreshState: Equatable, Sendable {
     let accessibilityLabel: String
     let sourceFrame: CGRect
     let captureWindowID: CGWindowID?
+    let captureFrame: CGRect?
     let imageFingerprint: UInt64?
     let fallbackPath: String?
 }
@@ -224,6 +228,7 @@ private struct ExternalStatusCapturedImage: @unchecked Sendable {
     let image: CGImage
     let fingerprint: UInt64
     let windowID: CGWindowID
+    let windowFrame: CGRect
 }
 
 private struct ExternalStatusItemSnapshot: Sendable {
@@ -341,22 +346,34 @@ private enum ExternalStatusItemDiscovery {
                   window.id,
                   [.boundsIgnoreFraming, .bestResolution]
               ) else { return nil }
-        return transparentContentImage(image, windowID: window.id)
+        return transparentContentImage(
+            image,
+            windowID: window.id,
+            windowFrame: window.frame
+        )
     }
 
-    static func capture(windowID: CGWindowID) -> ExternalStatusCapturedImage? {
+    static func capture(
+        windowID: CGWindowID,
+        windowFrame: CGRect
+    ) -> ExternalStatusCapturedImage? {
         guard let image = CGWindowListCreateImage(
             .null,
             .optionIncludingWindow,
             windowID,
             [.boundsIgnoreFraming, .bestResolution]
         ) else { return nil }
-        return transparentContentImage(image, windowID: windowID)
+        return transparentContentImage(
+            image,
+            windowID: windowID,
+            windowFrame: windowFrame
+        )
     }
 
     private static func transparentContentImage(
         _ image: CGImage,
-        windowID: CGWindowID
+        windowID: CGWindowID,
+        windowFrame: CGRect
     ) -> ExternalStatusCapturedImage? {
         let width = image.width
         let height = image.height
@@ -421,7 +438,8 @@ private enum ExternalStatusItemDiscovery {
                 height: height,
                 rgbaBytes: pixels
             ),
-            windowID: windowID
+            windowID: windowID,
+            windowFrame: windowFrame
         )
     }
 
@@ -472,7 +490,6 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
     private var refreshTask: Task<Void, Never>?
     private var liveCaptureTask: Task<Void, Never>?
     private var presentedMenu: NSMenu?
-    private var hoveredItemID: String?
 
     init(defaults: UserDefaults = .standard) {
         let layoutStore = ExternalStatusItemLayoutStore(defaults: defaults)
@@ -525,7 +542,6 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         refreshTask = nil
         liveCaptureTask?.cancel()
         liveCaptureTask = nil
-        hoveredItemID = nil
         items = []
         elements = [:]
         refreshStates = []
@@ -622,21 +638,6 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         }
     }
 
-    func updatePointerHover(_ item: ExternalStatusItem, sourcePoint: CGPoint?) {
-        guard ExternalStatusItemLiveCapturePolicy.shouldRefresh(sourceFrame: item.sourceFrame) else {
-            return
-        }
-        if let sourcePoint {
-            hoveredItemID = item.id
-            postMouseMoved(at: sourcePoint)
-        } else if hoveredItemID == item.id {
-            hoveredItemID = nil
-            if let pointerLocation = CGEvent(source: nil)?.location {
-                postMouseMoved(at: pointerLocation)
-            }
-        }
-    }
-
     private func postClick(at point: CGPoint) {
         let originalPointerLocation = CGEvent(source: nil)?.location
         CGEvent(
@@ -648,19 +649,6 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         CGEvent(
             mouseEventSource: nil,
             mouseType: .leftMouseUp,
-            mouseCursorPosition: point,
-            mouseButton: .left
-        )?.post(tap: .cghidEventTap)
-        if let originalPointerLocation {
-            CGWarpMouseCursorPosition(originalPointerLocation)
-        }
-    }
-
-    private func postMouseMoved(at point: CGPoint) {
-        let originalPointerLocation = CGEvent(source: nil)?.location
-        CGEvent(
-            mouseEventSource: nil,
-            mouseType: .mouseMoved,
             mouseCursorPosition: point,
             mouseButton: .left
         )?.post(tap: .cghidEventTap)
@@ -894,17 +882,21 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         guard isEnabled,
               refreshTask == nil,
               liveCaptureTask == nil else { return }
-        let targets = items.compactMap { item -> (String, CGWindowID)? in
-            guard ExternalStatusItemLiveCapturePolicy.shouldRefresh(sourceFrame: item.sourceFrame),
-                  let captureWindowID = item.captureWindowID else { return nil }
-            return (item.id, captureWindowID)
+        let targets = items.compactMap { item -> (String, CGWindowID, CGRect)? in
+            guard ExternalStatusItemLiveCapturePolicy.shouldRefresh(sourceFrame: item.interactionFrame),
+                  let captureWindowID = item.captureWindowID,
+                  let captureFrame = item.captureFrame else { return nil }
+            return (item.id, captureWindowID, captureFrame)
         }
         guard !targets.isEmpty else { return }
 
         liveCaptureTask = Task { [weak self] in
             let captures = await Task.detached(priority: .userInitiated) {
-                targets.compactMap { itemID, windowID in
-                    ExternalStatusItemDiscovery.capture(windowID: windowID).map { (itemID, $0) }
+                targets.compactMap { itemID, windowID, windowFrame in
+                    ExternalStatusItemDiscovery.capture(
+                        windowID: windowID,
+                        windowFrame: windowFrame
+                    ).map { (itemID, $0) }
                 }
             }.value
             guard let self, !Task.isCancelled else { return }
@@ -933,7 +925,8 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
                 accessibilityLabel: item.accessibilityLabel,
                 sourceFrame: item.sourceFrame,
                 image: image,
-                captureWindowID: capture.windowID
+                captureWindowID: capture.windowID,
+                captureFrame: capture.windowFrame
             )
             let state = nextStates[stateIndex]
             nextStates[stateIndex] = ExternalStatusItemRefreshState(
@@ -942,6 +935,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
                 accessibilityLabel: state.accessibilityLabel,
                 sourceFrame: state.sourceFrame,
                 captureWindowID: capture.windowID,
+                captureFrame: capture.windowFrame,
                 imageFingerprint: capture.fingerprint,
                 fallbackPath: state.fallbackPath
             )
@@ -972,6 +966,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
                     accessibilityLabel: snapshot.accessibilityLabel,
                     sourceFrame: snapshot.sourceFrame,
                     captureWindowID: snapshot.capturedImage?.windowID,
+                    captureFrame: snapshot.capturedImage?.windowFrame,
                     imageFingerprint: snapshot.capturedImage?.fingerprint,
                     fallbackPath: snapshot.capturedImage == nil ? snapshot.fallbackURL?.path : nil
                 )
@@ -1004,7 +999,8 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
                     accessibilityLabel: snapshot.accessibilityLabel,
                     sourceFrame: snapshot.sourceFrame,
                     image: image,
-                    captureWindowID: snapshot.capturedImage?.windowID
+                    captureWindowID: snapshot.capturedImage?.windowID,
+                    captureFrame: snapshot.capturedImage?.windowFrame
                 )
             }
             refreshStates = nextStates
@@ -1269,21 +1265,12 @@ struct ExternalStatusItemButton: View {
                     activationLocation: control.activationLocation,
                     controlBounds: control.bounds,
                     renderedContentSize: renderedContentSize,
-                    sourceFrame: item.sourceFrame
+                    sourceFrame: item.interactionFrame
                 ) : nil
                 service.performPrimaryAction(item, sourcePoint: sourcePoint)
                 onActivate?()
             },
             contextAction: { service.presentContextMenu(item) },
-            pointerAction: { control, location in
-                let sourcePoint = horizontal ? ExternalStatusItemClickMapper.sourcePoint(
-                    activationLocation: location,
-                    controlBounds: control.bounds,
-                    renderedContentSize: renderedContentSize,
-                    sourceFrame: item.sourceFrame
-                ) : nil
-                service.updatePointerHover(item, sourcePoint: sourcePoint)
-            },
             dragIdentifier: item.id,
             dropAxis: horizontal ? .horizontal : .vertical,
             dropValidator: { sourceID in
