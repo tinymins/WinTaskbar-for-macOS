@@ -398,6 +398,15 @@ func runSelfTest() async -> Int32 {
         imageFingerprint: changedTrayImage,
         fallbackPath: nil
     )
+    let compositeTraySourceFrame = CGRect(x: 973, y: 4, width: 150, height: 22)
+    let compositeTrayControlBounds = CGRect(x: 0, y: 0, width: 134, height: 40)
+    let compositeTrayContentSize = CGSize(width: 120, height: 18)
+    let compositeTrayCenterPoint = ExternalStatusItemClickMapper.sourcePoint(
+        activationLocation: CGPoint(x: 67, y: 20),
+        controlBounds: compositeTrayControlBounds,
+        renderedContentSize: compositeTrayContentSize,
+        sourceFrame: compositeTraySourceFrame
+    )
     guard SettingsPage.allCases.map(\.rawValue) == [
         "General",
         "Appearance",
@@ -502,6 +511,19 @@ func runSelfTest() async -> Int32 {
           ),
           unchangedTrayImage != changedTrayImage,
           [unchangedTrayPresentation] != [changedTrayPresentation],
+          compositeTrayCenterPoint == CGPoint(x: 1048, y: 15),
+          ExternalStatusItemClickMapper.sourcePoint(
+              activationLocation: CGPoint(x: 6, y: 20),
+              controlBounds: compositeTrayControlBounds,
+              renderedContentSize: compositeTrayContentSize,
+              sourceFrame: compositeTraySourceFrame
+          ) == nil,
+          ExternalStatusItemClickMapper.sourcePoint(
+              activationLocation: CGPoint(x: 16, y: 16),
+              controlBounds: CGRect(x: 0, y: 0, width: 32, height: 40),
+              renderedContentSize: CGSize(width: 18, height: 18),
+              sourceFrame: CGRect(x: 100, y: 2, width: 24, height: 24)
+          ) == nil,
           ExternalStatusOverflowMetrics.contentSize(itemCount: 11) == CGSize(width: 208, height: 128),
           !ExternalStatusOverflowVisibilityPolicy.shouldShowButton(hiddenItemCount: 0, isDragging: false),
           ExternalStatusOverflowVisibilityPolicy.shouldShowButton(hiddenItemCount: 1, isDragging: false),

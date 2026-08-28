@@ -97,6 +97,33 @@ enum ExternalStatusItemImageFingerprint {
     }
 }
 
+enum ExternalStatusItemClickMapper {
+    static func sourcePoint(
+        activationLocation: CGPoint?,
+        controlBounds: CGRect,
+        renderedContentSize: CGSize,
+        sourceFrame: CGRect
+    ) -> CGPoint? {
+        guard sourceFrame.height > 0,
+              sourceFrame.width >= sourceFrame.height * 2,
+              renderedContentSize.width > 0,
+              renderedContentSize.height > 0,
+              let activationLocation else { return nil }
+        let contentFrame = CGRect(
+            x: controlBounds.midX - renderedContentSize.width / 2,
+            y: controlBounds.midY - renderedContentSize.height / 2,
+            width: renderedContentSize.width,
+            height: renderedContentSize.height
+        )
+        guard contentFrame.contains(activationLocation) else { return nil }
+        let horizontalProgress = (activationLocation.x - contentFrame.minX) / contentFrame.width
+        return CGPoint(
+            x: sourceFrame.minX + horizontalProgress * sourceFrame.width,
+            y: sourceFrame.midY
+        )
+    }
+}
+
 struct ExternalStatusItemRefreshState: Equatable, Sendable {
     let id: String
     let processIdentifier: pid_t
@@ -528,9 +555,13 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         layoutStore.save(nextLayout)
     }
 
-    func performPrimaryAction(_ item: ExternalStatusItem) {
+    func performPrimaryAction(_ item: ExternalStatusItem, sourcePoint: CGPoint? = nil) {
         guard let element = elements[item.id] else {
             refresh()
+            return
+        }
+        if let sourcePoint {
+            postClick(at: sourcePoint)
             return
         }
         if children(of: element).contains(where: {
@@ -543,6 +574,25 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         let result = AXUIElementPerformAction(element, kAXPressAction as CFString)
         if result != .success, result != .cannotComplete {
             activateApplication(processIdentifier: item.processIdentifier)
+        }
+    }
+
+    private func postClick(at point: CGPoint) {
+        let originalPointerLocation = CGEvent(source: nil)?.location
+        CGEvent(
+            mouseEventSource: nil,
+            mouseType: .leftMouseDown,
+            mouseCursorPosition: point,
+            mouseButton: .left
+        )?.post(tap: .cghidEventTap)
+        CGEvent(
+            mouseEventSource: nil,
+            mouseType: .leftMouseUp,
+            mouseCursorPosition: point,
+            mouseButton: .left
+        )?.post(tap: .cghidEventTap)
+        if let originalPointerLocation {
+            CGWarpMouseCursorPosition(originalPointerLocation)
         }
     }
 
@@ -1061,11 +1111,30 @@ struct ExternalStatusItemButton: View {
     let controlWidth: CGFloat
     let onActivate: (() -> Void)?
 
+    private var renderedContentSize: CGSize {
+        CGSize(
+            width: min(
+                ExternalStatusItemsView.contentWidth(for: item.image),
+                max(
+                    controlWidth - 2 * WindowsTrayIconMetrics.horizontalContentPadding,
+                    WindowsTrayIconMetrics.iconSize
+                )
+            ),
+            height: WindowsTrayIconMetrics.iconSize
+        )
+    }
+
     var body: some View {
         WindowsTrayIconButton(
             title: item.accessibilityLabel,
-            primaryAction: {
-                service.performPrimaryAction(item)
+            anchoredPrimaryAction: { control in
+                let sourcePoint = horizontal ? ExternalStatusItemClickMapper.sourcePoint(
+                    activationLocation: control.activationLocation,
+                    controlBounds: control.bounds,
+                    renderedContentSize: renderedContentSize,
+                    sourceFrame: item.sourceFrame
+                ) : nil
+                service.performPrimaryAction(item, sourcePoint: sourcePoint)
                 onActivate?()
             },
             contextAction: { service.presentContextMenu(item) },
@@ -1096,14 +1165,8 @@ struct ExternalStatusItemButton: View {
                 .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
                 .frame(
-                    width: min(
-                        ExternalStatusItemsView.contentWidth(for: item.image),
-                        max(
-                            controlWidth - 2 * WindowsTrayIconMetrics.horizontalContentPadding,
-                            WindowsTrayIconMetrics.iconSize
-                        )
-                    ),
-                    height: WindowsTrayIconMetrics.iconSize
+                    width: renderedContentSize.width,
+                    height: renderedContentSize.height
                 )
         }
         .frame(width: controlWidth, height: WindowsTrayIconMetrics.controlHeight)

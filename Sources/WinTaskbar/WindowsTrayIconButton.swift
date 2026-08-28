@@ -223,6 +223,7 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
             if onDrop != nil { registerForDraggedTypes([Self.trayItemPasteboardType]) }
         }
     }
+    private(set) var activationLocation: CGPoint?
 
     private var hostingView: NSHostingView<AnyView>?
     private var trackingAreaReference: NSTrackingArea?
@@ -315,6 +316,7 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     }
 
     override func mouseUp(with event: NSEvent) {
+        let location = convert(event.locationInWindow, from: nil)
         mouseDownLocation = nil
         if didBeginDrag {
             didBeginDrag = false
@@ -322,11 +324,15 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
             needsDisplay = true
             return
         }
-        let shouldActivate = isPressed && bounds.contains(convert(event.locationInWindow, from: nil))
+        let shouldActivate = isPressed && bounds.contains(location)
         isPressed = false
         needsDisplay = true
         displayIfNeeded()
-        if shouldActivate { perform(onLeftActivate) }
+        if shouldActivate {
+            activationLocation = location
+            perform(onLeftActivate)
+            activationLocation = nil
+        }
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -335,6 +341,7 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     }
 
     override func accessibilityPerformPress() -> Bool {
+        activationLocation = nil
         perform(onLeftActivate)
         return onLeftActivate != nil
     }
