@@ -591,6 +591,8 @@ func runSelfTest() async -> Int32 {
     guard InputSourcePresentation.abbreviation(languageCode: "en-US", fallbackName: "ABC") == "ENG",
           InputSourcePresentation.abbreviation(languageCode: "zh-Hans", fallbackName: "Pinyin") == "中",
           InputSourcePresentation.abbreviation(languageCode: nil, fallbackName: "ABC") == "ABC",
+          InputSourceTrayPresentation.fontSize(for: "ENG") == 12,
+          InputSourceTrayPresentation.fontSize(for: "中") == 15,
           InputSourceCycling.nextID(sourceIDs: [], currentID: "missing") == nil,
           InputSourceCycling.nextID(sourceIDs: ["abc", "pinyin"], currentID: "missing") == "abc",
           InputSourceCycling.nextID(sourceIDs: ["abc", "pinyin"], currentID: "abc") == "pinyin",

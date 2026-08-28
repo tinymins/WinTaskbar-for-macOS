@@ -182,6 +182,16 @@ struct BatteryTrayView: View {
     }
 }
 
+enum InputSourceTrayPresentation {
+    static func usesCompactFont(for abbreviation: String) -> Bool {
+        abbreviation.count >= 3
+    }
+
+    static func fontSize(for abbreviation: String) -> CGFloat {
+        usesCompactFont(for: abbreviation) ? 12 : 15
+    }
+}
+
 struct InputSourceTrayView: View {
     @ObservedObject var service: SystemStatusService
     @ObservedObject var panelController: InputSourcePanelController
@@ -201,7 +211,14 @@ struct InputSourceTrayView: View {
             dropAction: dragConfiguration.onDrop
         ) {
             Text(currentAbbreviation)
-                .font(.system(size: 15, weight: .medium))
+                .font(
+                    .system(
+                        size: InputSourceTrayPresentation.fontSize(for: currentAbbreviation),
+                        weight: InputSourceTrayPresentation.usesCompactFont(for: currentAbbreviation)
+                            ? .regular
+                            : .medium
+                    )
+                )
         }
         .frame(width: WindowsTrayIconMetrics.squareControlWidth, height: WindowsTrayIconMetrics.controlHeight)
         .onDisappear { panelController.dismiss() }
