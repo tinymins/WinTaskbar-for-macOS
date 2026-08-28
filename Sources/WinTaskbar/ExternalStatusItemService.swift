@@ -82,6 +82,30 @@ struct ExternalStatusItemIdentity {
     }
 }
 
+enum ExternalStatusItemImageFingerprint {
+    static func make(width: Int, height: Int, rgbaBytes: [UInt8]) -> UInt64 {
+        var digest: UInt64 = 14_695_981_039_346_656_037
+        digest ^= UInt64(width)
+        digest &*= 1_099_511_628_211
+        digest ^= UInt64(height)
+        digest &*= 1_099_511_628_211
+        for byte in rgbaBytes {
+            digest ^= UInt64(byte)
+            digest &*= 1_099_511_628_211
+        }
+        return digest
+    }
+}
+
+struct ExternalStatusItemRefreshState: Equatable, Sendable {
+    let id: String
+    let processIdentifier: pid_t
+    let accessibilityLabel: String
+    let sourceFrame: CGRect
+    let imageFingerprint: UInt64?
+    let fallbackPath: String?
+}
+
 final class ExternalStatusItemLayoutStore {
     private static let orderKey = "wintaskbar.externalStatusItems.order"
     private static let hiddenKey = "wintaskbar.externalStatusItems.hidden"
@@ -159,12 +183,17 @@ private struct ExternalStatusApplicationSnapshot: Sendable {
     let localizedName: String?
 }
 
+private struct ExternalStatusCapturedImage: @unchecked Sendable {
+    let image: CGImage
+    let fingerprint: UInt64
+}
+
 private struct ExternalStatusItemSnapshot: Sendable {
     let id: String
     let processIdentifier: pid_t
     let accessibilityLabel: String
     let sourceFrame: CGRect
-    let capturedImage: CGImage?
+    let capturedImage: ExternalStatusCapturedImage?
     let fallbackURL: URL?
     let element: AXUIElement
 }
@@ -264,7 +293,7 @@ private enum ExternalStatusItemDiscovery {
     private static func capturedImage(
         frame: CGRect,
         windows: [StatusItemWindow]
-    ) -> CGImage? {
+    ) -> ExternalStatusCapturedImage? {
         guard let window = windows
             .filter({ $0.frame.minX <= frame.midX && $0.frame.maxX >= frame.midX })
             .min(by: { $0.frame.width < $1.frame.width }),
@@ -277,7 +306,7 @@ private enum ExternalStatusItemDiscovery {
         return transparentContentImage(image)
     }
 
-    private static func transparentContentImage(_ image: CGImage) -> CGImage? {
+    private static func transparentContentImage(_ image: CGImage) -> ExternalStatusCapturedImage? {
         let width = image.width
         let height = image.height
         guard width > 0, height > 0 else { return nil }
@@ -328,12 +357,20 @@ private enum ExternalStatusItemDiscovery {
         let cropMaximumX = min(width - 1, maximumX + padding)
         let normalizedMinimumY = max(0, height - 1 - maximumY - padding)
         let normalizedMaximumY = min(height - 1, height - 1 - minimumY + padding)
-        return image.cropping(to: CGRect(
+        guard let croppedImage = image.cropping(to: CGRect(
             x: cropMinimumX,
             y: normalizedMinimumY,
             width: cropMaximumX - cropMinimumX + 1,
             height: normalizedMaximumY - normalizedMinimumY + 1
-        ))
+        )) else { return nil }
+        return ExternalStatusCapturedImage(
+            image: croppedImage,
+            fingerprint: ExternalStatusItemImageFingerprint.make(
+                width: width,
+                height: height,
+                rgbaBytes: pixels
+            )
+        )
     }
 
     private static func frame(of element: AXUIElement) -> CGRect? {
@@ -375,6 +412,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
     @Published private(set) var layout: ExternalStatusItemLayout
 
     private var elements: [String: AXUIElement] = [:]
+    private var refreshStates: [ExternalStatusItemRefreshState] = []
     private let layoutStore: ExternalStatusItemLayoutStore
     private var timer: Timer?
     private var refreshTask: Task<Void, Never>?
@@ -711,35 +749,64 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
     }
 
     private func apply(_ snapshots: [ExternalStatusItemSnapshot]) {
-        var nextItems: [ExternalStatusItem] = []
+        let currentItemsByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        let currentStatesByID = Dictionary(
+            uniqueKeysWithValues: refreshStates.map { ($0.id, $0) }
+        )
+        var preparedSnapshots: [(
+            snapshot: ExternalStatusItemSnapshot,
+            state: ExternalStatusItemRefreshState
+        )] = []
         var nextElements: [String: AXUIElement] = [:]
         for snapshot in snapshots {
-            let image: NSImage?
-            if let capturedImage = snapshot.capturedImage {
-                image = NSImage(
-                    cgImage: capturedImage,
-                    size: NSSize(width: capturedImage.width, height: capturedImage.height)
+            guard snapshot.capturedImage != nil || snapshot.fallbackURL != nil else { continue }
+            preparedSnapshots.append((
+                snapshot: snapshot,
+                state: ExternalStatusItemRefreshState(
+                    id: snapshot.id,
+                    processIdentifier: snapshot.processIdentifier,
+                    accessibilityLabel: snapshot.accessibilityLabel,
+                    sourceFrame: snapshot.sourceFrame,
+                    imageFingerprint: snapshot.capturedImage?.fingerprint,
+                    fallbackPath: snapshot.capturedImage == nil ? snapshot.fallbackURL?.path : nil
                 )
-            } else if let fallbackURL = snapshot.fallbackURL {
-                image = NSWorkspace.shared.icon(forFile: fallbackURL.path)
-            } else {
-                image = nil
-            }
-            guard let image else { continue }
-            nextItems.append(ExternalStatusItem(
-                id: snapshot.id,
-                processIdentifier: snapshot.processIdentifier,
-                accessibilityLabel: snapshot.accessibilityLabel,
-                sourceFrame: snapshot.sourceFrame,
-                image: image
             ))
             nextElements[snapshot.id] = snapshot.element
         }
 
-        items = nextItems
+        let nextStates = preparedSnapshots.map(\.state)
+        if nextStates != refreshStates {
+            items = preparedSnapshots.map { prepared in
+                let snapshot = prepared.snapshot
+                let image: NSImage
+                if currentStatesByID[snapshot.id] == prepared.state,
+                   let currentItem = currentItemsByID[snapshot.id] {
+                    image = currentItem.image
+                } else if let capturedImage = snapshot.capturedImage {
+                    image = NSImage(
+                        cgImage: capturedImage.image,
+                        size: NSSize(
+                            width: capturedImage.image.width,
+                            height: capturedImage.image.height
+                        )
+                    )
+                } else {
+                    image = NSWorkspace.shared.icon(forFile: snapshot.fallbackURL!.path)
+                }
+                return ExternalStatusItem(
+                    id: snapshot.id,
+                    processIdentifier: snapshot.processIdentifier,
+                    accessibilityLabel: snapshot.accessibilityLabel,
+                    sourceFrame: snapshot.sourceFrame,
+                    image: image
+                )
+            }
+            refreshStates = nextStates
+        }
+
         var nextLayout = layout
         nextLayout.reconcile(
-            discoveredIDs: nextItems.map(\.id),
+            discoveredIDs: nextStates.map(\.id),
             beforeIDs: Set(SystemTrayItemID.allCases.map(\.rawValue))
         )
         if nextLayout != layout {

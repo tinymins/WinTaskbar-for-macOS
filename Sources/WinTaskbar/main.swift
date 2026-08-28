@@ -366,6 +366,32 @@ func runSelfTest() async -> Int32 {
     let trayLayoutStore = ExternalStatusItemLayoutStore(defaults: defaults)
     trayLayoutStore.save(trayLayout)
     let restoredTrayLayout = trayLayoutStore.load()
+    let unchangedTrayImage = ExternalStatusItemImageFingerprint.make(
+        width: 1,
+        height: 1,
+        rgbaBytes: [0, 0, 0, 255]
+    )
+    let changedTrayImage = ExternalStatusItemImageFingerprint.make(
+        width: 1,
+        height: 1,
+        rgbaBytes: [255, 255, 255, 255]
+    )
+    let unchangedTrayPresentation = ExternalStatusItemRefreshState(
+        id: "com.example.StatusApp|status-item",
+        processIdentifier: 101,
+        accessibilityLabel: "Status App",
+        sourceFrame: CGRect(x: 100, y: 2, width: 24, height: 24),
+        imageFingerprint: unchangedTrayImage,
+        fallbackPath: nil
+    )
+    let changedTrayPresentation = ExternalStatusItemRefreshState(
+        id: unchangedTrayPresentation.id,
+        processIdentifier: unchangedTrayPresentation.processIdentifier,
+        accessibilityLabel: unchangedTrayPresentation.accessibilityLabel,
+        sourceFrame: unchangedTrayPresentation.sourceFrame,
+        imageFingerprint: changedTrayImage,
+        fallbackPath: nil
+    )
     guard SettingsPage.allCases.map(\.rawValue) == [
         "General",
         "Appearance",
@@ -462,6 +488,13 @@ func runSelfTest() async -> Int32 {
               accessibilityIdentifier: nil,
               childIndex: 1
           ),
+          unchangedTrayImage == ExternalStatusItemImageFingerprint.make(
+              width: 1,
+              height: 1,
+              rgbaBytes: [0, 0, 0, 255]
+          ),
+          unchangedTrayImage != changedTrayImage,
+          [unchangedTrayPresentation] != [changedTrayPresentation],
           ExternalStatusOverflowMetrics.contentSize(itemCount: 11) == CGSize(width: 208, height: 128),
           !ExternalStatusOverflowVisibilityPolicy.shouldShowButton(hiddenItemCount: 0, isDragging: false),
           ExternalStatusOverflowVisibilityPolicy.shouldShowButton(hiddenItemCount: 1, isDragging: false),
