@@ -264,7 +264,6 @@ struct ClockTrayView: View {
         WindowsTrayIconButton(
             title: clockTooltip,
             accessibilityLabel: "Clock and calendar",
-            tooltipGap: WindowsTrayIconMetrics.clockTooltipGap,
             primaryAction: togglePanel
         ) {
             VStack(alignment: .trailing, spacing: 0) {

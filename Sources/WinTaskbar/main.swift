@@ -350,6 +350,13 @@ func runSelfTest() async -> Int32 {
         defer: false
     )
     WindowsTrayTooltipPanelPolicy.keepVisibleWhileApplicationIsInactive(tooltipPanel)
+    let tooltipSurface = NSVisualEffectView()
+    WindowsTrayTooltipSurfaceStyle.apply(to: tooltipSurface)
+    let tooltipLineHeight = ceil(
+        WindowsTrayTooltipMetrics.font.ascender
+            - WindowsTrayTooltipMetrics.font.descender
+            + WindowsTrayTooltipMetrics.font.leading
+    )
 
     let suiteName = "WinTaskbar.SelfTest.\(UUID().uuidString)"
     guard let defaults = UserDefaults(suiteName: suiteName) else {
@@ -562,9 +569,20 @@ func runSelfTest() async -> Int32 {
           WindowsTrayIconMetrics.pressedFillOpacity > WindowsTrayIconMetrics.hoverFillOpacity,
           WindowsTrayIconControl.trackingAreaOptions.contains(.inVisibleRect),
           WindowsTrayIconControl.trackingAreaOptions.contains(.mouseMoved),
+          WindowsTrayIconMetrics.tooltipGap == StartMenuGeometry.taskbarGap,
           !tooltipPanel.hidesOnDeactivate,
-          WindowsTrayTooltipMetrics.size(for: "QQ音乐").height == 32,
-          WindowsTrayTooltipMetrics.size(for: "Thursday, August 27, 2026\n\nThu 14:35:49 (Local time)").height > 32,
+          tooltipSurface.material == .popover,
+          tooltipSurface.blendingMode == .behindWindow,
+          tooltipSurface.state == .active,
+          tooltipSurface.layer?.cornerRadius == WindowsTrayTooltipSurfaceStyle.cornerRadius,
+          tooltipSurface.layer?.borderWidth == WindowsTrayTooltipSurfaceStyle.borderWidth,
+          WindowsTrayTooltipMetrics.horizontalPadding == 8,
+          WindowsTrayTooltipMetrics.verticalPadding == 5,
+          WindowsTrayTooltipMetrics.size(for: "QQ音乐").height
+              == tooltipLineHeight + 2 * WindowsTrayTooltipMetrics.verticalPadding,
+          WindowsTrayTooltipMetrics.size(
+              for: "Thursday, August 27, 2026\n\nThu 14:35:49 (Local time)"
+          ).height > 32,
           preferences.menuButtonPlacement == .standard,
           preferences.windowsKeyMapping == .option,
           preferences.windowsKeyOpensStart,

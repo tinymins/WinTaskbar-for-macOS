@@ -9,8 +9,7 @@ enum WindowsTrayIconMetrics {
     static let clockFontSize: CGFloat = 12
     static let clockRowHeight: CGFloat = 18
     static let horizontalContentPadding: CGFloat = 7
-    static let tooltipGap: CGFloat = 4
-    static let clockTooltipGap: CGFloat = 10
+    static let tooltipGap = StartMenuGeometry.taskbarGap
     static let showDesktopHitThickness: CGFloat = 8
     static let showDesktopVisibleThickness: CGFloat = 1
     static let showDesktopIndicatorLength: CGFloat = 20
@@ -51,11 +50,10 @@ final class WindowsTrayDragSessionState: ObservableObject {
 @MainActor
 enum WindowsTrayTooltipMetrics {
     static let font = NSFont.systemFont(ofSize: 11, weight: .regular)
-    static let horizontalPadding: CGFloat = 10
-    static let verticalPadding: CGFloat = 8
-    static let minimumWidth: CGFloat = 44
+    static let horizontalPadding: CGFloat = 8
+    static let verticalPadding: CGFloat = 5
+    static let minimumWidth: CGFloat = 32
     static let maximumWidth: CGFloat = 280
-    static let singleLineHeight: CGFloat = 32
 
     static func lines(for title: String) -> [String] {
         title.components(separatedBy: "\n")
@@ -67,13 +65,29 @@ enum WindowsTrayTooltipMetrics {
             ($0 as NSString).size(withAttributes: [.font: font]).width
         }.max() ?? 0
         let lineHeight = ceil(font.ascender - font.descender + font.leading)
-        let height = lines.count == 1
-            ? singleLineHeight
-            : ceil(CGFloat(lines.count) * lineHeight + 2 * verticalPadding)
+        let height = ceil(CGFloat(lines.count) * lineHeight + 2 * verticalPadding)
         return CGSize(
             width: min(max(ceil(textWidth) + 2 * horizontalPadding, minimumWidth), maximumWidth),
             height: height
         )
+    }
+}
+
+@MainActor
+enum WindowsTrayTooltipSurfaceStyle {
+    static let cornerRadius: CGFloat = 8
+    static let borderWidth: CGFloat = 0.5
+
+    static func apply(to view: NSVisualEffectView) {
+        view.material = .popover
+        view.blendingMode = .behindWindow
+        view.state = .active
+        view.wantsLayer = true
+        view.layer?.cornerRadius = cornerRadius
+        view.layer?.cornerCurve = .continuous
+        view.layer?.masksToBounds = true
+        view.layer?.borderWidth = borderWidth
+        view.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
     }
 }
 
@@ -88,7 +102,6 @@ enum WindowsTrayTooltipPanelPolicy {
 struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     let title: String
     let accessibilityLabel: String
-    let tooltipGap: CGFloat
     let visualStyle: WindowsTrayIconAppearance
     let preservesTransientPanelOnMouseDown: Bool
     let primaryAction: (WindowsTrayIconControl) -> Void
@@ -105,7 +118,6 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     init(
         title: String,
         accessibilityLabel: String? = nil,
-        tooltipGap: CGFloat = WindowsTrayIconMetrics.tooltipGap,
         visualStyle: WindowsTrayIconAppearance = .standard,
         preservesTransientPanelOnMouseDown: Bool = false,
         primaryAction: @escaping () -> Void,
@@ -121,7 +133,6 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     ) {
         self.title = title
         self.accessibilityLabel = accessibilityLabel ?? title
-        self.tooltipGap = tooltipGap
         self.visualStyle = visualStyle
         self.preservesTransientPanelOnMouseDown = preservesTransientPanelOnMouseDown
         self.primaryAction = { _ in primaryAction() }
@@ -139,7 +150,6 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     init(
         title: String,
         accessibilityLabel: String? = nil,
-        tooltipGap: CGFloat = WindowsTrayIconMetrics.tooltipGap,
         visualStyle: WindowsTrayIconAppearance = .standard,
         preservesTransientPanelOnMouseDown: Bool = false,
         anchoredPrimaryAction: @escaping (WindowsTrayIconControl) -> Void,
@@ -155,7 +165,6 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     ) {
         self.title = title
         self.accessibilityLabel = accessibilityLabel ?? title
-        self.tooltipGap = tooltipGap
         self.visualStyle = visualStyle
         self.preservesTransientPanelOnMouseDown = preservesTransientPanelOnMouseDown
         self.primaryAction = anchoredPrimaryAction
@@ -187,7 +196,6 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
                 .allowsHitTesting(false)
         ))
         control.hoverTitle = title
-        control.tooltipGap = tooltipGap
         control.visualStyle = visualStyle
         control.preservesTransientPanelOnMouseDown = preservesTransientPanelOnMouseDown
         control.onLeftActivate = { [weak control] in
@@ -224,7 +232,6 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     ]
 
     var hoverTitle = ""
-    var tooltipGap = WindowsTrayIconMetrics.tooltipGap
     var visualStyle = WindowsTrayIconAppearance.standard
     var preservesTransientPanelOnMouseDown = false
     var onLeftActivate: (() -> Void)?
@@ -295,7 +302,6 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
         WindowsTrayTooltipController.shared.schedule(
             title: hoverTitle,
             anchor: anchor,
-            gap: tooltipGap,
             owner: self
         )
     }
@@ -552,7 +558,6 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
         WindowsTrayDropTipController.shared.show(
             symbolName: dropTipSymbolName,
             anchor: anchor,
-            gap: tooltipGap,
             owner: self
         )
     }
@@ -584,14 +589,15 @@ private final class WindowsTrayTooltipController {
         panel.contentView = tooltipView
     }
 
-    func schedule(title: String, anchor: CGRect, gap: CGFloat, owner: WindowsTrayIconControl) {
+    func schedule(title: String, anchor: CGRect, owner: WindowsTrayIconControl) {
         pendingWorkItem?.cancel()
         panel.orderOut(nil)
+        panel.appearance = owner.effectiveAppearance
         self.owner = owner
 
         let workItem = DispatchWorkItem { [weak self, weak owner] in
             guard let self, let owner, self.owner === owner, owner.window != nil else { return }
-            self.show(title: title, anchor: anchor, gap: gap)
+            self.show(title: title, anchor: anchor)
         }
         pendingWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(400), execute: workItem)
@@ -605,15 +611,15 @@ private final class WindowsTrayTooltipController {
         panel.orderOut(nil)
     }
 
-    private func show(title: String, anchor: CGRect, gap: CGFloat) {
+    private func show(title: String, anchor: CGRect) {
         tooltipView.title = title
         let size = WindowsTrayTooltipMetrics.size(for: title)
         guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) }) ?? NSScreen.main else { return }
-        panel.setFrame(Self.frame(size: size, anchor: anchor, gap: gap, screen: screen.frame), display: true)
+        panel.setFrame(Self.frame(size: size, anchor: anchor, screen: screen.frame), display: true)
         panel.orderFrontRegardless()
     }
 
-    static func frame(size: CGSize, anchor: CGRect, gap: CGFloat, screen: CGRect) -> CGRect {
+    static func frame(size: CGSize, anchor: CGRect, screen: CGRect) -> CGRect {
         let distances = [
             (side: 0, distance: abs(anchor.minY - screen.minY)),
             (side: 1, distance: abs(screen.maxY - anchor.maxY)),
@@ -624,13 +630,25 @@ private final class WindowsTrayTooltipController {
         var origin: CGPoint
         switch side {
         case 1:
-            origin = CGPoint(x: anchor.midX - size.width / 2, y: anchor.minY - size.height - gap)
+            origin = CGPoint(
+                x: anchor.midX - size.width / 2,
+                y: anchor.minY - size.height - WindowsTrayIconMetrics.tooltipGap
+            )
         case 2:
-            origin = CGPoint(x: anchor.maxX + gap, y: anchor.midY - size.height / 2)
+            origin = CGPoint(
+                x: anchor.maxX + WindowsTrayIconMetrics.tooltipGap,
+                y: anchor.midY - size.height / 2
+            )
         case 3:
-            origin = CGPoint(x: anchor.minX - size.width - gap, y: anchor.midY - size.height / 2)
+            origin = CGPoint(
+                x: anchor.minX - size.width - WindowsTrayIconMetrics.tooltipGap,
+                y: anchor.midY - size.height / 2
+            )
         default:
-            origin = CGPoint(x: anchor.midX - size.width / 2, y: anchor.maxY + gap)
+            origin = CGPoint(
+                x: anchor.midX - size.width / 2,
+                y: anchor.maxY + WindowsTrayIconMetrics.tooltipGap
+            )
         }
         origin.x = min(max(origin.x, screen.minX + 6), screen.maxX - size.width - 6)
         origin.y = min(max(origin.y, screen.minY + 6), screen.maxY - size.height - 6)
@@ -663,13 +681,14 @@ private final class WindowsTrayDropTipController {
         panel.contentView = tipView
     }
 
-    func show(symbolName: String, anchor: CGRect, gap: CGFloat, owner: WindowsTrayIconControl) {
+    func show(symbolName: String, anchor: CGRect, owner: WindowsTrayIconControl) {
         self.owner = owner
+        panel.appearance = owner.effectiveAppearance
         tipView.symbolName = symbolName
         let size = CGSize(width: 32, height: 32)
         guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) }) ?? NSScreen.main else { return }
         panel.setFrame(
-            WindowsTrayTooltipController.frame(size: size, anchor: anchor, gap: gap, screen: screen.frame),
+            WindowsTrayTooltipController.frame(size: size, anchor: anchor, screen: screen.frame),
             display: true
         )
         panel.orderFrontRegardless()
@@ -687,25 +706,32 @@ private final class WindowsTrayTooltipPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-private final class WindowsTrayTooltipView: NSView {
+private class WindowsTrayTooltipSurfaceView: NSVisualEffectView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        WindowsTrayTooltipSurfaceStyle.apply(to: self)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        WindowsTrayTooltipSurfaceStyle.apply(to: self)
+    }
+}
+
+private final class WindowsTrayTooltipView: WindowsTrayTooltipSurfaceView {
     var title = "" { didSet { needsDisplay = true } }
 
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(srgbRed: 31 / 255, green: 42 / 255, blue: 52 / 255, alpha: 0.98).setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3).fill()
-        NSColor(srgbRed: 58 / 255, green: 68 / 255, blue: 77 / 255, alpha: 1).setStroke()
-        let border = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 3, yRadius: 3)
-        border.lineWidth = 1
-        border.stroke()
+        super.draw(dirtyRect)
 
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
         paragraph.lineBreakMode = .byTruncatingTail
         let attributes: [NSAttributedString.Key: Any] = [
             .font: WindowsTrayTooltipMetrics.font,
-            .foregroundColor: NSColor(srgbRed: 246 / 255, green: 247 / 255, blue: 247 / 255, alpha: 1),
+            .foregroundColor: NSColor.labelColor,
             .paragraphStyle: paragraph
         ]
         let lines = WindowsTrayTooltipMetrics.lines(for: title)
@@ -730,19 +756,14 @@ private final class WindowsTrayTooltipView: NSView {
     }
 }
 
-private final class WindowsTrayDropTipView: NSView {
+private final class WindowsTrayDropTipView: WindowsTrayTooltipSurfaceView {
     var symbolName = "pin.slash" { didSet { needsDisplay = true } }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(srgbRed: 31 / 255, green: 42 / 255, blue: 52 / 255, alpha: 0.98).setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3).fill()
-        NSColor(srgbRed: 58 / 255, green: 68 / 255, blue: 77 / 255, alpha: 1).setStroke()
-        let border = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 3, yRadius: 3)
-        border.lineWidth = 1
-        border.stroke()
+        super.draw(dirtyRect)
 
         let configuration = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
-            .applying(.init(paletteColors: [.white]))
+            .applying(.init(paletteColors: [.labelColor]))
         guard let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
             .withSymbolConfiguration(configuration) else { return }
         let imageSize = image.size
