@@ -2,6 +2,15 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.18] - 2026-08-31
+
+### Fixed
+
+- Keep taskbar and tray hover tooltips visible while WinTaskbar is inactive, including battery and mirrored status-item titles.
+- Render single-line and multiline clock tooltips above the Fluent material layer with consistent text, padding, border, and appearance.
+- Anchor tooltips to the taskbar's outer edge with the standard 8pt gap on every taskbar side, preventing the clock tooltip from overlapping the taskbar.
+- Use the same tooltip surface and placement for Start, taskbar apps, overflow controls, system tray items, and the clock while preserving their accessibility labels.
+
 ## [0.0.17] - 2026-08-28
 
 ### Added
@@ -134,6 +143,7 @@ All notable changes to WinTaskbar for macOS are documented here.
 - Show window previews immediately when hovering over a taskbar app while retaining a short dismissal delay.
 - Match Windows preview thumbnail proportions and refine preview panel styling.
 
+[0.0.18]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.17...v0.0.18
 [0.0.14]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.13...v0.0.14
 [0.0.13]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.11...v0.0.12
