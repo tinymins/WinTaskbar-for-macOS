@@ -2,6 +2,13 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.19] - 2026-08-31
+
+### Fixed
+
+- Keep a window preview group open after closing one of its windows, immediately remove and animate the closed thumbnail out of the group, and dismiss the preview only after its final window closes.
+- Preserve the current thumbnail when macOS rejects the close request, and animate same-app preview resizing without reintroducing flashes during unchanged updates.
+
 ## [0.0.18] - 2026-08-31
 
 ### Fixed
@@ -143,6 +150,7 @@ All notable changes to WinTaskbar for macOS are documented here.
 - Show window previews immediately when hovering over a taskbar app while retaining a short dismissal delay.
 - Match Windows preview thumbnail proportions and refine preview panel styling.
 
+[0.0.19]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.18...v0.0.19
 [0.0.18]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.17...v0.0.18
 [0.0.14]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.13...v0.0.14
 [0.0.13]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.12...v0.0.13
