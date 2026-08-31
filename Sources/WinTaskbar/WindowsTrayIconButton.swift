@@ -89,6 +89,33 @@ enum WindowsTrayTooltipSurfaceStyle {
         view.layer?.borderWidth = borderWidth
         view.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
     }
+
+    static func makeSurface(contentView: NSView) -> NSVisualEffectView {
+        let surface = NSVisualEffectView()
+        apply(to: surface)
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        surface.addSubview(contentView)
+        NSLayoutConstraint.activate([
+            contentView.leadingAnchor.constraint(equalTo: surface.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: surface.trailingAnchor),
+            contentView.topAnchor.constraint(equalTo: surface.topAnchor),
+            contentView.bottomAnchor.constraint(equalTo: surface.bottomAnchor)
+        ])
+        return surface
+    }
+}
+
+@MainActor
+enum WindowsTrayTooltipContentStyle {
+    static func makeLabel() -> NSTextField {
+        let label = NSTextField(labelWithString: "")
+        label.font = WindowsTrayTooltipMetrics.font
+        label.textColor = .labelColor
+        label.alignment = .center
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 0
+        return label
+    }
 }
 
 @MainActor
@@ -568,11 +595,15 @@ private final class WindowsTrayTooltipController {
     static let shared = WindowsTrayTooltipController()
 
     private let panel: WindowsTrayTooltipPanel
-    private let tooltipView = WindowsTrayTooltipView()
+    private let tooltipView: WindowsTrayTooltipView
+    private let surfaceView: NSVisualEffectView
     private var pendingWorkItem: DispatchWorkItem?
     private weak var owner: WindowsTrayIconControl?
 
     private init() {
+        let tooltipView = WindowsTrayTooltipView()
+        self.tooltipView = tooltipView
+        surfaceView = WindowsTrayTooltipSurfaceStyle.makeSurface(contentView: tooltipView)
         panel = WindowsTrayTooltipPanel(
             contentRect: .zero,
             styleMask: .borderless,
@@ -586,7 +617,7 @@ private final class WindowsTrayTooltipController {
         WindowsTrayTooltipPanelPolicy.keepVisibleWhileApplicationIsInactive(panel)
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 2)
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        panel.contentView = tooltipView
+        panel.contentView = surfaceView
     }
 
     func schedule(title: String, anchor: CGRect, owner: WindowsTrayIconControl) {
@@ -661,10 +692,14 @@ private final class WindowsTrayDropTipController {
     static let shared = WindowsTrayDropTipController()
 
     private let panel: WindowsTrayTooltipPanel
-    private let tipView = WindowsTrayDropTipView()
+    private let tipView: WindowsTrayDropTipView
+    private let surfaceView: NSVisualEffectView
     private weak var owner: WindowsTrayIconControl?
 
     private init() {
+        let tipView = WindowsTrayDropTipView()
+        self.tipView = tipView
+        surfaceView = WindowsTrayTooltipSurfaceStyle.makeSurface(contentView: tipView)
         panel = WindowsTrayTooltipPanel(
             contentRect: .zero,
             styleMask: .borderless,
@@ -678,7 +713,7 @@ private final class WindowsTrayDropTipController {
         WindowsTrayTooltipPanelPolicy.keepVisibleWhileApplicationIsInactive(panel)
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 3)
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        panel.contentView = tipView
+        panel.contentView = surfaceView
     }
 
     func show(symbolName: String, anchor: CGRect, owner: WindowsTrayIconControl) {
@@ -706,74 +741,56 @@ private final class WindowsTrayTooltipPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-private class WindowsTrayTooltipSurfaceView: NSVisualEffectView {
+private final class WindowsTrayTooltipView: NSView {
+    private let label = WindowsTrayTooltipContentStyle.makeLabel()
+
+    var title: String {
+        get { label.stringValue }
+        set { label.stringValue = newValue }
+    }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        WindowsTrayTooltipSurfaceStyle.apply(to: self)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(
+                equalTo: leadingAnchor,
+                constant: WindowsTrayTooltipMetrics.horizontalPadding
+            ),
+            label.trailingAnchor.constraint(
+                equalTo: trailingAnchor,
+                constant: -WindowsTrayTooltipMetrics.horizontalPadding
+            ),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
     }
 
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        WindowsTrayTooltipSurfaceStyle.apply(to: self)
-    }
+    required init?(coder: NSCoder) { nil }
 }
 
-private final class WindowsTrayTooltipView: WindowsTrayTooltipSurfaceView {
-    var title = "" { didSet { needsDisplay = true } }
+private final class WindowsTrayDropTipView: NSView {
+    private let imageView = NSImageView()
 
-    override var isFlipped: Bool { true }
+    var symbolName = "pin.slash" { didSet { updateImage() } }
 
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = .center
-        paragraph.lineBreakMode = .byTruncatingTail
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: WindowsTrayTooltipMetrics.font,
-            .foregroundColor: NSColor.labelColor,
-            .paragraphStyle: paragraph
-        ]
-        let lines = WindowsTrayTooltipMetrics.lines(for: title)
-        let lineHeight = ceil(
-            WindowsTrayTooltipMetrics.font.ascender
-                - WindowsTrayTooltipMetrics.font.descender
-                + WindowsTrayTooltipMetrics.font.leading
-        )
-        let contentHeight = CGFloat(lines.count) * lineHeight
-        let originY = (bounds.height - contentHeight) / 2
-        for (index, line) in lines.enumerated() where !line.isEmpty {
-            (line as NSString).draw(
-                in: CGRect(
-                    x: WindowsTrayTooltipMetrics.horizontalPadding,
-                    y: originY + CGFloat(index) * lineHeight,
-                    width: bounds.width - 2 * WindowsTrayTooltipMetrics.horizontalPadding,
-                    height: lineHeight
-                ),
-                withAttributes: attributes
-            )
-        }
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(imageView)
+        NSLayoutConstraint.activate([
+            imageView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            imageView.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+        updateImage()
     }
-}
 
-private final class WindowsTrayDropTipView: WindowsTrayTooltipSurfaceView {
-    var symbolName = "pin.slash" { didSet { needsDisplay = true } }
+    required init?(coder: NSCoder) { nil }
 
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-
+    private func updateImage() {
         let configuration = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
             .applying(.init(paletteColors: [.labelColor]))
-        guard let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
-            .withSymbolConfiguration(configuration) else { return }
-        let imageSize = image.size
-        image.draw(
-            in: CGRect(
-                x: bounds.midX - imageSize.width / 2,
-                y: bounds.midY - imageSize.height / 2,
-                width: imageSize.width,
-                height: imageSize.height
-            )
-        )
+        imageView.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
+            .withSymbolConfiguration(configuration)
     }
 }

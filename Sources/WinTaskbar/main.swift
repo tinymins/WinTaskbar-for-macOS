@@ -350,8 +350,10 @@ func runSelfTest() async -> Int32 {
         defer: false
     )
     WindowsTrayTooltipPanelPolicy.keepVisibleWhileApplicationIsInactive(tooltipPanel)
-    let tooltipSurface = NSVisualEffectView()
-    WindowsTrayTooltipSurfaceStyle.apply(to: tooltipSurface)
+    let tooltipContent = NSView()
+    let tooltipSurface = WindowsTrayTooltipSurfaceStyle.makeSurface(contentView: tooltipContent)
+    let tooltipLabel = WindowsTrayTooltipContentStyle.makeLabel()
+    tooltipLabel.stringValue = "Battery, 100%"
     let tooltipLineHeight = ceil(
         WindowsTrayTooltipMetrics.font.ascender
             - WindowsTrayTooltipMetrics.font.descender
@@ -576,6 +578,11 @@ func runSelfTest() async -> Int32 {
           tooltipSurface.state == .active,
           tooltipSurface.layer?.cornerRadius == WindowsTrayTooltipSurfaceStyle.cornerRadius,
           tooltipSurface.layer?.borderWidth == WindowsTrayTooltipSurfaceStyle.borderWidth,
+          tooltipContent.superview === tooltipSurface,
+          !tooltipContent.translatesAutoresizingMaskIntoConstraints,
+          tooltipLabel.stringValue == "Battery, 100%",
+          tooltipLabel.textColor == .labelColor,
+          tooltipLabel.font == WindowsTrayTooltipMetrics.font,
           WindowsTrayTooltipMetrics.horizontalPadding == 8,
           WindowsTrayTooltipMetrics.verticalPadding == 5,
           WindowsTrayTooltipMetrics.size(for: "QQ音乐").height
