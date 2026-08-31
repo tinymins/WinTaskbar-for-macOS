@@ -50,8 +50,8 @@ final class WindowsTrayDragSessionState: ObservableObject {
 @MainActor
 enum WindowsTrayTooltipMetrics {
     static let font = NSFont.systemFont(ofSize: 11, weight: .regular)
-    static let horizontalPadding: CGFloat = 8
-    static let verticalPadding: CGFloat = 5
+    static let horizontalPadding: CGFloat = 12
+    static let verticalPadding: CGFloat = 8
     static let minimumWidth: CGFloat = 32
     static let maximumWidth: CGFloat = 280
 
@@ -107,13 +107,20 @@ enum WindowsTrayTooltipSurfaceStyle {
 
 @MainActor
 enum WindowsTrayTooltipContentStyle {
-    static func makeLabel() -> NSTextField {
-        let label = NSTextField(labelWithString: "")
+    static func makeLabels(for title: String) -> [NSTextField] {
+        WindowsTrayTooltipMetrics.lines(for: title).map { line in
+            makeLabel(text: line)
+        }
+    }
+
+    private static func makeLabel(text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
         label.font = WindowsTrayTooltipMetrics.font
         label.textColor = .labelColor
         label.alignment = .center
         label.lineBreakMode = .byTruncatingTail
-        label.maximumNumberOfLines = 0
+        label.maximumNumberOfLines = 1
+        label.usesSingleLineMode = true
         return label
     }
 }
@@ -742,27 +749,48 @@ private final class WindowsTrayTooltipPanel: NSPanel {
 }
 
 private final class WindowsTrayTooltipView: NSView {
-    private let label = WindowsTrayTooltipContentStyle.makeLabel()
+    private let stackView = NSStackView()
+    private var storedTitle = ""
 
     var title: String {
-        get { label.stringValue }
-        set { label.stringValue = newValue }
+        get { storedTitle }
+        set {
+            storedTitle = newValue
+            stackView.arrangedSubviews.forEach { view in
+                stackView.removeArrangedSubview(view)
+                view.removeFromSuperview()
+            }
+            WindowsTrayTooltipContentStyle.makeLabels(for: newValue).forEach {
+                stackView.addArrangedSubview($0)
+            }
+        }
     }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        label.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(label)
+        stackView.orientation = .vertical
+        stackView.alignment = .width
+        stackView.distribution = .fillEqually
+        stackView.spacing = 0
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stackView)
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(
+            stackView.leadingAnchor.constraint(
                 equalTo: leadingAnchor,
                 constant: WindowsTrayTooltipMetrics.horizontalPadding
             ),
-            label.trailingAnchor.constraint(
+            stackView.trailingAnchor.constraint(
                 equalTo: trailingAnchor,
                 constant: -WindowsTrayTooltipMetrics.horizontalPadding
             ),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor)
+            stackView.topAnchor.constraint(
+                equalTo: topAnchor,
+                constant: WindowsTrayTooltipMetrics.verticalPadding
+            ),
+            stackView.bottomAnchor.constraint(
+                equalTo: bottomAnchor,
+                constant: -WindowsTrayTooltipMetrics.verticalPadding
+            )
         ])
     }
 

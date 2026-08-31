@@ -352,8 +352,9 @@ func runSelfTest() async -> Int32 {
     WindowsTrayTooltipPanelPolicy.keepVisibleWhileApplicationIsInactive(tooltipPanel)
     let tooltipContent = NSView()
     let tooltipSurface = WindowsTrayTooltipSurfaceStyle.makeSurface(contentView: tooltipContent)
-    let tooltipLabel = WindowsTrayTooltipContentStyle.makeLabel()
-    tooltipLabel.stringValue = "Battery, 100%"
+    let tooltipLabels = WindowsTrayTooltipContentStyle.makeLabels(
+        for: "Thursday, August 27, 2026\n\nThu 14:35:49 (Local time)"
+    )
     let tooltipLineHeight = ceil(
         WindowsTrayTooltipMetrics.font.ascender
             - WindowsTrayTooltipMetrics.font.descender
@@ -580,11 +581,12 @@ func runSelfTest() async -> Int32 {
           tooltipSurface.layer?.borderWidth == WindowsTrayTooltipSurfaceStyle.borderWidth,
           tooltipContent.superview === tooltipSurface,
           !tooltipContent.translatesAutoresizingMaskIntoConstraints,
-          tooltipLabel.stringValue == "Battery, 100%",
-          tooltipLabel.textColor == .labelColor,
-          tooltipLabel.font == WindowsTrayTooltipMetrics.font,
-          WindowsTrayTooltipMetrics.horizontalPadding == 8,
-          WindowsTrayTooltipMetrics.verticalPadding == 5,
+          tooltipLabels.map(\.stringValue)
+              == ["Thursday, August 27, 2026", "", "Thu 14:35:49 (Local time)"],
+          tooltipLabels.allSatisfy({ $0.textColor == .labelColor }),
+          tooltipLabels.allSatisfy({ $0.font == WindowsTrayTooltipMetrics.font }),
+          WindowsTrayTooltipMetrics.horizontalPadding == 12,
+          WindowsTrayTooltipMetrics.verticalPadding == 8,
           WindowsTrayTooltipMetrics.size(for: "QQ音乐").height
               == tooltipLineHeight + 2 * WindowsTrayTooltipMetrics.verticalPadding,
           WindowsTrayTooltipMetrics.size(
