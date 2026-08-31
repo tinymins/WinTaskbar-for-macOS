@@ -478,6 +478,7 @@ struct TaskbarView: View {
                 service: externalStatusItems,
                 visibility: .visible,
                 horizontal: preferences.position.isHorizontal,
+                taskbarPosition: preferences.position,
                 controlWidth: ExternalStatusItemsView.controlWidth(
                     for: item.image,
                     horizontal: preferences.position.isHorizontal
@@ -577,6 +578,7 @@ struct TaskbarView: View {
         WindowsTrayIconButton(
             title: "Show desktop",
             accessibilityLabel: "Show Desktop",
+            taskbarPosition: preferences.position,
             visualStyle: .showDesktop(horizontal: horizontal),
             primaryAction: actions.showDesktop
         ) {

@@ -55,6 +55,7 @@ struct WiFiTrayView: View {
     var body: some View {
         WindowsTrayIconButton(
             title: service.wifiSSID ?? (service.wifiPoweredOn ? "Not connected" : "Wi-Fi off"),
+            taskbarPosition: position,
             preservesTransientPanelOnMouseDown: true,
             primaryAction: presentPanelIfNeeded,
             dragIdentifier: dragConfiguration.identifier,
@@ -92,6 +93,7 @@ struct VolumeTrayView: View {
     var body: some View {
         WindowsTrayIconButton(
             title: "Volume",
+            taskbarPosition: position,
             preservesTransientPanelOnMouseDown: true,
             primaryAction: presentPanelIfNeeded,
             dragIdentifier: dragConfiguration.identifier,
@@ -140,6 +142,7 @@ struct BatteryTrayView: View {
             WindowsTrayIconButton(
                 title: title,
                 accessibilityLabel: service.isCharging ? "Battery charging, \(level)%" : "Battery, \(level)%",
+                taskbarPosition: position,
                 preservesTransientPanelOnMouseDown: true,
                 primaryAction: presentPanelIfNeeded,
                 dragIdentifier: dragConfiguration.identifier,
@@ -204,6 +207,7 @@ struct InputSourceTrayView: View {
         WindowsTrayIconButton(
             title: service.inputSource,
             accessibilityLabel: "Keyboard layout: \(service.inputSource)",
+            taskbarPosition: position,
             primaryAction: togglePanel,
             dragIdentifier: dragConfiguration.identifier,
             dropAxis: dragConfiguration.dropAxis,
@@ -264,6 +268,7 @@ struct ClockTrayView: View {
         WindowsTrayIconButton(
             title: clockTooltip,
             accessibilityLabel: "Clock and calendar",
+            taskbarPosition: position,
             primaryAction: togglePanel
         ) {
             VStack(alignment: .trailing, spacing: 0) {

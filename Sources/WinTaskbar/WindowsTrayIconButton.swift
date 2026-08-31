@@ -125,6 +125,65 @@ enum WindowsTrayTooltipContentStyle {
     }
 }
 
+enum WindowsTrayTooltipGeometry {
+    static let screenInset: CGFloat = 8
+
+    static func frame(
+        size: CGSize,
+        anchor: CGRect,
+        taskbarFrame: CGRect,
+        position explicitPosition: TaskbarPosition?,
+        screen: CGRect
+    ) -> CGRect {
+        let distances = [
+            (position: TaskbarPosition.bottom, distance: abs(anchor.minY - screen.minY)),
+            (position: TaskbarPosition.top, distance: abs(screen.maxY - anchor.maxY)),
+            (position: TaskbarPosition.left, distance: abs(anchor.minX - screen.minX)),
+            (position: TaskbarPosition.right, distance: abs(screen.maxX - anchor.maxX))
+        ]
+        let position = explicitPosition
+            ?? distances.min(by: { $0.distance < $1.distance })?.position
+            ?? .bottom
+        let boundary = explicitPosition == nil ? anchor : taskbarFrame
+        var origin: CGPoint
+        switch position {
+        case .top:
+            origin = CGPoint(
+                x: anchor.midX - size.width / 2,
+                y: boundary.minY - size.height - WindowsTrayIconMetrics.tooltipGap
+            )
+        case .left:
+            origin = CGPoint(
+                x: boundary.maxX + WindowsTrayIconMetrics.tooltipGap,
+                y: anchor.midY - size.height / 2
+            )
+        case .right:
+            origin = CGPoint(
+                x: boundary.minX - size.width - WindowsTrayIconMetrics.tooltipGap,
+                y: anchor.midY - size.height / 2
+            )
+        case .bottom:
+            origin = CGPoint(
+                x: anchor.midX - size.width / 2,
+                y: boundary.maxY + WindowsTrayIconMetrics.tooltipGap
+            )
+        }
+        switch position {
+        case .bottom, .top:
+            origin.x = min(
+                max(origin.x, screen.minX + screenInset),
+                screen.maxX - size.width - screenInset
+            )
+        case .left, .right:
+            origin.y = min(
+                max(origin.y, screen.minY + screenInset),
+                screen.maxY - size.height - screenInset
+            )
+        }
+        return CGRect(origin: origin, size: size)
+    }
+}
+
 @MainActor
 enum WindowsTrayTooltipPanelPolicy {
     static func keepVisibleWhileApplicationIsInactive(_ panel: NSPanel) {
@@ -136,6 +195,7 @@ enum WindowsTrayTooltipPanelPolicy {
 struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     let title: String
     let accessibilityLabel: String
+    let taskbarPosition: TaskbarPosition?
     let visualStyle: WindowsTrayIconAppearance
     let preservesTransientPanelOnMouseDown: Bool
     let primaryAction: (WindowsTrayIconControl) -> Void
@@ -152,6 +212,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     init(
         title: String,
         accessibilityLabel: String? = nil,
+        taskbarPosition: TaskbarPosition? = nil,
         visualStyle: WindowsTrayIconAppearance = .standard,
         preservesTransientPanelOnMouseDown: Bool = false,
         primaryAction: @escaping () -> Void,
@@ -167,6 +228,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     ) {
         self.title = title
         self.accessibilityLabel = accessibilityLabel ?? title
+        self.taskbarPosition = taskbarPosition
         self.visualStyle = visualStyle
         self.preservesTransientPanelOnMouseDown = preservesTransientPanelOnMouseDown
         self.primaryAction = { _ in primaryAction() }
@@ -184,6 +246,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     init(
         title: String,
         accessibilityLabel: String? = nil,
+        taskbarPosition: TaskbarPosition? = nil,
         visualStyle: WindowsTrayIconAppearance = .standard,
         preservesTransientPanelOnMouseDown: Bool = false,
         anchoredPrimaryAction: @escaping (WindowsTrayIconControl) -> Void,
@@ -199,6 +262,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     ) {
         self.title = title
         self.accessibilityLabel = accessibilityLabel ?? title
+        self.taskbarPosition = taskbarPosition
         self.visualStyle = visualStyle
         self.preservesTransientPanelOnMouseDown = preservesTransientPanelOnMouseDown
         self.primaryAction = anchoredPrimaryAction
@@ -230,6 +294,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
                 .allowsHitTesting(false)
         ))
         control.hoverTitle = title
+        control.taskbarPosition = taskbarPosition
         control.visualStyle = visualStyle
         control.preservesTransientPanelOnMouseDown = preservesTransientPanelOnMouseDown
         control.onLeftActivate = { [weak control] in
@@ -266,6 +331,7 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     ]
 
     var hoverTitle = ""
+    var taskbarPosition: TaskbarPosition?
     var visualStyle = WindowsTrayIconAppearance.standard
     var preservesTransientPanelOnMouseDown = false
     var onLeftActivate: (() -> Void)?
@@ -336,6 +402,8 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
         WindowsTrayTooltipController.shared.schedule(
             title: hoverTitle,
             anchor: anchor,
+            taskbarFrame: window.frame,
+            position: taskbarPosition,
             owner: self
         )
     }
@@ -627,7 +695,13 @@ private final class WindowsTrayTooltipController {
         panel.contentView = surfaceView
     }
 
-    func schedule(title: String, anchor: CGRect, owner: WindowsTrayIconControl) {
+    func schedule(
+        title: String,
+        anchor: CGRect,
+        taskbarFrame: CGRect,
+        position: TaskbarPosition?,
+        owner: WindowsTrayIconControl
+    ) {
         pendingWorkItem?.cancel()
         panel.orderOut(nil)
         panel.appearance = owner.effectiveAppearance
@@ -635,7 +709,12 @@ private final class WindowsTrayTooltipController {
 
         let workItem = DispatchWorkItem { [weak self, weak owner] in
             guard let self, let owner, self.owner === owner, owner.window != nil else { return }
-            self.show(title: title, anchor: anchor)
+            self.show(
+                title: title,
+                anchor: anchor,
+                taskbarFrame: taskbarFrame,
+                position: position
+            )
         }
         pendingWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(400), execute: workItem)
@@ -649,49 +728,28 @@ private final class WindowsTrayTooltipController {
         panel.orderOut(nil)
     }
 
-    private func show(title: String, anchor: CGRect) {
+    private func show(
+        title: String,
+        anchor: CGRect,
+        taskbarFrame: CGRect,
+        position: TaskbarPosition?
+    ) {
         tooltipView.title = title
         let size = WindowsTrayTooltipMetrics.size(for: title)
         guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) }) ?? NSScreen.main else { return }
-        panel.setFrame(Self.frame(size: size, anchor: anchor, screen: screen.frame), display: true)
+        panel.setFrame(
+            WindowsTrayTooltipGeometry.frame(
+                size: size,
+                anchor: anchor,
+                taskbarFrame: taskbarFrame,
+                position: position,
+                screen: screen.frame
+            ),
+            display: true
+        )
         panel.orderFrontRegardless()
     }
 
-    static func frame(size: CGSize, anchor: CGRect, screen: CGRect) -> CGRect {
-        let distances = [
-            (side: 0, distance: abs(anchor.minY - screen.minY)),
-            (side: 1, distance: abs(screen.maxY - anchor.maxY)),
-            (side: 2, distance: abs(anchor.minX - screen.minX)),
-            (side: 3, distance: abs(screen.maxX - anchor.maxX))
-        ]
-        let side = distances.min(by: { $0.distance < $1.distance })?.side ?? 0
-        var origin: CGPoint
-        switch side {
-        case 1:
-            origin = CGPoint(
-                x: anchor.midX - size.width / 2,
-                y: anchor.minY - size.height - WindowsTrayIconMetrics.tooltipGap
-            )
-        case 2:
-            origin = CGPoint(
-                x: anchor.maxX + WindowsTrayIconMetrics.tooltipGap,
-                y: anchor.midY - size.height / 2
-            )
-        case 3:
-            origin = CGPoint(
-                x: anchor.minX - size.width - WindowsTrayIconMetrics.tooltipGap,
-                y: anchor.midY - size.height / 2
-            )
-        default:
-            origin = CGPoint(
-                x: anchor.midX - size.width / 2,
-                y: anchor.maxY + WindowsTrayIconMetrics.tooltipGap
-            )
-        }
-        origin.x = min(max(origin.x, screen.minX + 6), screen.maxX - size.width - 6)
-        origin.y = min(max(origin.y, screen.minY + 6), screen.maxY - size.height - 6)
-        return CGRect(origin: origin, size: size)
-    }
 }
 
 @MainActor
@@ -730,7 +788,13 @@ private final class WindowsTrayDropTipController {
         let size = CGSize(width: 32, height: 32)
         guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) }) ?? NSScreen.main else { return }
         panel.setFrame(
-            WindowsTrayTooltipController.frame(size: size, anchor: anchor, screen: screen.frame),
+            WindowsTrayTooltipGeometry.frame(
+                size: size,
+                anchor: anchor,
+                taskbarFrame: owner.window?.frame ?? anchor,
+                position: owner.taskbarPosition,
+                screen: screen.frame
+            ),
             display: true
         )
         panel.orderFrontRegardless()

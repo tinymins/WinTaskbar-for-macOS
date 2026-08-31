@@ -355,6 +355,40 @@ func runSelfTest() async -> Int32 {
     let tooltipLabels = WindowsTrayTooltipContentStyle.makeLabels(
         for: "Thursday, August 27, 2026\n\nThu 14:35:49 (Local time)"
     )
+    let tooltipScreen = CGRect(x: 0, y: 0, width: 1_200, height: 800)
+    let tooltipSize = CGSize(width: 240, height: 55)
+    let bottomTaskbar = CGRect(x: 0, y: 0, width: 1_200, height: 48)
+    let topTaskbar = CGRect(x: 0, y: 752, width: 1_200, height: 48)
+    let leftTaskbar = CGRect(x: 0, y: 0, width: 48, height: 800)
+    let rightTaskbar = CGRect(x: 1_152, y: 0, width: 48, height: 800)
+    let bottomTooltipFrame = WindowsTrayTooltipGeometry.frame(
+        size: tooltipSize,
+        anchor: CGRect(x: 1_060, y: 4, width: 80, height: 40),
+        taskbarFrame: bottomTaskbar,
+        position: .bottom,
+        screen: tooltipScreen
+    )
+    let topTooltipFrame = WindowsTrayTooltipGeometry.frame(
+        size: tooltipSize,
+        anchor: CGRect(x: 1_060, y: 756, width: 80, height: 40),
+        taskbarFrame: topTaskbar,
+        position: .top,
+        screen: tooltipScreen
+    )
+    let leftTooltipFrame = WindowsTrayTooltipGeometry.frame(
+        size: tooltipSize,
+        anchor: CGRect(x: 4, y: 756, width: 40, height: 40),
+        taskbarFrame: leftTaskbar,
+        position: .left,
+        screen: tooltipScreen
+    )
+    let rightTooltipFrame = WindowsTrayTooltipGeometry.frame(
+        size: tooltipSize,
+        anchor: CGRect(x: 1_156, y: 756, width: 40, height: 40),
+        taskbarFrame: rightTaskbar,
+        position: .right,
+        screen: tooltipScreen
+    )
     let tooltipLineHeight = ceil(
         WindowsTrayTooltipMetrics.font.ascender
             - WindowsTrayTooltipMetrics.font.descender
@@ -587,6 +621,12 @@ func runSelfTest() async -> Int32 {
           tooltipLabels.allSatisfy({ $0.font == WindowsTrayTooltipMetrics.font }),
           WindowsTrayTooltipMetrics.horizontalPadding == 12,
           WindowsTrayTooltipMetrics.verticalPadding == 8,
+          bottomTooltipFrame.minY - bottomTaskbar.maxY == WindowsTrayIconMetrics.tooltipGap,
+          topTaskbar.minY - topTooltipFrame.maxY == WindowsTrayIconMetrics.tooltipGap,
+          leftTooltipFrame.minX - leftTaskbar.maxX == WindowsTrayIconMetrics.tooltipGap,
+          rightTaskbar.minX - rightTooltipFrame.maxX == WindowsTrayIconMetrics.tooltipGap,
+          bottomTooltipFrame.maxX == tooltipScreen.maxX - WindowsTrayTooltipGeometry.screenInset,
+          leftTooltipFrame.maxY == tooltipScreen.maxY - WindowsTrayTooltipGeometry.screenInset,
           WindowsTrayTooltipMetrics.size(for: "QQ音乐").height
               == tooltipLineHeight + 2 * WindowsTrayTooltipMetrics.verticalPadding,
           WindowsTrayTooltipMetrics.size(

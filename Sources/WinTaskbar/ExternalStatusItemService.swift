@@ -1162,6 +1162,7 @@ struct ExternalStatusOverflowButton: View {
     var body: some View {
         WindowsTrayIconButton(
             title: "Show hidden icons",
+            taskbarPosition: position,
             anchoredPrimaryAction: { anchorView in
                 panelController.toggle(
                     service: service,
@@ -1241,6 +1242,7 @@ struct ExternalStatusItemButton: View {
     @ObservedObject var service: ExternalStatusItemService
     let visibility: ExternalStatusItemVisibility
     let horizontal: Bool
+    var taskbarPosition: TaskbarPosition? = nil
     let controlWidth: CGFloat
     let onActivate: (() -> Void)?
 
@@ -1260,6 +1262,7 @@ struct ExternalStatusItemButton: View {
     var body: some View {
         WindowsTrayIconButton(
             title: item.accessibilityLabel,
+            taskbarPosition: taskbarPosition,
             anchoredPrimaryAction: { control in
                 let sourcePoint = horizontal ? ExternalStatusItemClickMapper.sourcePoint(
                     activationLocation: control.activationLocation,
