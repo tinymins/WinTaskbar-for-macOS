@@ -716,6 +716,12 @@ struct WindowPreviewHoverPolicy {
     }
 }
 
+struct WindowPreviewClosePolicy {
+    static func remainingWindows(afterClosing closedWindow: WindowInfo, in windows: [WindowInfo]) -> [WindowInfo] {
+        windows.filter { $0.id != closedWindow.id }
+    }
+}
+
 struct WindowPreviewThumbnailGeometry {
     static let height: CGFloat = 100
     static let fallbackSize = CGSize(width: 176, height: height)
@@ -921,8 +927,7 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
                         },
                         onClose: {
                             windowPeekController.hideImmediately()
-                            windowActivator.close(window: $0)
-                            windowPreviewPanelController.dismiss(ownerID: previewOwnerID)
+                            closePreviewWindow($0)
                         }
                     )
                     .onHover(perform: handlePreviewPopoverHover)
@@ -1066,6 +1071,21 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
         windowPreviewPanelController.scheduleDismissal(ownerID: previewOwnerID) {
             windowPeekController.hide()
         }
+    }
+
+    private func closePreviewWindow(_ window: WindowInfo) {
+        guard windowActivator.close(window: window) else { return }
+        let remainingWindows = WindowPreviewClosePolicy.remainingWindows(
+            afterClosing: window,
+            in: previewWindows
+        )
+        guard !remainingWindows.isEmpty else {
+            previewWindows = []
+            windowPreviewPanelController.dismiss(ownerID: previewOwnerID)
+            return
+        }
+        previewWindows = remainingWindows
+        windowPreviewPanelController.cancelDismissal(ownerID: previewOwnerID)
     }
 
     private var dragDecorationAnimation: Animation? {
@@ -1225,26 +1245,30 @@ private struct WindowPreviewPopover: View {
     let windowPeekController: WindowPeekController
     let onSelect: (WindowInfo) -> Void
     let onClose: (WindowInfo) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @ViewBuilder
     var body: some View {
-        if windows.isEmpty {
-            Text("No open windows")
-                .foregroundStyle(.secondary)
-                .frame(width: WindowPreviewMetrics.emptySize.width, height: WindowPreviewMetrics.emptySize.height)
-        } else if WindowPreviewLayout.axis(for: position) == .horizontal {
-            HStack(alignment: .top, spacing: 0) {
-                ForEach(windows.prefix(6)) { window in
-                    previewButton(for: window)
+        Group {
+            if windows.isEmpty {
+                Text("No open windows")
+                    .foregroundStyle(.secondary)
+                    .frame(width: WindowPreviewMetrics.emptySize.width, height: WindowPreviewMetrics.emptySize.height)
+            } else if WindowPreviewLayout.axis(for: position) == .horizontal {
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(windows.prefix(6)) { window in
+                        previewButton(for: window)
+                    }
                 }
-            }
-        } else {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(windows.prefix(6)) { window in
-                    previewButton(for: window)
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(windows.prefix(6)) { window in
+                        previewButton(for: window)
+                    }
                 }
             }
         }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: windows.map(\.id))
     }
 
     private func previewButton(for window: WindowInfo) -> some View {

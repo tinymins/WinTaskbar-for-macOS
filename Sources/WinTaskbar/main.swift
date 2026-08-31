@@ -1309,6 +1309,12 @@ func runSelfTest() async -> Int32 {
     var previewUpdateSequence = WindowPreviewPanelUpdateSequence()
     let stalePreviewUpdate = previewUpdateSequence.schedule()
     let currentPreviewUpdate = previewUpdateSequence.schedule()
+    let remainingPreviewWindows = WindowPreviewClosePolicy.remainingWindows(
+        afterClosing: landscapePreviewWindow,
+        in: [landscapePreviewWindow, portraitPreviewWindow]
+    )
+    let previewCurrentFrame = CGRect(x: 350, y: 54, width: 340, height: 130)
+    let previewResizedFrame = CGRect(x: 420, y: 54, width: 200, height: 130)
     guard WindowPreviewLayout.axis(for: .top) == .horizontal,
           WindowPreviewLayout.axis(for: .bottom) == .horizontal,
           WindowPreviewLayout.axis(for: .left) == .vertical,
@@ -1320,18 +1326,36 @@ func runSelfTest() async -> Int32 {
           WindowPreviewPanelTransitionPolicy.shouldAnimate(
               isVisible: true,
               displayedOwnerID: firstPreviewOwner,
-              targetOwnerID: secondPreviewOwner
+              targetOwnerID: secondPreviewOwner,
+              currentFrame: previewCurrentFrame,
+              targetFrame: previewCurrentFrame
           ),
           !WindowPreviewPanelTransitionPolicy.shouldAnimate(
               isVisible: true,
               displayedOwnerID: secondPreviewOwner,
-              targetOwnerID: secondPreviewOwner
+              targetOwnerID: secondPreviewOwner,
+              currentFrame: previewCurrentFrame,
+              targetFrame: previewCurrentFrame
+          ),
+          WindowPreviewPanelTransitionPolicy.shouldAnimate(
+              isVisible: true,
+              displayedOwnerID: secondPreviewOwner,
+              targetOwnerID: secondPreviewOwner,
+              currentFrame: previewCurrentFrame,
+              targetFrame: previewResizedFrame
           ),
           !WindowPreviewPanelTransitionPolicy.shouldAnimate(
               isVisible: false,
               displayedOwnerID: firstPreviewOwner,
-              targetOwnerID: secondPreviewOwner
+              targetOwnerID: secondPreviewOwner,
+              currentFrame: previewCurrentFrame,
+              targetFrame: previewResizedFrame
           ),
+          remainingPreviewWindows == [portraitPreviewWindow],
+          WindowPreviewClosePolicy.remainingWindows(
+              afterClosing: portraitPreviewWindow,
+              in: [portraitPreviewWindow]
+          ).isEmpty,
           !previewUpdateSequence.isCurrent(stalePreviewUpdate),
           previewUpdateSequence.isCurrent(currentPreviewUpdate),
           WindowPreviewHostingPolicy.sizingOptions.isEmpty,

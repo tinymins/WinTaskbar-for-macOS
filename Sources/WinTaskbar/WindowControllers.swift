@@ -214,9 +214,11 @@ struct WindowPreviewPanelTransitionPolicy {
     static func shouldAnimate(
         isVisible: Bool,
         displayedOwnerID: WindowPreviewOwnerID?,
-        targetOwnerID: WindowPreviewOwnerID
+        targetOwnerID: WindowPreviewOwnerID,
+        currentFrame: CGRect,
+        targetFrame: CGRect
     ) -> Bool {
-        isVisible && displayedOwnerID != targetOwnerID
+        isVisible && (displayedOwnerID != targetOwnerID || currentFrame != targetFrame)
     }
 }
 
@@ -431,7 +433,9 @@ final class WindowPreviewPanelController: ObservableObject {
         let shouldAnimate = animatesTransition && WindowPreviewPanelTransitionPolicy.shouldAnimate(
             isVisible: panel.isVisible,
             displayedOwnerID: displayedOwnerID,
-            targetOwnerID: ownerID
+            targetOwnerID: ownerID,
+            currentFrame: panel.frame,
+            targetFrame: targetFrame
         )
 
         panel.appearance = anchorWindow.appearance

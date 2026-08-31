@@ -77,10 +77,11 @@ final class WindowActivationService {
         NSRunningApplication(processIdentifier: window.ownerPID)?.activate(options: [.activateIgnoringOtherApps])
     }
 
-    func close(window: WindowInfo) {
+    @discardableResult
+    func close(window: WindowInfo) -> Bool {
         guard let match = matchingWindow(for: window),
-              let closeButton: AXUIElement = attribute(match, kAXCloseButtonAttribute) else { return }
-        AXUIElementPerformAction(closeButton, kAXPressAction as CFString)
+              let closeButton: AXUIElement = attribute(match, kAXCloseButtonAttribute) else { return false }
+        return AXUIElementPerformAction(closeButton, kAXPressAction as CFString) == .success
     }
 
     func minimize(window: WindowInfo) {
