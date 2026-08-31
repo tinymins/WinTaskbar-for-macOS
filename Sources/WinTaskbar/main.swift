@@ -343,6 +343,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 @MainActor
 func runSelfTest() async -> Int32 {
+    let tooltipPanel = NSPanel(
+        contentRect: .zero,
+        styleMask: .borderless,
+        backing: .buffered,
+        defer: false
+    )
+    WindowsTrayTooltipPanelPolicy.keepVisibleWhileApplicationIsInactive(tooltipPanel)
+
     let suiteName = "WinTaskbar.SelfTest.\(UUID().uuidString)"
     guard let defaults = UserDefaults(suiteName: suiteName) else {
         fputs("SELF-TEST FAILED: cannot create temporary defaults\n", stderr)
@@ -554,6 +562,7 @@ func runSelfTest() async -> Int32 {
           WindowsTrayIconMetrics.pressedFillOpacity > WindowsTrayIconMetrics.hoverFillOpacity,
           WindowsTrayIconControl.trackingAreaOptions.contains(.inVisibleRect),
           WindowsTrayIconControl.trackingAreaOptions.contains(.mouseMoved),
+          !tooltipPanel.hidesOnDeactivate,
           WindowsTrayTooltipMetrics.size(for: "QQ音乐").height == 32,
           WindowsTrayTooltipMetrics.size(for: "Thursday, August 27, 2026\n\nThu 14:35:49 (Local time)").height > 32,
           preferences.menuButtonPlacement == .standard,

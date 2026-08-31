@@ -78,6 +78,13 @@ enum WindowsTrayTooltipMetrics {
 }
 
 @MainActor
+enum WindowsTrayTooltipPanelPolicy {
+    static func keepVisibleWhileApplicationIsInactive(_ panel: NSPanel) {
+        panel.hidesOnDeactivate = false
+    }
+}
+
+@MainActor
 struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     let title: String
     let accessibilityLabel: String
@@ -571,6 +578,7 @@ private final class WindowsTrayTooltipController {
         panel.isOpaque = false
         panel.hasShadow = true
         panel.ignoresMouseEvents = true
+        WindowsTrayTooltipPanelPolicy.keepVisibleWhileApplicationIsInactive(panel)
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 2)
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         panel.contentView = tooltipView
@@ -649,6 +657,7 @@ private final class WindowsTrayDropTipController {
         panel.isOpaque = false
         panel.hasShadow = true
         panel.ignoresMouseEvents = true
+        WindowsTrayTooltipPanelPolicy.keepVisibleWhileApplicationIsInactive(panel)
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 3)
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         panel.contentView = tipView
