@@ -206,7 +206,12 @@ struct TaskbarView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(TaskbarButtonStyle())
-        .help("Open menu")
+        .background {
+            WindowsTaskbarTooltipRegion(
+                title: "Open menu",
+                taskbarPosition: preferences.position
+            )
+        }
         .accessibilityLabel("Open menu")
         .overlay {
             TaskbarContextClickAnchor { anchorView in
@@ -409,7 +414,13 @@ struct TaskbarView: View {
         }
         .menuStyle(.borderlessButton)
         .frame(width: itemGeometry.cellSize + 6)
-        .help("More apps")
+        .background {
+            WindowsTaskbarTooltipRegion(
+                title: "More apps",
+                taskbarPosition: preferences.position
+            )
+        }
+        .accessibilityLabel("More apps")
     }
 
     @ViewBuilder
@@ -863,7 +874,13 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
                 showJumpList(relativeTo: anchorView)
             }
         }
-        .help(item.name)
+        .background {
+            WindowsTaskbarTooltipRegion(
+                title: item.name,
+                taskbarPosition: preferences.position
+            )
+        }
+        .accessibilityLabel(item.name)
         .onChange(of: attentionState?.pulseGeneration ?? 0) { generation in
             if generation > 0 { startAttentionPulse() }
         }

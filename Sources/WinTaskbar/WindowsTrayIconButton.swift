@@ -319,6 +319,68 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
 }
 
 @MainActor
+struct WindowsTaskbarTooltipRegion: NSViewRepresentable {
+    let title: String
+    let taskbarPosition: TaskbarPosition
+
+    func makeNSView(context: Context) -> WindowsTaskbarTooltipTrackingView {
+        let view = WindowsTaskbarTooltipTrackingView()
+        update(view)
+        return view
+    }
+
+    func updateNSView(_ view: WindowsTaskbarTooltipTrackingView, context: Context) {
+        update(view)
+    }
+
+    private func update(_ view: WindowsTaskbarTooltipTrackingView) {
+        view.hoverTitle = title
+        view.taskbarPosition = taskbarPosition
+    }
+}
+
+@MainActor
+final class WindowsTaskbarTooltipTrackingView: NSView {
+    var hoverTitle = ""
+    var taskbarPosition = TaskbarPosition.bottom
+    private var trackingAreaReference: NSTrackingArea?
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingAreaReference { removeTrackingArea(trackingAreaReference) }
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: WindowsTrayIconControl.trackingAreaOptions,
+            owner: self
+        )
+        addTrackingArea(area)
+        trackingAreaReference = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        guard !hoverTitle.isEmpty, let window else { return }
+        WindowsTrayTooltipController.shared.schedule(
+            title: hoverTitle,
+            anchor: window.convertToScreen(convert(bounds, to: nil)),
+            taskbarFrame: window.frame,
+            position: taskbarPosition,
+            owner: self
+        )
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        WindowsTrayTooltipController.shared.hide(owner: self)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { WindowsTrayTooltipController.shared.hide(owner: self) }
+    }
+}
+
+@MainActor
 final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     static let trayItemPasteboardType = NSPasteboard.PasteboardType(
         "io.github.tinymins.WinTaskbar.external-status-item"
@@ -673,7 +735,7 @@ private final class WindowsTrayTooltipController {
     private let tooltipView: WindowsTrayTooltipView
     private let surfaceView: NSVisualEffectView
     private var pendingWorkItem: DispatchWorkItem?
-    private weak var owner: WindowsTrayIconControl?
+    private weak var owner: NSView?
 
     private init() {
         let tooltipView = WindowsTrayTooltipView()
@@ -700,7 +762,7 @@ private final class WindowsTrayTooltipController {
         anchor: CGRect,
         taskbarFrame: CGRect,
         position: TaskbarPosition?,
-        owner: WindowsTrayIconControl
+        owner: NSView
     ) {
         pendingWorkItem?.cancel()
         panel.orderOut(nil)
@@ -720,7 +782,7 @@ private final class WindowsTrayTooltipController {
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(400), execute: workItem)
     }
 
-    func hide(owner: WindowsTrayIconControl) {
+    func hide(owner: NSView) {
         guard self.owner === owner else { return }
         pendingWorkItem?.cancel()
         pendingWorkItem = nil
