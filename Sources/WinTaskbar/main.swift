@@ -1980,6 +1980,16 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    var windowAppearanceOrder = WindowAppearanceOrder()
+    guard windowAppearanceOrder.reconcile(observedWindowIDs: [101], forPID: 42) == [101],
+          windowAppearanceOrder.reconcile(observedWindowIDs: [202, 101], forPID: 42) == [101, 202],
+          windowAppearanceOrder.reconcile(observedWindowIDs: [202, 303, 101], forPID: 42) == [101, 202, 303],
+          windowAppearanceOrder.reconcile(observedWindowIDs: [303, 202], forPID: 42) == [202, 303],
+          windowAppearanceOrder.reconcile(observedWindowIDs: [], forPID: 42).isEmpty else {
+        fputs("SELF-TEST FAILED: window appearance order mismatch\n", stderr)
+        return 1
+    }
+
     let thumbnailCache = WindowThumbnailCache()
     let capturedThumbnail = NSImage(size: NSSize(width: 320, height: 180))
     let refreshedThumbnail = NSImage(size: NSSize(width: 640, height: 360))

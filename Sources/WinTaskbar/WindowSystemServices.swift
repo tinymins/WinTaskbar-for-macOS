@@ -169,9 +169,30 @@ final class WindowThumbnailCache {
     }
 }
 
+struct WindowAppearanceOrder {
+    private var orderedWindowIDsByPID: [pid_t: [CGWindowID]] = [:]
+
+    mutating func reconcile(observedWindowIDs: [CGWindowID], forPID pid: pid_t) -> [CGWindowID] {
+        guard !observedWindowIDs.isEmpty else {
+            orderedWindowIDsByPID.removeValue(forKey: pid)
+            return []
+        }
+
+        let observedWindowIDSet = Set(observedWindowIDs)
+        var orderedWindowIDs = (orderedWindowIDsByPID[pid] ?? []).filter(observedWindowIDSet.contains)
+        var knownWindowIDs = Set(orderedWindowIDs)
+        for windowID in observedWindowIDs where knownWindowIDs.insert(windowID).inserted {
+            orderedWindowIDs.append(windowID)
+        }
+        orderedWindowIDsByPID[pid] = orderedWindowIDs
+        return orderedWindowIDs
+    }
+}
+
 @MainActor
 final class WindowsService {
     private let thumbnailCache = WindowThumbnailCache()
+    private var appearanceOrder = WindowAppearanceOrder()
 
     func windows(forPID pid: pid_t) -> [WindowInfo] {
         windows(forPIDs: [pid])[pid] ?? []
@@ -200,6 +221,9 @@ final class WindowsService {
             let isOnScreen = info[kCGWindowIsOnscreen as String] as? Bool ?? false
             return (ownerPID, windowID, title, frame, isOnScreen)
         }
+        let observedWindowIDsByPID = Dictionary(grouping: candidates, by: \.pid).mapValues {
+            $0.map(\.windowID)
+        }
 
         let pidsWithOffscreenCandidates = Set(candidates.lazy.filter { !$0.isOnScreen }.map(\.pid))
         let minimizedFramesByPID = Dictionary(uniqueKeysWithValues: pidsWithOffscreenCandidates.map {
@@ -219,6 +243,20 @@ final class WindowsService {
                 frame: candidate.frame,
                 isMinimized: !candidate.isOnScreen
             ))
+        }
+        for pid in requestedPIDs {
+            let orderedWindowIDs = appearanceOrder.reconcile(
+                observedWindowIDs: observedWindowIDsByPID[pid] ?? [], forPID: pid
+            )
+            let currentWindowsByID = Dictionary(
+                uniqueKeysWithValues: (windowsByPID[pid] ?? []).map { ($0.windowID, $0) }
+            )
+            let orderedWindows = orderedWindowIDs.compactMap { currentWindowsByID[$0] }
+            if orderedWindows.isEmpty {
+                windowsByPID.removeValue(forKey: pid)
+            } else {
+                windowsByPID[pid] = orderedWindows
+            }
         }
         return windowsByPID
     }
