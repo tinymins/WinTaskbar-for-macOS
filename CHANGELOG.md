@@ -2,6 +2,12 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.20] - 2026-09-01
+
+### Fixed
+
+- Keep each app's window previews in first-seen order when WindowServer stacking changes, append newly discovered windows to the end, and remove IDs only after their windows close.
+
 ## [0.0.19] - 2026-08-31
 
 ### Fixed
@@ -150,6 +156,7 @@ All notable changes to WinTaskbar for macOS are documented here.
 - Show window previews immediately when hovering over a taskbar app while retaining a short dismissal delay.
 - Match Windows preview thumbnail proportions and refine preview panel styling.
 
+[0.0.20]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.19...v0.0.20
 [0.0.19]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.18...v0.0.19
 [0.0.18]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.17...v0.0.18
 [0.0.14]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.13...v0.0.14
