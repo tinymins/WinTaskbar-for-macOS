@@ -2,6 +2,12 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.21] - 2026-09-02
+
+### Fixed
+
+- Remove app icon tooltips from the taskbar so they no longer overlap window thumbnail previews, while preserving app accessibility labels.
+
 ## [0.0.20] - 2026-09-01
 
 ### Fixed
