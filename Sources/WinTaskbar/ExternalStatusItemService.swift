@@ -141,8 +141,10 @@ struct ExternalStatusItemCaptureCadence {
     private var interval = ExternalStatusItemLiveCapturePolicy.interval
     private var fingerprint: UInt64?
 
-    mutating func record(fingerprint: UInt64?, at time: TimeInterval) {
-        if let fingerprint, fingerprint != self.fingerprint {
+    mutating func record(fingerprint: UInt64?, at time: TimeInterval, sourceFrame: CGRect) {
+        if !ExternalStatusItemLiveCapturePolicy.shouldRefresh(sourceFrame: sourceFrame) {
+            interval = 2
+        } else if let fingerprint, fingerprint != self.fingerprint {
             interval = ExternalStatusItemLiveCapturePolicy.interval
             self.fingerprint = fingerprint
         } else {
@@ -185,7 +187,7 @@ final class ExternalStatusItemLayoutStore {
     }
 }
 
-private struct StatusItemWindow {
+private struct StatusItemWindow: Sendable {
     let id: CGWindowID
     let frame: CGRect
 }
@@ -252,7 +254,7 @@ private struct ExternalStatusItemSnapshot: Sendable {
     let processIdentifier: pid_t
     let accessibilityLabel: String
     let sourceFrame: CGRect
-    let capturedImage: ExternalStatusCapturedImage?
+    let captureWindow: StatusItemWindow?
     let fallbackURL: URL?
     let element: AXUIElement
 }
@@ -312,7 +314,9 @@ private enum ExternalStatusItemDiscovery {
                     processIdentifier: application.processIdentifier,
                     accessibilityLabel: label,
                     sourceFrame: frame,
-                    capturedImage: capturedImage(frame: frame, windows: statusItemWindows),
+                    captureWindow: statusItemWindows
+                        .filter { $0.frame.minX <= frame.midX && $0.frame.maxX >= frame.midX }
+                        .min { $0.frame.width < $1.frame.width },
                     fallbackURL: application.bundleURL,
                     element: child
                 ))
@@ -347,26 +351,6 @@ private enum ExternalStatusItemDiscovery {
                   frame.height <= 50 else { return nil }
             return StatusItemWindow(id: id, frame: frame)
         }
-    }
-
-    private static func capturedImage(
-        frame: CGRect,
-        windows: [StatusItemWindow]
-    ) -> ExternalStatusCapturedImage? {
-        guard let window = windows
-            .filter({ $0.frame.minX <= frame.midX && $0.frame.maxX >= frame.midX })
-            .min(by: { $0.frame.width < $1.frame.width }),
-              let image = CGWindowListCreateImage(
-                  .null,
-                  .optionIncludingWindow,
-                  window.id,
-                  [.boundsIgnoreFraming, .bestResolution]
-              ) else { return nil }
-        return transparentContentImage(
-            image,
-            windowID: window.id,
-            windowFrame: window.frame
-        )
     }
 
     static func capture(
@@ -508,6 +492,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
     private var refreshPending = false
     private var captureCadences: [String: ExternalStatusItemCaptureCadence] = [:]
     private var captureViews: [String: NSHashTable<NSView>] = [:]
+    private var visibleCaptureItemIDs: Set<String> = []
     private var visibilityCancellable: AnyCancellable?
     private var applicationsCancellable: AnyCancellable?
     private var cachedApplications: [ExternalStatusApplicationSnapshot]?
@@ -569,6 +554,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         liveCaptureTask = nil
         refreshPending = false
         captureCadences = [:]
+        visibleCaptureItemIDs = []
         items = []
         elements = [:]
         refreshStates = []
@@ -937,22 +923,27 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         scheduleLiveCapture()
     }
 
-    private var visibleLiveItems: [ExternalStatusItem] {
+    private var visibleCaptureItems: [ExternalStatusItem] {
         items.filter { item in
-            ExternalStatusItemLiveCapturePolicy.shouldRefresh(sourceFrame: item.interactionFrame)
-                && captureViews[item.id]?.allObjects.contains(where: { view in
-                    !view.isHiddenOrHasHiddenAncestor
-                        && view.window?.isVisible == true
-                        && view.window?.occlusionState.contains(.visible) == true
-                }) == true
+            captureViews[item.id]?.allObjects.contains(where: { view in
+                !view.isHiddenOrHasHiddenAncestor
+                    && view.window?.isVisible == true
+                    && view.window?.occlusionState.contains(.visible) == true
+            }) == true
         }
     }
 
     private func scheduleLiveCapture() {
         liveCaptureTimer?.invalidate()
         liveCaptureTimer = nil
+        let visibleItems = visibleCaptureItems
+        let visibleIDs = Set(visibleItems.map(\.id))
+        for itemID in visibleIDs.subtracting(visibleCaptureItemIDs) {
+            captureCadences[itemID] = ExternalStatusItemCaptureCadence()
+        }
+        visibleCaptureItemIDs = visibleIDs
         guard isEnabled, refreshTask == nil, liveCaptureTask == nil,
-              let nextTime = visibleLiveItems.compactMap({ item -> TimeInterval? in
+              let nextTime = visibleItems.compactMap({ item -> TimeInterval? in
                   guard item.captureWindowID != nil, item.captureFrame != nil else { return nil }
                   return captureCadences[item.id]?.nextCaptureTime ?? 0
               }).min() else { return }
@@ -971,7 +962,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
               refreshTask == nil,
               liveCaptureTask == nil else { return }
         let now = ProcessInfo.processInfo.systemUptime
-        let targets = visibleLiveItems.compactMap { item -> (String, CGWindowID, CGRect)? in
+        let targets = visibleCaptureItems.compactMap { item -> (String, CGWindowID, CGRect)? in
             guard (captureCadences[item.id]?.nextCaptureTime ?? 0) <= now,
                   let captureWindowID = item.captureWindowID,
                   let captureFrame = item.captureFrame else { return nil }
@@ -993,9 +984,11 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
             }.value
             guard let self, !Task.isCancelled else { return }
             for (itemID, capture) in captures {
+                guard let item = items.first(where: { $0.id == itemID }) else { continue }
                 captureCadences[itemID, default: ExternalStatusItemCaptureCadence()].record(
                     fingerprint: capture?.fingerprint,
-                    at: now
+                    at: now,
+                    sourceFrame: item.interactionFrame
                 )
             }
             applyLiveImages(captures.compactMap { itemID, capture in
@@ -1039,7 +1032,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
                 captureWindowID: capture.windowID,
                 captureFrame: capture.windowFrame,
                 imageFingerprint: capture.fingerprint,
-                fallbackPath: state.fallbackPath
+                fallbackPath: nil
             )
             changed = true
         }
@@ -1049,14 +1042,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
     }
 
     private func apply(_ snapshots: [ExternalStatusItemSnapshot]) {
-        let now = ProcessInfo.processInfo.systemUptime
         captureCadences = captureCadences.filter { entry in snapshots.contains { $0.id == entry.key } }
-        for snapshot in snapshots {
-            captureCadences[snapshot.id, default: ExternalStatusItemCaptureCadence()].record(
-                fingerprint: snapshot.capturedImage?.fingerprint,
-                at: now
-            )
-        }
         let currentItemsByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
         let currentStatesByID = Dictionary(
             uniqueKeysWithValues: refreshStates.map { ($0.id, $0) }
@@ -1067,7 +1053,16 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         )] = []
         var nextElements: [String: AXUIElement] = [:]
         for snapshot in snapshots {
-            guard snapshot.capturedImage != nil || snapshot.fallbackURL != nil else { continue }
+            guard snapshot.captureWindow != nil || snapshot.fallbackURL != nil else { continue }
+            let previousState = currentStatesByID[snapshot.id]
+            let sameProcess = previousState?.processIdentifier == snapshot.processIdentifier
+            let fingerprint = sameProcess ? previousState?.imageFingerprint : nil
+            if !sameProcess
+                || previousState?.captureWindowID != snapshot.captureWindow?.id
+                || previousState?.captureFrame != snapshot.captureWindow?.frame
+                || previousState?.accessibilityLabel != snapshot.accessibilityLabel {
+                captureCadences[snapshot.id] = ExternalStatusItemCaptureCadence()
+            }
             preparedSnapshots.append((
                 snapshot: snapshot,
                 state: ExternalStatusItemRefreshState(
@@ -1075,10 +1070,10 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
                     processIdentifier: snapshot.processIdentifier,
                     accessibilityLabel: snapshot.accessibilityLabel,
                     sourceFrame: snapshot.sourceFrame,
-                    captureWindowID: snapshot.capturedImage?.windowID,
-                    captureFrame: snapshot.capturedImage?.windowFrame,
-                    imageFingerprint: snapshot.capturedImage?.fingerprint,
-                    fallbackPath: snapshot.capturedImage == nil ? snapshot.fallbackURL?.path : nil
+                    captureWindowID: snapshot.captureWindow?.id,
+                    captureFrame: snapshot.captureWindow?.frame,
+                    imageFingerprint: fingerprint,
+                    fallbackPath: fingerprint == nil ? snapshot.fallbackURL?.path : nil
                 )
             ))
             nextElements[snapshot.id] = snapshot.element
@@ -1089,19 +1084,13 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
             items = preparedSnapshots.map { prepared in
                 let snapshot = prepared.snapshot
                 let image: NSImage
-                if currentStatesByID[snapshot.id] == prepared.state,
-                   let currentItem = currentItemsByID[snapshot.id] {
+                if let currentItem = currentItemsByID[snapshot.id],
+                   currentItem.processIdentifier == snapshot.processIdentifier {
                     image = currentItem.image
-                } else if let capturedImage = snapshot.capturedImage {
-                    image = NSImage(
-                        cgImage: capturedImage.image,
-                        size: NSSize(
-                            width: capturedImage.image.width,
-                            height: capturedImage.image.height
-                        )
-                    )
+                } else if let fallbackURL = snapshot.fallbackURL {
+                    image = NSWorkspace.shared.icon(forFile: fallbackURL.path)
                 } else {
-                    image = NSWorkspace.shared.icon(forFile: snapshot.fallbackURL!.path)
+                    image = NSImage(size: snapshot.sourceFrame.size)
                 }
                 return ExternalStatusItem(
                     id: snapshot.id,
@@ -1109,8 +1098,8 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
                     accessibilityLabel: snapshot.accessibilityLabel,
                     sourceFrame: snapshot.sourceFrame,
                     image: image,
-                    captureWindowID: snapshot.capturedImage?.windowID,
-                    captureFrame: snapshot.capturedImage?.windowFrame
+                    captureWindowID: snapshot.captureWindow?.id,
+                    captureFrame: snapshot.captureWindow?.frame
                 )
             }
             refreshStates = nextStates

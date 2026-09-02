@@ -428,28 +428,45 @@ func runSelfTest() async -> Int32 {
     var staticTrayCadence = ExternalStatusItemCaptureCadence()
     var animatedTrayCadence = ExternalStatusItemCaptureCadence()
     var failedTrayCadence = ExternalStatusItemCaptureCadence()
+    var squareTrayCadence = ExternalStatusItemCaptureCadence()
+    let wideTrayFrame = CGRect(x: 0, y: 0, width: 100, height: 24)
+    let squareTrayFrame = CGRect(x: 0, y: 0, width: 24, height: 24)
     var staticCaptures = 0
     var animatedCaptures = 0
     var failedCaptures = 0
+    var squareCaptures = 0
     while staticTrayCadence.nextCaptureTime < 10 {
         staticCaptures += 1
-        staticTrayCadence.record(fingerprint: unchangedTrayImage, at: staticTrayCadence.nextCaptureTime)
+        staticTrayCadence.record(
+            fingerprint: unchangedTrayImage, at: staticTrayCadence.nextCaptureTime, sourceFrame: wideTrayFrame
+        )
     }
     while animatedTrayCadence.nextCaptureTime < 10 {
         animatedCaptures += 1
-        animatedTrayCadence.record(fingerprint: UInt64(animatedCaptures), at: animatedTrayCadence.nextCaptureTime)
+        animatedTrayCadence.record(
+            fingerprint: UInt64(animatedCaptures), at: animatedTrayCadence.nextCaptureTime, sourceFrame: wideTrayFrame
+        )
     }
     while failedTrayCadence.nextCaptureTime < 10 {
         failedCaptures += 1
-        failedTrayCadence.record(fingerprint: nil, at: failedTrayCadence.nextCaptureTime)
+        failedTrayCadence.record(
+            fingerprint: nil, at: failedTrayCadence.nextCaptureTime, sourceFrame: wideTrayFrame
+        )
+    }
+    while squareTrayCadence.nextCaptureTime < 10 {
+        squareCaptures += 1
+        squareTrayCadence.record(
+            fingerprint: UInt64(squareCaptures), at: squareTrayCadence.nextCaptureTime, sourceFrame: squareTrayFrame
+        )
     }
     guard staticCaptures <= 15,
           animatedCaptures >= 240,
-          failedCaptures <= 15 else {
+          failedCaptures <= 15,
+          squareCaptures == 5 else {
         fputs("SELF-TEST FAILED: static or failed tray captures must back off without slowing animation\n", stderr)
         return 1
     }
-    staticTrayCadence.record(fingerprint: changedTrayImage, at: 10)
+    staticTrayCadence.record(fingerprint: changedTrayImage, at: 10, sourceFrame: wideTrayFrame)
     guard abs(staticTrayCadence.nextCaptureTime - 10.04) < 0.000_001 else {
         fputs("SELF-TEST FAILED: a changed tray image must restore live capture cadence\n", stderr)
         return 1

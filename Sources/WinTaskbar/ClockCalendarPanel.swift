@@ -37,6 +37,7 @@ final class ClockCalendarPanelController: ObservableObject {
 
     private let backdrop = NSVisualEffectView()
     private let hostingView: NSHostingView<AnyView>
+    private let preferences: PreferencesStore
     private var panel: ClockCalendarPanel?
     private var localMonitor: Any?
     private var globalMonitor: Any?
@@ -59,11 +60,8 @@ final class ClockCalendarPanelController: ObservableObject {
         let calendarService = SystemCalendarService()
         self.state = state
         self.calendarService = calendarService
-        hostingView = NSHostingView(rootView: AnyView(ClockCalendarPanelView(
-            state: state,
-            calendarService: calendarService,
-            preferences: preferences
-        )))
+        self.preferences = preferences
+        hostingView = NSHostingView(rootView: AnyView(EmptyView()))
         expansionObserver = state.$isExpanded.dropFirst().sink { [weak self] isExpanded in
             MainActor.assumeIsolated { self?.resizeForExpansion(isExpanded: isExpanded) }
         }
@@ -86,6 +84,7 @@ final class ClockCalendarPanelController: ObservableObject {
 
         guard animated else {
             panel.orderOut(nil)
+            hostingView.rootView = AnyView(EmptyView())
             return
         }
 
@@ -102,6 +101,7 @@ final class ClockCalendarPanelController: ObservableObject {
                       !self.isShowing,
                       self.transitionSequence.isCurrent(transitionRevision) else { return }
                 panel.orderOut(nil)
+                self.hostingView.rootView = AnyView(EmptyView())
             }
         }
     }
@@ -112,6 +112,11 @@ final class ClockCalendarPanelController: ObservableObject {
 
     private func present(screen: NSScreen, position: TaskbarPosition, barHeight: CGFloat, theme: AppTheme) {
         let transitionRevision = transitionSequence.begin()
+        hostingView.rootView = AnyView(ClockCalendarPanelView(
+            state: state,
+            calendarService: calendarService,
+            preferences: preferences
+        ))
         state.resetToToday()
         calendarService.refreshAuthorizationState()
         Task { [weak self] in
