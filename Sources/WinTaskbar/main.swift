@@ -434,6 +434,35 @@ func runSelfTest() async -> Int32 {
         height: 1,
         rgbaBytes: [255, 255, 255, 255]
     )
+    var staticTrayCadence = ExternalStatusItemCaptureCadence()
+    var animatedTrayCadence = ExternalStatusItemCaptureCadence()
+    var failedTrayCadence = ExternalStatusItemCaptureCadence()
+    var staticCaptures = 0
+    var animatedCaptures = 0
+    var failedCaptures = 0
+    while staticTrayCadence.nextCaptureTime < 10 {
+        staticCaptures += 1
+        staticTrayCadence.record(fingerprint: unchangedTrayImage, at: staticTrayCadence.nextCaptureTime)
+    }
+    while animatedTrayCadence.nextCaptureTime < 10 {
+        animatedCaptures += 1
+        animatedTrayCadence.record(fingerprint: UInt64(animatedCaptures), at: animatedTrayCadence.nextCaptureTime)
+    }
+    while failedTrayCadence.nextCaptureTime < 10 {
+        failedCaptures += 1
+        failedTrayCadence.record(fingerprint: nil, at: failedTrayCadence.nextCaptureTime)
+    }
+    guard staticCaptures <= 15,
+          animatedCaptures >= 240,
+          failedCaptures <= 15 else {
+        fputs("SELF-TEST FAILED: static or failed tray captures must back off without slowing animation\n", stderr)
+        return 1
+    }
+    staticTrayCadence.record(fingerprint: changedTrayImage, at: 10)
+    guard abs(staticTrayCadence.nextCaptureTime - 10.04) < 0.000_001 else {
+        fputs("SELF-TEST FAILED: a changed tray image must restore live capture cadence\n", stderr)
+        return 1
+    }
     let unchangedTrayPresentation = ExternalStatusItemRefreshState(
         id: "com.example.StatusApp|status-item",
         processIdentifier: 101,

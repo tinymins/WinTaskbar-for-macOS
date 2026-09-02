@@ -136,6 +136,22 @@ enum ExternalStatusItemLiveCapturePolicy {
     }
 }
 
+struct ExternalStatusItemCaptureCadence {
+    private(set) var nextCaptureTime: TimeInterval = 0
+    private var interval = ExternalStatusItemLiveCapturePolicy.interval
+    private var fingerprint: UInt64?
+
+    mutating func record(fingerprint: UInt64?, at time: TimeInterval) {
+        if let fingerprint, fingerprint != self.fingerprint {
+            interval = ExternalStatusItemLiveCapturePolicy.interval
+            self.fingerprint = fingerprint
+        } else {
+            interval = min(interval * 2, 1)
+        }
+        nextCaptureTime = time + interval
+    }
+}
+
 struct ExternalStatusItemRefreshState: Equatable, Sendable {
     let id: String
     let processIdentifier: pid_t
@@ -489,6 +505,13 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
     private var liveCaptureTimer: Timer?
     private var refreshTask: Task<Void, Never>?
     private var liveCaptureTask: Task<Void, Never>?
+    private var refreshPending = false
+    private var captureCadences: [String: ExternalStatusItemCaptureCadence] = [:]
+    private var captureViews: [String: NSHashTable<NSView>] = [:]
+    private var visibilityCancellable: AnyCancellable?
+    private var applicationsCancellable: AnyCancellable?
+    private var cachedApplications: [ExternalStatusApplicationSnapshot]?
+    private var controlCenterProcessIdentifier: pid_t?
     private var presentedMenu: NSMenu?
 
     init(defaults: UserDefaults = .standard) {
@@ -502,6 +525,18 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         self.layout = layout
         layoutStore.save(layout)
         super.init()
+        visibilityCancellable = NotificationCenter.default.publisher(
+            for: NSWindow.didChangeOcclusionStateNotification
+        ).sink { [weak self] _ in
+            self?.scheduleLiveCapture()
+        }
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
+        applicationsCancellable = Publishers.Merge(
+            workspaceCenter.publisher(for: NSWorkspace.didLaunchApplicationNotification),
+            workspaceCenter.publisher(for: NSWorkspace.didTerminateApplicationNotification)
+        ).sink { [weak self] _ in
+            self?.cachedApplications = nil
+        }
     }
 
     isolated deinit {
@@ -521,16 +556,6 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
                     self?.refresh()
                 }
             }
-            let liveCaptureTimer = Timer(
-                timeInterval: ExternalStatusItemLiveCapturePolicy.interval,
-                repeats: true
-            ) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    self?.refreshLiveImages()
-                }
-            }
-            RunLoop.main.add(liveCaptureTimer, forMode: .common)
-            self.liveCaptureTimer = liveCaptureTimer
             return
         }
 
@@ -542,6 +567,8 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         refreshTask = nil
         liveCaptureTask?.cancel()
         liveCaptureTask = nil
+        refreshPending = false
+        captureCadences = [:]
         items = []
         elements = [:]
         refreshStates = []
@@ -832,21 +859,11 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         return raw as? [String] ?? []
     }
 
-    private func refresh() {
-        guard isEnabled else { return }
-        guard AXIsProcessTrusted() else {
-            refreshTask?.cancel()
-            refreshTask = nil
-            items = []
-            elements = [:]
-            refreshStates = []
-            return
-        }
-        guard refreshTask == nil else { return }
-
+    private func applicationsForDiscovery() -> [ExternalStatusApplicationSnapshot] {
+        if let cachedApplications { return cachedApplications }
+        let runningApplications = NSWorkspace.shared.runningApplications
         let ownProcessIdentifier = ProcessInfo.processInfo.processIdentifier
-        let applications: [ExternalStatusApplicationSnapshot] = NSWorkspace.shared.runningApplications.compactMap {
-            application in
+        let applications: [ExternalStatusApplicationSnapshot] = runningApplications.compactMap { application in
             guard ExternalStatusItemPolicy.shouldInspectApplication(
                 processIdentifier: application.processIdentifier,
                 bundleIdentifier: application.bundleIdentifier,
@@ -859,10 +876,36 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
                 localizedName: application.localizedName
             )
         }
-        let canCapture = CGPreflightScreenCaptureAccess()
-        let controlCenterProcessIdentifier = NSWorkspace.shared.runningApplications.first(where: {
+        controlCenterProcessIdentifier = runningApplications.first(where: {
             $0.bundleIdentifier == "com.apple.controlcenter"
         })?.processIdentifier
+        cachedApplications = applications
+        return applications
+    }
+
+    private func refresh() {
+        guard isEnabled else { return }
+        guard AXIsProcessTrusted() else {
+            refreshTask?.cancel()
+            refreshTask = nil
+            items = []
+            elements = [:]
+            refreshStates = []
+            return
+        }
+        guard refreshTask == nil else { return }
+        guard liveCaptureTask == nil else {
+            refreshPending = true
+            return
+        }
+        refreshPending = false
+        liveCaptureTimer?.invalidate()
+        liveCaptureTimer = nil
+
+        let ownProcessIdentifier = ProcessInfo.processInfo.processIdentifier
+        let applications = applicationsForDiscovery()
+        let canCapture = CGPreflightScreenCaptureAccess()
+        let controlCenterProcessIdentifier = self.controlCenterProcessIdentifier
         refreshTask = Task { [weak self] in
             let snapshots = await Task.detached(priority: .utility) {
                 ExternalStatusItemDiscovery.discover(
@@ -875,33 +918,92 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
             guard let self, !Task.isCancelled else { return }
             apply(snapshots)
             refreshTask = nil
+            scheduleLiveCapture()
         }
+    }
+
+    func registerCaptureView(_ view: NSView, itemID: String) {
+        let views = captureViews[itemID] ?? NSHashTable<NSView>.weakObjects()
+        views.add(view)
+        captureViews[itemID] = views
+        scheduleLiveCapture()
+    }
+
+    func unregisterCaptureView(_ view: NSView, itemID: String) {
+        captureViews[itemID]?.remove(view)
+        if captureViews[itemID]?.allObjects.isEmpty == true {
+            captureViews[itemID] = nil
+        }
+        scheduleLiveCapture()
+    }
+
+    private var visibleLiveItems: [ExternalStatusItem] {
+        items.filter { item in
+            ExternalStatusItemLiveCapturePolicy.shouldRefresh(sourceFrame: item.interactionFrame)
+                && captureViews[item.id]?.allObjects.contains(where: { view in
+                    !view.isHiddenOrHasHiddenAncestor
+                        && view.window?.isVisible == true
+                        && view.window?.occlusionState.contains(.visible) == true
+                }) == true
+        }
+    }
+
+    private func scheduleLiveCapture() {
+        liveCaptureTimer?.invalidate()
+        liveCaptureTimer = nil
+        guard isEnabled, refreshTask == nil, liveCaptureTask == nil,
+              let nextTime = visibleLiveItems.compactMap({ item -> TimeInterval? in
+                  guard item.captureWindowID != nil, item.captureFrame != nil else { return nil }
+                  return captureCadences[item.id]?.nextCaptureTime ?? 0
+              }).min() else { return }
+        let timer = Timer(
+            timeInterval: max(0.001, nextTime - ProcessInfo.processInfo.systemUptime),
+            repeats: false
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshLiveImages() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        liveCaptureTimer = timer
     }
 
     private func refreshLiveImages() {
         guard isEnabled,
               refreshTask == nil,
               liveCaptureTask == nil else { return }
-        let targets = items.compactMap { item -> (String, CGWindowID, CGRect)? in
-            guard ExternalStatusItemLiveCapturePolicy.shouldRefresh(sourceFrame: item.interactionFrame),
+        let now = ProcessInfo.processInfo.systemUptime
+        let targets = visibleLiveItems.compactMap { item -> (String, CGWindowID, CGRect)? in
+            guard (captureCadences[item.id]?.nextCaptureTime ?? 0) <= now,
                   let captureWindowID = item.captureWindowID,
                   let captureFrame = item.captureFrame else { return nil }
             return (item.id, captureWindowID, captureFrame)
         }
-        guard !targets.isEmpty else { return }
+        guard !targets.isEmpty else {
+            scheduleLiveCapture()
+            return
+        }
 
         liveCaptureTask = Task { [weak self] in
             let captures = await Task.detached(priority: .userInitiated) {
-                targets.compactMap { itemID, windowID, windowFrame in
-                    ExternalStatusItemDiscovery.capture(
+                targets.map { itemID, windowID, windowFrame in
+                    (itemID, ExternalStatusItemDiscovery.capture(
                         windowID: windowID,
                         windowFrame: windowFrame
-                    ).map { (itemID, $0) }
+                    ))
                 }
             }.value
             guard let self, !Task.isCancelled else { return }
-            applyLiveImages(captures)
+            for (itemID, capture) in captures {
+                captureCadences[itemID, default: ExternalStatusItemCaptureCadence()].record(
+                    fingerprint: capture?.fingerprint,
+                    at: now
+                )
+            }
+            applyLiveImages(captures.compactMap { itemID, capture in
+                capture.map { (itemID, $0) }
+            })
             liveCaptureTask = nil
+            if refreshPending { refresh() }
+            else { scheduleLiveCapture() }
         }
     }
 
@@ -947,6 +1049,14 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
     }
 
     private func apply(_ snapshots: [ExternalStatusItemSnapshot]) {
+        let now = ProcessInfo.processInfo.systemUptime
+        captureCadences = captureCadences.filter { entry in snapshots.contains { $0.id == entry.key } }
+        for snapshot in snapshots {
+            captureCadences[snapshot.id, default: ExternalStatusItemCaptureCadence()].record(
+                fingerprint: snapshot.capturedImage?.fingerprint,
+                at: now
+            )
+        }
         let currentItemsByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
         let currentStatesByID = Dictionary(
             uniqueKeysWithValues: refreshStates.map { ($0.id, $0) }
@@ -1306,6 +1416,44 @@ struct ExternalStatusItemButton: View {
                 )
         }
         .frame(width: controlWidth, height: WindowsTrayIconMetrics.controlHeight)
+        .background(ExternalStatusItemCaptureView(service: service, itemID: item.id))
+    }
+}
+
+@MainActor
+private struct ExternalStatusItemCaptureView: NSViewRepresentable {
+    let service: ExternalStatusItemService
+    let itemID: String
+
+    func makeNSView(context: Context) -> CaptureView {
+        CaptureView(service: service, itemID: itemID)
+    }
+
+    func updateNSView(_ view: CaptureView, context: Context) {}
+
+    static func dismantleNSView(_ view: CaptureView, coordinator: ()) {
+        view.service?.unregisterCaptureView(view, itemID: view.itemID)
+    }
+
+    final class CaptureView: NSView {
+        weak var service: ExternalStatusItemService?
+        let itemID: String
+
+        init(service: ExternalStatusItemService, itemID: String) {
+            self.service = service
+            self.itemID = itemID
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window != nil { service?.registerCaptureView(self, itemID: itemID) }
+            else { service?.unregisterCaptureView(self, itemID: itemID) }
+        }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 }
 
