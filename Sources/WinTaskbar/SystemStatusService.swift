@@ -80,7 +80,28 @@ enum InputSourceCycling {
 }
 
 @MainActor
-final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDelegate {
+private final class AudioPropertyObservation {
+    private let objectID: AudioObjectID
+    private var address: AudioObjectPropertyAddress
+    private let listener: AudioObjectPropertyListenerBlock
+
+    init?(objectID: AudioObjectID, selector: AudioObjectPropertySelector,
+          scope: AudioObjectPropertyScope, changed: @escaping @MainActor () -> Void) {
+        self.objectID = objectID
+        address = AudioObjectPropertyAddress(
+            mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain
+        )
+        listener = { _, _ in MainActor.assumeIsolated { changed() } }
+        guard AudioObjectAddPropertyListenerBlock(objectID, &address, .main, listener) == noErr else { return nil }
+    }
+
+    isolated deinit {
+        AudioObjectRemovePropertyListenerBlock(objectID, &address, .main, listener)
+    }
+}
+
+@MainActor
+final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDelegate, CWEventDelegate {
     @Published private(set) var batteryLevel: Int?
     @Published private(set) var isCharging = false
     @Published private(set) var isLowPowerModeEnabled = false
@@ -96,6 +117,12 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
     @Published private(set) var inputSources: [InputSourceOption] = []
 
     private var statusTimer: Timer?
+    private var powerSourceObserver: CFRunLoopSource?
+    private var statusObservers: [AnyCancellable] = []
+    private var audioOutputObserver: AudioPropertyObservation?
+    private var audioDeviceObservers: [AudioPropertyObservation] = []
+    private var observedAudioDevice: AudioDeviceID?
+    private var wifiClient = CWWiFiClient()
     private let locationManager = CLLocationManager()
     private var scannedNetworks: [String: CWNetwork] = [:]
     private var inputSourceRefs: [String: TISInputSource] = [:]
@@ -103,22 +130,122 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
     override init() {
         super.init()
         locationManager.delegate = self
+        installStatusObservers()
         refresh()
         reloadInputSources()
-        statusTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+        // Notifications provide immediate updates; reconcile after missed events or device changes.
+        statusTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.refresh()
             }
         }
+        statusTimer?.tolerance = 5
+    }
+
+    isolated deinit {
+        statusTimer?.invalidate()
+        if let powerSourceObserver { CFRunLoopSourceInvalidate(powerSourceObserver) }
+        try? wifiClient.stopMonitoringAllEvents()
+        wifiClient.delegate = nil
     }
 
     func refresh() {
         readBattery()
+        observeAudioDevice()
         readAudio()
-        let interface = CWWiFiClient.shared().interface()
+        readWiFi()
+        readInputSource()
+    }
+
+    private func readWiFi() {
+        let interface = wifiClient.interface()
         update(\.wifiSSID, to: interface?.ssid())
         update(\.wifiPoweredOn, to: interface?.powerOn() ?? false)
-        readInputSource()
+    }
+
+    private func installStatusObservers() {
+        powerSourceObserver = IOPSNotificationCreateRunLoopSource({ context in
+            guard let context else { return }
+            MainActor.assumeIsolated {
+                Unmanaged<SystemStatusService>.fromOpaque(context).takeUnretainedValue().readBattery()
+            }
+        }, Unmanaged.passUnretained(self).toOpaque())?.takeRetainedValue()
+        if let powerSourceObserver { CFRunLoopAddSource(CFRunLoopGetMain(), powerSourceObserver, .commonModes) }
+        statusObservers = [
+            NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)
+                .receive(on: DispatchQueue.main).sink { [weak self] _ in self?.readBattery() },
+            NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)
+                .receive(on: DispatchQueue.main).sink { [weak self] _ in
+                    self?.startWiFiMonitoring()
+                    self?.reloadInputSources()
+                    self?.refresh()
+                },
+            DistributedNotificationCenter.default().publisher(
+                for: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String)
+            ).receive(on: DispatchQueue.main).sink { [weak self] _ in self?.readInputSource() },
+            DistributedNotificationCenter.default().publisher(
+                for: Notification.Name(kTISNotifyEnabledKeyboardInputSourcesChanged as String)
+            ).receive(on: DispatchQueue.main).sink { [weak self] _ in
+                self?.reloadInputSources()
+                self?.readInputSource()
+            }
+        ]
+        audioOutputObserver = AudioPropertyObservation(
+            objectID: AudioObjectID(kAudioObjectSystemObject),
+            selector: kAudioHardwarePropertyDefaultOutputDevice,
+            scope: kAudioObjectPropertyScopeGlobal
+        ) { [weak self] in
+            self?.observeAudioDevice()
+            self?.readAudio()
+        }
+        wifiClient.delegate = self
+        startWiFiMonitoring()
+    }
+
+    private func observeAudioDevice() {
+        let device = defaultOutputDevice()
+        guard device != observedAudioDevice else { return }
+        audioDeviceObservers.removeAll()
+        observedAudioDevice = device
+        guard let device else { return }
+        audioDeviceObservers = [kAudioDevicePropertyVolumeScalar, kAudioDevicePropertyMute].compactMap { selector in
+            AudioPropertyObservation(
+                objectID: device, selector: selector, scope: kAudioDevicePropertyScopeOutput
+            ) { [weak self] in self?.readAudio() }
+        }
+    }
+
+    private func startWiFiMonitoring() {
+        for event: CWEventType in [.powerDidChange, .ssidDidChange, .linkDidChange] {
+            try? wifiClient.startMonitoringEvent(with: event)
+        }
+    }
+
+    nonisolated func powerStateDidChangeForWiFiInterface(withName interfaceName: String) {
+        Task { @MainActor [weak self] in self?.readWiFi() }
+    }
+
+    nonisolated func ssidDidChangeForWiFiInterface(withName interfaceName: String) {
+        Task { @MainActor [weak self] in self?.readWiFi() }
+    }
+
+    nonisolated func linkDidChangeForWiFiInterface(withName interfaceName: String) {
+        Task { @MainActor [weak self] in self?.readWiFi() }
+    }
+
+    nonisolated func clientConnectionInterrupted() {
+        Task { @MainActor [weak self] in self?.readWiFi() }
+    }
+
+    nonisolated func clientConnectionInvalidated() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            wifiClient.delegate = nil
+            wifiClient = CWWiFiClient()
+            wifiClient.delegate = self
+            startWiFiMonitoring()
+            readWiFi()
+        }
     }
 
     private func update<Value: Equatable>(
@@ -140,13 +267,13 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
         if VolumeAdjustmentPolicy.shouldUnmute(targetVolume: newValue) {
             writeMute(false, to: device)
         }
-        refresh()
+        readAudio()
     }
 
     func toggleMute() {
         guard let device = defaultOutputDevice() else { return }
         writeMute(!isMuted, to: device)
-        refresh()
+        readAudio()
     }
 
     private func writeMute(_ muted: Bool, to device: AudioDeviceID) {
@@ -188,7 +315,7 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
             wifiScanIssue = .locationPermissionDenied
             return
         }
-        guard let interface = CWWiFiClient.shared().interface(), interface.powerOn() else {
+        guard let interface = wifiClient.interface(), interface.powerOn() else {
             wifiNetworks = []
             wifiScanIssue = nil
             return
@@ -242,25 +369,25 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
     }
 
     func joinWiFi(ssid: String, password: String?) -> Bool {
-        guard let interface = CWWiFiClient.shared().interface(), let network = scannedNetworks[ssid] else { return false }
+        guard let interface = wifiClient.interface(), let network = scannedNetworks[ssid] else { return false }
         do {
             try interface.associate(to: network, password: password)
-            refresh()
+            readWiFi()
             return true
         } catch {
-            refresh()
+            readWiFi()
             return false
         }
     }
 
     func disconnectWiFi() {
-        CWWiFiClient.shared().interface()?.disassociate()
-        refresh()
+        wifiClient.interface()?.disassociate()
+        readWiFi()
     }
 
     func setWiFiPower(_ enabled: Bool) {
-        try? CWWiFiClient.shared().interface()?.setPower(enabled)
-        refresh()
+        try? wifiClient.interface()?.setPower(enabled)
+        readWiFi()
         if enabled { scanWiFi() }
     }
 

@@ -447,6 +447,37 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    func traySourceImage(
+        bytes: [UInt8], width: Int = 2, height: Int = 1,
+        colorSpace: CGColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!,
+        alpha: CGImageAlphaInfo = .premultipliedLast
+    ) -> CGImage {
+        CGImage(
+            width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+            bytesPerRow: width * 4, space: colorSpace,
+            bitmapInfo: CGBitmapInfo(rawValue: alpha.rawValue),
+            provider: CGDataProvider(data: Data(bytes) as CFData)!, decode: nil,
+            shouldInterpolate: false, intent: .defaultIntent
+        )!
+    }
+    let sourcePixels: [UInt8] = [30, 60, 90, 255, 0, 0, 0, 0]
+    let originalSource = ExternalStatusItemImageSource(traySourceImage(bytes: sourcePixels))!
+    let repeatedSource = ExternalStatusItemImageSource(traySourceImage(bytes: sourcePixels))!
+    let changedPixelSource = ExternalStatusItemImageSource(traySourceImage(bytes: [31] + sourcePixels.dropFirst()))!
+    let resizedSource = ExternalStatusItemImageSource(traySourceImage(bytes: sourcePixels, width: 1, height: 2))!
+    let changedColorSource = ExternalStatusItemImageSource(traySourceImage(
+        bytes: sourcePixels, colorSpace: CGColorSpace(name: CGColorSpace.displayP3)!
+    ))!
+    let changedAlphaSource = ExternalStatusItemImageSource(traySourceImage(bytes: sourcePixels, alpha: .premultipliedFirst))!
+    guard originalSource.matches(repeatedSource),
+          !originalSource.matches(changedPixelSource),
+          !originalSource.matches(resizedSource),
+          !originalSource.matches(changedColorSource),
+          !originalSource.matches(changedAlphaSource) else {
+        fputs("SELF-TEST FAILED: tray capture reuse must detect pixel, geometry, color space, and format changes\n", stderr)
+        return 1
+    }
+
     var staticTrayCadence = ExternalStatusItemCaptureCadence()
     var animatedTrayCadence = ExternalStatusItemCaptureCadence()
     var failedTrayCadence = ExternalStatusItemCaptureCadence()

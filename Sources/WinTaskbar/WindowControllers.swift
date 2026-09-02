@@ -637,7 +637,9 @@ final class TaskbarWindowController {
     private var activeTaskbarContextSection: TaskbarContextMenuSection?
     private var activeTaskbarContextNestedSection: TaskbarContextNestedSection?
     private var taskbarTerminalEntries: [TaskbarTerminalMenuEntry] = []
-    private var taskbarContextScreen: NSScreen?
+    private var taskbarContextScreen: NSScreen? {
+        didSet { updatePointerMonitors() }
+    }
     private var taskbarContextNestedFrame: CGRect?
     private var previousPointerLocation: CGPoint?
     private var currentPointerLocation: CGPoint?
@@ -718,7 +720,7 @@ final class TaskbarWindowController {
             self?.activeTaskbarContextNestedSection = nil
             self?.taskbarContextNestedFrame = nil
         }
-        installPointerMonitors()
+        updatePointerMonitors()
         installMenuTrackingObservers()
     }
 
@@ -968,6 +970,7 @@ final class TaskbarWindowController {
     }
 
     func applyLayout() {
+        updatePointerMonitors()
         if !keepsTransientSurfacesVisibleForSettings {
             taskbarJumpListController.dismiss()
             startButtonContextMenuController.dismiss()
@@ -1058,7 +1061,19 @@ final class TaskbarWindowController {
         return panel
     }
 
-    private func installPointerMonitors() {
+    private func updatePointerMonitors() {
+        let needsMonitoring = preferences.autoHideTaskbar || taskbarContextScreen != nil
+        guard needsMonitoring != (localPointerMonitor != nil) else { return }
+        if !needsMonitoring {
+            if let localPointerMonitor { NSEvent.removeMonitor(localPointerMonitor) }
+            if let globalPointerMonitor { NSEvent.removeMonitor(globalPointerMonitor) }
+            localPointerMonitor = nil
+            globalPointerMonitor = nil
+            previousPointerLocation = nil
+            currentPointerLocation = nil
+            return
+        }
+        currentPointerLocation = NSEvent.mouseLocation
         let events: NSEvent.EventTypeMask = [
             .mouseMoved,
             .leftMouseDragged,
@@ -1070,17 +1085,20 @@ final class TaskbarWindowController {
         ]
         localPointerMonitor = NSEvent.addLocalMonitorForEvents(matching: events) { [weak self] event in
             MainActor.assumeIsolated {
-                self?.recordPointerLocation()
-                self?.updateAutoHideState()
+                self?.handlePointerEvent()
             }
             return event
         }
         globalPointerMonitor = NSEvent.addGlobalMonitorForEvents(matching: events) { [weak self] _ in
             Task { @MainActor in
-                self?.recordPointerLocation()
-                self?.updateAutoHideState()
+                self?.handlePointerEvent()
             }
         }
+    }
+
+    private func handlePointerEvent() {
+        if taskbarContextScreen != nil { recordPointerLocation() }
+        if preferences.autoHideTaskbar { updateAutoHideState() }
     }
 
     private func recordPointerLocation() {

@@ -101,6 +101,32 @@ enum ExternalStatusItemImageFingerprint {
     }
 }
 
+struct ExternalStatusItemImageSource: @unchecked Sendable {
+    private let image: CGImage
+    private let data: CFData
+
+    init?(_ image: CGImage) {
+        // A custom decode array changes how identical bytes are interpreted.
+        guard image.decode == nil, let data = image.dataProvider?.data else { return nil }
+        self.image = image
+        self.data = data
+    }
+
+    func matches(_ other: Self) -> Bool {
+        image.width == other.image.width
+            && image.height == other.image.height
+            && image.bitsPerComponent == other.image.bitsPerComponent
+            && image.bitsPerPixel == other.image.bitsPerPixel
+            && image.bytesPerRow == other.image.bytesPerRow
+            && image.bitmapInfo == other.image.bitmapInfo
+            && image.isMask == other.image.isMask
+            && image.shouldInterpolate == other.image.shouldInterpolate
+            && image.renderingIntent == other.image.renderingIntent
+            && image.colorSpace == other.image.colorSpace
+            && CFEqual(data, other.data)
+    }
+}
+
 enum ExternalStatusItemClickMapper {
     static func sourcePoint(
         activationLocation: CGPoint?,
@@ -244,6 +270,7 @@ private struct ExternalStatusApplicationSnapshot: Sendable {
 
 private struct ExternalStatusCapturedImage: @unchecked Sendable {
     let image: CGImage
+    let source: ExternalStatusItemImageSource?
     let fingerprint: UInt64
     let windowID: CGWindowID
     let windowFrame: CGRect
@@ -387,7 +414,8 @@ private enum ExternalStatusItemDiscovery {
 
     static func capture(
         windowID: CGWindowID,
-        windowFrame: CGRect
+        windowFrame: CGRect,
+        previous: ExternalStatusCapturedImage?
     ) -> ExternalStatusCapturedImage? {
         guard let image = CGWindowListCreateImage(
             .null,
@@ -395,8 +423,17 @@ private enum ExternalStatusItemDiscovery {
             windowID,
             [.boundsIgnoreFraming, .bestResolution]
         ) else { return nil }
+        let source = ExternalStatusItemImageSource(image)
+        if let source, let previous, let previousSource = previous.source,
+           source.matches(previousSource) {
+            return ExternalStatusCapturedImage(
+                image: previous.image, source: source, fingerprint: previous.fingerprint,
+                windowID: windowID, windowFrame: windowFrame
+            )
+        }
         return transparentContentImage(
             image,
+            source: source,
             windowID: windowID,
             windowFrame: windowFrame
         )
@@ -404,6 +441,7 @@ private enum ExternalStatusItemDiscovery {
 
     private static func transparentContentImage(
         _ image: CGImage,
+        source: ExternalStatusItemImageSource?,
         windowID: CGWindowID,
         windowFrame: CGRect
     ) -> ExternalStatusCapturedImage? {
@@ -465,6 +503,7 @@ private enum ExternalStatusItemDiscovery {
         )) else { return nil }
         return ExternalStatusCapturedImage(
             image: croppedImage,
+            source: source,
             fingerprint: ExternalStatusItemImageFingerprint.make(
                 width: width,
                 height: height,
@@ -506,6 +545,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
     private var liveCaptureTask: Task<Void, Never>?
     private var refreshPending = false
     private var captureCadences: [String: ExternalStatusItemCaptureCadence] = [:]
+    private var capturedImages: [CGWindowID: ExternalStatusCapturedImage] = [:]
     private var captureViews: [String: NSHashTable<NSView>] = [:]
     private var visibleCaptureItemIDs: Set<String> = []
     private var visibilityCancellable: AnyCancellable?
@@ -569,6 +609,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         liveCaptureTask = nil
         refreshPending = false
         captureCadences = [:]
+        capturedImages = [:]
         visibleCaptureItemIDs = []
         items = []
         elements = [:]
@@ -952,6 +993,8 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         liveCaptureTimer?.invalidate()
         liveCaptureTimer = nil
         let visibleItems = visibleCaptureItems
+        let visibleWindowIDs = Set(visibleItems.compactMap(\.captureWindowID))
+        capturedImages = capturedImages.filter { visibleWindowIDs.contains($0.key) }
         let visibleIDs = Set(visibleItems.map(\.id))
         for itemID in visibleIDs.subtracting(visibleCaptureItemIDs) {
             captureCadences[itemID] = ExternalStatusItemCaptureCadence()
@@ -988,16 +1031,23 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
             return
         }
 
+        let previousCaptures = capturedImages
         liveCaptureTask = Task { [weak self] in
-            let captures = await Task.detached(priority: .userInitiated) {
-                targets.map { itemID, windowID, windowFrame in
-                    (itemID, ExternalStatusItemDiscovery.capture(
+            let (captures, updatedImages) = await Task.detached(priority: .userInitiated) {
+                var updatedImages = previousCaptures
+                let captures = targets.map { itemID, windowID, windowFrame in
+                    let capture = ExternalStatusItemDiscovery.capture(
                         windowID: windowID,
-                        windowFrame: windowFrame
-                    ))
+                        windowFrame: windowFrame,
+                        previous: updatedImages[windowID]
+                    )
+                    updatedImages[windowID] = capture
+                    return (itemID, capture)
                 }
+                return (captures, updatedImages)
             }.value
             guard let self, !Task.isCancelled else { return }
+            capturedImages = updatedImages
             for (itemID, capture) in captures {
                 guard let item = items.first(where: { $0.id == itemID }) else { continue }
                 captureCadences[itemID, default: ExternalStatusItemCaptureCadence()].record(
