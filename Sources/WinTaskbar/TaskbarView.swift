@@ -880,12 +880,6 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
                 showJumpList(relativeTo: anchorView)
             }
         }
-        .background {
-            WindowsTaskbarTooltipRegion(
-                title: item.name,
-                taskbarPosition: preferences.position
-            )
-        }
         .accessibilityLabel(item.name)
         .onChange(of: attentionState?.pulseGeneration ?? 0) { generation in
             if generation > 0 { startAttentionPulse() }
