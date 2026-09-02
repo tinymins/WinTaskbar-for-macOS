@@ -115,15 +115,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
             .store(in: &cancellables)
-        preferences.$trayClockEnabled
-            .combineLatest(preferences.$trayClockShowsSeconds)
-            .removeDuplicates { previous, current in
-                previous.0 == current.0 && previous.1 == current.1
-            }
-            .sink { [weak self] clockEnabled, showsSeconds in
-                self?.status.setClockShowsSeconds(clockEnabled && showsSeconds)
-            }
-            .store(in: &cancellables)
         preferences.$externalStatusItemsEnabled
             .removeDuplicates()
             .sink { [weak self] enabled in
@@ -2174,6 +2165,37 @@ func runSelfTest() async -> Int32 {
           !TaskbarAttentionPolicy.shouldRequest(previous: "new", current: "new"),
           !TaskbarAttentionPolicy.shouldRequest(previous: "1", current: nil) else {
         fputs("SELF-TEST FAILED: taskbar attention policy mismatch\n", stderr)
+        return 1
+    }
+
+    let badgeBatch = """
+    "CFBundleIdentifier"="com.example.chat"
+    "StatusLabel"={ "label"="461" }
+    "CFBundleIdentifier"="com.example.mail"
+    "StatusLabel"={ "label"="2" }
+    "CFBundleIdentifier"="com.example.empty"
+    "StatusLabel"=[ NULL ]
+    "CFBundleIdentifier"="com.example.zero"
+    "StatusLabel"={ "label"="0" }
+    "CFBundleIdentifier"="com.example.unrequested"
+    "StatusLabel"={ "label"="99" }
+    """
+    let badgeBundleIDs: Set<String> = [
+        "com.example.chat", "com.example.mail", "com.example.empty", "com.example.zero"
+    ]
+    guard DockBadgeService.parseLSAppInfoBatchOutput(badgeBatch, bundleIDs: badgeBundleIDs)
+            == ["com.example.chat": "461", "com.example.mail": "2"],
+          DockBadgeService.parseLSAppInfoBatchOutput(badgeBatch, bundleIDs: ["com.example.empty"]) == [:],
+          DockBadgeService.parseLSAppInfoBatchOutput(badgeBatch, bundleIDs: ["com.example.zero"]) == [:],
+          DockBadgeService.parseLSAppInfoBatchOutput(badgeBatch, bundleIDs: ["com.example.exited"]) == nil,
+          DockBadgeService.parseLSAppInfoBatchOutput("", bundleIDs: badgeBundleIDs) == nil,
+          DockBadgeService.parseLSAppInfoBatchOutput(
+            "\"StatusLabel\"={ \"label\"=\"99\" }", bundleIDs: badgeBundleIDs
+          ) == nil,
+          DockBadgeService.parseLSAppInfoBatchOutput(
+            "\"CFBundleIdentifier\"=\"com.example.chat\"\n\"StatusLabel\"=invalid", bundleIDs: badgeBundleIDs
+          ) == nil else {
+        fputs("SELF-TEST FAILED: batched dock badges lost application identity or availability\n", stderr)
         return 1
     }
 

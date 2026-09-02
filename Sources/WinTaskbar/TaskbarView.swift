@@ -87,7 +87,7 @@ private struct TaskbarDragPreviewLayer<Content: View>: View {
 struct TaskbarView: View {
     @ObservedObject var preferences: PreferencesStore
     @ObservedObject var apps: AppDiscoveryService
-    @ObservedObject var status: SystemStatusService
+    let status: SystemStatusService
     @ObservedObject var externalStatusItems: ExternalStatusItemService
     @ObservedObject var actions: AppActions
     @ObservedObject var dockBadges: DockBadgeService
@@ -458,7 +458,6 @@ struct TaskbarView: View {
         }
         if preferences.trayClockEnabled {
             ClockTrayView(
-                service: status,
                 panelController: clockCalendarPanelController,
                 position: preferences.position,
                 barHeight: CGFloat(preferences.barHeight),

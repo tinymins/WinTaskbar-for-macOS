@@ -144,7 +144,7 @@ final class DockBadgeService: ObservableObject {
 
     func acknowledge(_ bundleID: String) {
         tracker.acknowledge(bundleID)
-        attentionStates = tracker.states
+        publishState()
     }
 
     func refresh() {
@@ -171,14 +171,18 @@ final class DockBadgeService: ObservableObject {
             let activeBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             tracker.apply(result, activeBundleID: activeBundleID)
             tracker.retainRunning(Set(bundleIDs))
-            badges = tracker.badges
-            attentionStates = tracker.states
+            publishState()
             refreshTask = nil
             if refreshPending {
                 refreshPending = false
                 refresh()
             }
         }
+    }
+
+    private func publishState() {
+        if badges != tracker.badges { badges = tracker.badges }
+        if attentionStates != tracker.states { attentionStates = tracker.states }
     }
 
 #if DEBUG
@@ -234,8 +238,7 @@ final class DockBadgeService: ObservableObject {
 
     private func publishDemo(_ sample: [String: String], activeBundleID: String?) {
         tracker.apply(sample, activeBundleID: activeBundleID)
-        badges = tracker.badges
-        attentionStates = tracker.states
+        publishState()
     }
 #endif
 
@@ -252,6 +255,32 @@ final class DockBadgeService: ObservableObject {
         let valueStart = markerRange.upperBound
         guard let valueEnd = output[valueStart...].firstIndex(of: "\"") else { return nil }
         return parseStatusLabel(String(output[valueStart..<valueEnd]))
+    }
+
+    nonisolated static func parseLSAppInfoBatchOutput(
+        _ output: String,
+        bundleIDs: Set<String>
+    ) -> [String: String]? {
+        var result: [String: String] = [:]
+        var currentBundleID: String?
+        var receivedStatus = false
+        let identifierPrefix = "\"CFBundleIdentifier\"=\""
+        for rawLine in output.split(whereSeparator: \.isNewline) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("\"CFBundleIdentifier\"=") {
+                currentBundleID = nil
+                if line.hasPrefix(identifierPrefix), line.hasSuffix("\"") {
+                    let identifier = String(line.dropFirst(identifierPrefix.count).dropLast())
+                    if bundleIDs.contains(identifier) { currentBundleID = identifier }
+                }
+            } else if line.hasPrefix("\"StatusLabel\"="), let bundleID = currentBundleID {
+                currentBundleID = nil
+                guard line.contains("\"label\"=\"") || line.hasSuffix("[ NULL ]") else { continue }
+                receivedStatus = true
+                result[bundleID] = parseLSAppInfoOutput(line)
+            }
+        }
+        return receivedStatus ? result : nil
     }
 
     private func start() {
@@ -305,38 +334,31 @@ final class DockBadgeService: ObservableObject {
     }
 
     nonisolated private static func readBadgesWithLSAppInfo(bundleIDs: [String]) -> BadgeReadResult {
+        guard !bundleIDs.isEmpty else { return BadgeReadResult(badges: [:], sourceWasAvailable: true) }
         let executableURL = URL(fileURLWithPath: "/usr/bin/lsappinfo")
         guard FileManager.default.isExecutableFile(atPath: executableURL.path) else {
             return BadgeReadResult(badges: [:], sourceWasAvailable: false)
         }
 
-        var result: [String: String] = [:]
-        var successfulQueries = 0
-        for bundleID in bundleIDs {
-            let process = Process()
-            let output = Pipe()
-            process.executableURL = executableURL
-            process.arguments = ["info", "-only", "StatusLabel", "-app", bundleID]
-            process.standardOutput = output
-            process.standardError = FileHandle.nullDevice
-            do {
-                try process.run()
-                let data = output.fileHandleForReading.readDataToEndOfFile()
-                process.waitUntilExit()
-                guard process.terminationStatus == 0 else { continue }
-                successfulQueries += 1
-                if let text = String(data: data, encoding: .utf8),
-                   let badge = parseLSAppInfoOutput(text) {
-                    result[bundleID] = badge
-                }
-            } catch {
-                continue
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = executableURL
+        process.arguments = bundleIDs.flatMap { ["info", "-only", "CFBundleIdentifier,StatusLabel", "-app", $0] }
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            // An exited application can resolve to the frontmost app; trust the returned identity.
+            if let text = String(data: data, encoding: .utf8),
+               let badges = parseLSAppInfoBatchOutput(text, bundleIDs: Set(bundleIDs)) {
+                return BadgeReadResult(badges: badges, sourceWasAvailable: true)
             }
+        } catch {
+            return BadgeReadResult(badges: [:], sourceWasAvailable: false)
         }
-        return BadgeReadResult(
-            badges: result,
-            sourceWasAvailable: bundleIDs.isEmpty || successfulQueries > 0
-        )
+        return BadgeReadResult(badges: [:], sourceWasAvailable: false)
     }
 
     nonisolated private static func readBadgesWithAccessibility() -> [String: String] {

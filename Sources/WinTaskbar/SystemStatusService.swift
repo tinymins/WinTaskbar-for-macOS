@@ -81,7 +81,6 @@ enum InputSourceCycling {
 
 @MainActor
 final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDelegate {
-    @Published private(set) var now = Date()
     @Published private(set) var batteryLevel: Int?
     @Published private(set) var isCharging = false
     @Published private(set) var isLowPowerModeEnabled = false
@@ -96,7 +95,6 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
     @Published private(set) var wifiScanIssue: WiFiScanIssue?
     @Published private(set) var inputSources: [InputSourceOption] = []
 
-    private var clockTimer: Timer?
     private var statusTimer: Timer?
     private let locationManager = CLLocationManager()
     private var scannedNetworks: [String: CWNetwork] = [:]
@@ -114,25 +112,20 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
         }
     }
 
-    func setClockShowsSeconds(_ showsSeconds: Bool) {
-        clockTimer?.invalidate()
-        clockTimer = nil
-        guard showsSeconds else { return }
-        clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.now = Date()
-            }
-        }
-    }
-
     func refresh() {
-        now = Date()
         readBattery()
         readAudio()
         let interface = CWWiFiClient.shared().interface()
-        wifiSSID = interface?.ssid()
-        wifiPoweredOn = interface?.powerOn() ?? false
+        update(\.wifiSSID, to: interface?.ssid())
+        update(\.wifiPoweredOn, to: interface?.powerOn() ?? false)
         readInputSource()
+    }
+
+    private func update<Value: Equatable>(
+        _ keyPath: ReferenceWritableKeyPath<SystemStatusService, Value>,
+        to value: Value
+    ) {
+        if self[keyPath: keyPath] != value { self[keyPath: keyPath] = value }
     }
 
     func setVolume(_ value: Float) {
@@ -294,7 +287,7 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
     }
 
     private func readBattery() {
-        isLowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
+        update(\.isLowPowerModeEnabled, to: ProcessInfo.processInfo.isLowPowerModeEnabled)
         guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
               let list = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as? [CFTypeRef],
               let source = list.first,
@@ -302,12 +295,12 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
               let current = description[kIOPSCurrentCapacityKey] as? Int,
               let maximum = description[kIOPSMaxCapacityKey] as? Int,
               maximum > 0 else {
-            batteryLevel = nil
-            isCharging = false
+            update(\.batteryLevel, to: nil)
+            update(\.isCharging, to: false)
             return
         }
-        batteryLevel = Int((Double(current) / Double(maximum) * 100).rounded())
-        isCharging = (description[kIOPSIsChargingKey] as? Bool) ?? false
+        update(\.batteryLevel, to: Int((Double(current) / Double(maximum) * 100).rounded()))
+        update(\.isCharging, to: (description[kIOPSIsChargingKey] as? Bool) ?? false)
     }
 
     private func readAudio() {
@@ -320,7 +313,7 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
             mElement: kAudioObjectPropertyElementMain
         )
         if AudioObjectGetPropertyData(device, &volumeAddress, 0, nil, &size, &volumeValue) == noErr {
-            volume = volumeValue
+            update(\.volume, to: volumeValue)
         }
 
         var muteValue: UInt32 = 0
@@ -332,7 +325,7 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
         )
         if AudioObjectHasProperty(device, &muteAddress),
            AudioObjectGetPropertyData(device, &muteAddress, 0, nil, &size, &muteValue) == noErr {
-            isMuted = muteValue != 0
+            update(\.isMuted, to: muteValue != 0)
         }
     }
 
@@ -354,8 +347,8 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
         guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
               let id = stringProperty(source, kTISPropertyInputSourceID),
               let name = stringProperty(source, kTISPropertyLocalizedName) else { return }
-        inputSourceID = id
-        inputSource = name
+        update(\.inputSourceID, to: id)
+        update(\.inputSource, to: name)
     }
 
     private func reloadInputSources() {

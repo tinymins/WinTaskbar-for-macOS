@@ -245,7 +245,6 @@ struct InputSourceTrayView: View {
 }
 
 struct ClockTrayView: View {
-    @ObservedObject var service: SystemStatusService
     @ObservedObject var panelController: ClockCalendarPanelController
     let position: TaskbarPosition
     let barHeight: CGFloat
@@ -256,17 +255,24 @@ struct ClockTrayView: View {
     let screen: NSScreen
 
     var body: some View {
+        TimelineView(.periodic(from: .now, by: showsSeconds ? 1 : 3)) { context in
+            content(at: context.date)
+        }
+        .onDisappear { panelController.dismiss(animated: false) }
+    }
+
+    private func content(at now: Date) -> some View {
         let time = ClockTrayPresentation.time(
-            service.now,
+            now,
             showsSeconds: showsSeconds,
             configuration: formatConfiguration
         )
         let date = position.isHorizontal ? ClockTrayPresentation.date(
-            service.now,
+            now,
             configuration: formatConfiguration
         ) : nil
-        WindowsTrayIconButton(
-            title: clockTooltip,
+        return WindowsTrayIconButton(
+            title: clockTooltip(at: now),
             accessibilityLabel: "Clock and calendar",
             taskbarPosition: position,
             primaryAction: togglePanel
@@ -297,7 +303,6 @@ struct ClockTrayView: View {
             width: Self.controlWidth(time: time, date: date),
             height: WindowsTrayIconMetrics.controlHeight
         )
-        .onDisappear { panelController.dismiss(animated: false) }
     }
 
     static func controlWidth(time: String, date: String?) -> CGFloat {
@@ -324,11 +329,11 @@ struct ClockTrayView: View {
         )
     }
 
-    private var clockTooltip: String {
+    private func clockTooltip(at now: Date) -> String {
         let clockLines = additionalClocks.filter(\.isEnabled).compactMap { clock -> String? in
             guard let timeZone = TimeZone(identifier: clock.timeZoneIdentifier) else { return nil }
             let time = DateTimeFormatter.string(
-                from: service.now,
+                from: now,
                 pattern: "EEE \(formatConfiguration.longTimePattern)",
                 configuration: formatConfiguration,
                 timeZone: timeZone
@@ -336,11 +341,11 @@ struct ClockTrayView: View {
             return "\(time) (\(clock.displayName))"
         }
         let longDate = DateTimeFormatter.longDateString(
-            from: service.now,
+            from: now,
             configuration: formatConfiguration
         )
         let localTime = DateTimeFormatter.string(
-            from: service.now,
+            from: now,
             pattern: "EEE \(formatConfiguration.longTimePattern)",
             configuration: formatConfiguration
         )
