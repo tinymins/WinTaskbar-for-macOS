@@ -111,6 +111,8 @@ final class DockBadgeService: ObservableObject {
     @Published private(set) var attentionStates: [String: TaskbarAttentionState] = [:]
 
     private let interval: TimeInterval
+    private var runningBundleIDs: [String]
+    private var runningAppsCancellable: AnyCancellable?
     private var tracker = TaskbarAttentionTracker()
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
@@ -123,8 +125,17 @@ final class DockBadgeService: ObservableObject {
     private var isDemoRunning = false
 #endif
 
-    init(interval: TimeInterval = 4) {
+    init(apps: AppDiscoveryService, interval: TimeInterval = 4) {
         self.interval = interval
+        runningBundleIDs = apps.runningApps.compactMap(\.bundleIdentifier).sorted()
+        runningAppsCancellable = apps.$runningApps
+            .map { $0.compactMap(\.bundleIdentifier).sorted() }
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] bundleIDs in
+                self?.runningBundleIDs = bundleIDs
+                self?.scheduleEventRefresh()
+            }
         start()
     }
 
@@ -156,9 +167,7 @@ final class DockBadgeService: ObservableObject {
             return
         }
 
-        let bundleIDs = NSWorkspace.shared.runningApplications
-            .filter { $0.activationPolicy == .regular && !$0.isTerminated }
-            .compactMap(\.bundleIdentifier)
+        let bundleIDs = runningBundleIDs
 
         refreshTask = Task { [weak self] in
             let result = await Task.detached(priority: .utility) {

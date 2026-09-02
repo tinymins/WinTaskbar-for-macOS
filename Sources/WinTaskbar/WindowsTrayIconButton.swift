@@ -195,6 +195,7 @@ enum WindowsTrayTooltipPanelPolicy {
 struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     let title: String
     let accessibilityLabel: String
+    let tooltip: (() -> String)?
     let taskbarPosition: TaskbarPosition?
     let visualStyle: WindowsTrayIconAppearance
     let preservesTransientPanelOnMouseDown: Bool
@@ -212,6 +213,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     init(
         title: String,
         accessibilityLabel: String? = nil,
+        tooltip: (() -> String)? = nil,
         taskbarPosition: TaskbarPosition? = nil,
         visualStyle: WindowsTrayIconAppearance = .standard,
         preservesTransientPanelOnMouseDown: Bool = false,
@@ -228,6 +230,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     ) {
         self.title = title
         self.accessibilityLabel = accessibilityLabel ?? title
+        self.tooltip = tooltip
         self.taskbarPosition = taskbarPosition
         self.visualStyle = visualStyle
         self.preservesTransientPanelOnMouseDown = preservesTransientPanelOnMouseDown
@@ -246,6 +249,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     init(
         title: String,
         accessibilityLabel: String? = nil,
+        tooltip: (() -> String)? = nil,
         taskbarPosition: TaskbarPosition? = nil,
         visualStyle: WindowsTrayIconAppearance = .standard,
         preservesTransientPanelOnMouseDown: Bool = false,
@@ -262,6 +266,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
     ) {
         self.title = title
         self.accessibilityLabel = accessibilityLabel ?? title
+        self.tooltip = tooltip
         self.taskbarPosition = taskbarPosition
         self.visualStyle = visualStyle
         self.preservesTransientPanelOnMouseDown = preservesTransientPanelOnMouseDown
@@ -294,6 +299,7 @@ struct WindowsTrayIconButton<Content: View>: NSViewRepresentable {
                 .allowsHitTesting(false)
         ))
         control.hoverTitle = title
+        control.hoverTitleProvider = tooltip
         control.taskbarPosition = taskbarPosition
         control.visualStyle = visualStyle
         control.preservesTransientPanelOnMouseDown = preservesTransientPanelOnMouseDown
@@ -393,6 +399,7 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
     ]
 
     var hoverTitle = ""
+    var hoverTitleProvider: (() -> String)?
     var taskbarPosition: TaskbarPosition?
     var visualStyle = WindowsTrayIconAppearance.standard
     var preservesTransientPanelOnMouseDown = false
@@ -459,10 +466,11 @@ final class WindowsTrayIconControl: NSControl, NSDraggingSource {
         isHovered = true
         needsDisplay = true
         onPointerMove?(convert(event.locationInWindow, from: nil))
-        guard !hoverTitle.isEmpty, let window else { return }
+        let title = hoverTitleProvider?() ?? hoverTitle
+        guard !title.isEmpty, let window else { return }
         let anchor = window.convertToScreen(convert(bounds, to: nil))
         WindowsTrayTooltipController.shared.schedule(
-            title: hoverTitle,
+            title: title,
             anchor: anchor,
             taskbarFrame: window.frame,
             position: taskbarPosition,

@@ -14,7 +14,17 @@ struct TrayItemDragConfiguration {
     let onDrop: (String, Bool) -> Void
 }
 
+@MainActor
 enum ClockTrayPresentation {
+    private struct CachedDate {
+        let interval: DateInterval
+        let configuration: DateTimeFormatConfiguration
+        let timeZone: TimeZone
+        let text: String
+    }
+
+    private static var cachedDate: CachedDate?
+
     static func time(
         _ date: Date,
         showsSeconds: Bool,
@@ -34,12 +44,47 @@ enum ClockTrayPresentation {
         configuration: DateTimeFormatConfiguration,
         timeZone: TimeZone = .autoupdatingCurrent
     ) -> String {
-        DateTimeFormatter.string(
+        let resolvedTimeZone = TimeZone(identifier: timeZone.identifier) ?? timeZone
+        if let cachedDate,
+           cachedDate.configuration == configuration,
+           cachedDate.timeZone == resolvedTimeZone,
+           date >= cachedDate.interval.start, date < cachedDate.interval.end {
+            return cachedDate.text
+        }
+        let text = DateTimeFormatter.string(
             from: date,
             pattern: configuration.shortDatePattern,
             configuration: configuration,
-            timeZone: timeZone
+            timeZone: resolvedTimeZone
         )
+        var calendar = Calendar(identifier: configuration.calendarKind.identifier)
+        calendar.timeZone = resolvedTimeZone
+        if let interval = calendar.dateInterval(of: .day, for: date) {
+            cachedDate = CachedDate(interval: interval, configuration: configuration, timeZone: resolvedTimeZone, text: text)
+        }
+        return text
+    }
+}
+
+@MainActor
+private enum ClockTrayTextWidth {
+    static let font = NSFont.monospacedDigitSystemFont(ofSize: WindowsTrayIconMetrics.clockFontSize, weight: .regular)
+    private static let widths: NSCache<NSString, NSNumber> = {
+        let cache = NSCache<NSString, NSNumber>()
+        cache.countLimit = 128
+        return cache
+    }()
+
+    static func width(of text: String) -> CGFloat {
+        // Tabular ASCII digits share a width; preserve all other glyphs in the key.
+        let key = String(text.map { character in
+            guard let ascii = character.asciiValue, (48...57).contains(ascii) else { return character }
+            return Character("0")
+        }) as NSString
+        if let cached = widths.object(forKey: key) { return CGFloat(cached.doubleValue) }
+        let width = (text as NSString).size(withAttributes: [.font: font]).width
+        widths.setObject(NSNumber(value: Double(width)), forKey: key)
+        return width
     }
 }
 
@@ -272,8 +317,9 @@ struct ClockTrayView: View {
             configuration: formatConfiguration
         ) : nil
         return WindowsTrayIconButton(
-            title: clockTooltip(at: now),
+            title: "",
             accessibilityLabel: "Clock and calendar",
+            tooltip: { clockTooltip(at: Date()) },
             taskbarPosition: position,
             primaryAction: togglePanel
         ) {
@@ -306,14 +352,8 @@ struct ClockTrayView: View {
     }
 
     static func controlWidth(time: String, date: String?) -> CGFloat {
-        let font = NSFont.monospacedDigitSystemFont(
-            ofSize: WindowsTrayIconMetrics.clockFontSize,
-            weight: .regular
-        )
         let strings = [time, date].compactMap { $0 }
-        let textWidth = strings.map {
-            ($0 as NSString).size(withAttributes: [.font: font]).width
-        }.max() ?? 0
+        let textWidth = strings.map { ClockTrayTextWidth.width(of: $0) }.max() ?? 0
         return max(
             WindowsTrayIconMetrics.squareControlWidth,
             ceil(textWidth) + 2 * WindowsTrayIconMetrics.horizontalContentPadding

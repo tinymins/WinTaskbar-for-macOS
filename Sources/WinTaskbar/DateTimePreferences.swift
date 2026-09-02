@@ -96,20 +96,55 @@ enum DateTimeFormatCatalog {
 }
 
 enum DateTimeFormatter {
+    private struct Key: Hashable {
+        let pattern: String
+        let calendar: Calendar.Identifier
+        let timeZone: TimeZone
+        let amSymbol: String
+        let pmSymbol: String
+    }
+
+    // The lock protects both the cache and all use of its mutable formatters.
+    private final class Cache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var formatters: [Key: Foundation.DateFormatter] = [:]
+
+        func string(from date: Date, key: Key) -> String {
+            lock.lock()
+            defer { lock.unlock() }
+            let formatter: Foundation.DateFormatter
+            if let cached = formatters[key] {
+                formatter = cached
+            } else {
+                formatter = Foundation.DateFormatter()
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.calendar = Calendar(identifier: key.calendar)
+                formatter.timeZone = key.timeZone
+                formatter.amSymbol = key.amSymbol
+                formatter.pmSymbol = key.pmSymbol
+                formatter.dateFormat = key.pattern
+                if formatters.count >= 64 { formatters.removeAll(keepingCapacity: true) }
+                formatters[key] = formatter
+            }
+            return formatter.string(from: date)
+        }
+    }
+
+    private static let cache = Cache()
+
     static func string(
         from date: Date,
         pattern: String,
         configuration: DateTimeFormatConfiguration,
         timeZone: TimeZone = .autoupdatingCurrent
     ) -> String {
-        let formatter = Foundation.DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.calendar = Calendar(identifier: configuration.calendarKind.identifier)
-        formatter.timeZone = timeZone
-        formatter.amSymbol = configuration.amSymbol
-        formatter.pmSymbol = configuration.pmSymbol
-        formatter.dateFormat = pattern
-        return formatter.string(from: date)
+        cache.string(from: date, key: Key(
+            pattern: pattern,
+            calendar: configuration.calendarKind.identifier,
+            timeZone: TimeZone(identifier: timeZone.identifier) ?? timeZone,
+            amSymbol: configuration.amSymbol,
+            pmSymbol: configuration.pmSymbol
+        ))
     }
 
     static func longDateString(

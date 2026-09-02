@@ -14,7 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let windowsService = WindowsService()
     private lazy var windowActivator = WindowActivationService(windowsService: windowsService)
     private let recentDocuments = RecentDocumentsService()
-    private let dockBadges = DockBadgeService()
+    private lazy var dockBadges = DockBadgeService(apps: apps)
     private let powerService = PowerService()
     private let showDesktopService = ShowDesktopService()
     private lazy var activeWindowShortcutService = ActiveWindowShortcutService(preferences: preferences)
@@ -425,6 +425,28 @@ func runSelfTest() async -> Int32 {
         height: 1,
         rgbaBytes: [255, 255, 255, 255]
     )
+    var batchPosition = CGPoint(x: 100, y: 2)
+    var batchSize = CGSize(width: 24, height: 24)
+    var unsupportedAttribute = AXError.attributeUnsupported
+    let batchPositionValue = AXValueCreate(.cgPoint, &batchPosition)!
+    let batchSizeValue = AXValueCreate(.cgSize, &batchSize)!
+    let batchErrorValue = AXValueCreate(.axError, &unsupportedAttribute)!
+    let batchAttributes: [Any] = [
+        batchPositionValue, batchSizeValue, kAXMenuBarItemRole,
+        NSNull(), batchErrorValue, "Fallback label", "Title"
+    ]
+    let parsedBatch = ExternalStatusItemAttributes(values: batchAttributes)
+    guard parsedBatch?.frame == CGRect(origin: batchPosition, size: batchSize),
+          parsedBatch?.role == kAXMenuBarItemRole,
+          parsedBatch?.identifier == nil,
+          parsedBatch?.label == "Fallback label",
+          ExternalStatusItemAttributes(values: []) == nil,
+          ExternalStatusItemAttributes(values: [batchErrorValue] + Array(batchAttributes.dropFirst())) == nil,
+          ExternalStatusItemAttributes(values: [batchPositionValue, batchPositionValue] + Array(batchAttributes.dropFirst(2))) == nil else {
+        fputs("SELF-TEST FAILED: batched tray attributes must tolerate optional errors and reject invalid geometry\n", stderr)
+        return 1
+    }
+
     var staticTrayCadence = ExternalStatusItemCaptureCadence()
     var animatedTrayCadence = ExternalStatusItemCaptureCadence()
     var failedTrayCadence = ExternalStatusItemCaptureCadence()
@@ -905,6 +927,41 @@ func runSelfTest() async -> Int32 {
           lunarDateExample.contains("农历") else {
         fputs("SELF-TEST FAILED: date format catalog mismatch\n", stderr)
         return 1
+    }
+
+    let symbolConfiguration = DateTimeFormatConfiguration(
+        calendarKind: .gregorian, firstDayOfWeek: .sunday,
+        shortDatePattern: "yyyy/M/d", longDatePattern: "yyyy年M月d日", longDateIncludesLunar: true,
+        shortTimePattern: "h:mm a", longTimePattern: "h:mm:ss a", amSymbol: "上午", pmSymbol: "下午"
+    )
+    let dateCacheChecks: [(Date, DateTimeFormatConfiguration, TimeZone, String)] = [
+        (dateFormatReferenceDate, lunarDateConfiguration, clockReferenceTimeZone, "2026/7/1"),
+        (dateFormatReferenceDate.addingTimeInterval(86_399), lunarDateConfiguration, clockReferenceTimeZone, "2026/7/1"),
+        (dateFormatReferenceDate.addingTimeInterval(86_400), lunarDateConfiguration, clockReferenceTimeZone, "2026/7/2"),
+        (dateFormatReferenceDate, lunarDateConfiguration, TimeZone(secondsFromGMT: -28_800)!, "2026/6/30"),
+        (dateFormatReferenceDate, preferences.dateTimeFormatConfiguration, clockReferenceTimeZone, "7/1/2026")
+    ]
+    for (date, configuration, zone, expected) in dateCacheChecks {
+        guard ClockTrayPresentation.date(date, configuration: configuration, timeZone: zone) == expected else {
+            fputs("SELF-TEST FAILED: clock date cache leaked across date, format or timezone changes\n", stderr)
+            return 1
+        }
+    }
+    for (configuration, expected) in [(lunarDateConfiguration, "AM"), (symbolConfiguration, "上午"), (lunarDateConfiguration, "AM")] {
+        guard DateTimeFormatter.string(from: dateFormatReferenceDate, pattern: "a", configuration: configuration, timeZone: clockReferenceTimeZone) == expected else {
+            fputs("SELF-TEST FAILED: formatter cache leaked AM/PM symbols\n", stderr)
+            return 1
+        }
+    }
+    let clockWidthFont = NSFont.monospacedDigitSystemFont(ofSize: WindowsTrayIconMetrics.clockFontSize, weight: .regular)
+    for clockText in ["00:00:00", "11:11:11", "23:59:59", "1:11 AM", "11:11 PM", "上午 11:11", "1\u{FE0F}:11"] {
+        let expectedWidth = max(WindowsTrayIconMetrics.squareControlWidth,
+            ceil((clockText as NSString).size(withAttributes: [.font: clockWidthFont]).width)
+                + 2 * WindowsTrayIconMetrics.horizontalContentPadding)
+        guard ClockTrayView.controlWidth(time: clockText, date: nil) == expectedWidth else {
+            fputs("SELF-TEST FAILED: cached clock width changed glyph measurement\n", stderr)
+            return 1
+        }
     }
 
     guard BatteryPresentationState.resolve(level: 82, isCharging: false, isLowPowerModeEnabled: false) == .normal,

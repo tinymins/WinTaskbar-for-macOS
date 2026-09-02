@@ -49,7 +49,8 @@ final class AppDiscoveryService: ObservableObject {
             NSWorkspace.didTerminateApplicationNotification,
             NSWorkspace.didActivateApplicationNotification,
             NSWorkspace.didHideApplicationNotification,
-            NSWorkspace.didUnhideApplicationNotification
+            NSWorkspace.didUnhideApplicationNotification,
+            NSWorkspace.didWakeNotification
         ] {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {

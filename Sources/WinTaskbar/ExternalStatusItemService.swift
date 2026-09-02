@@ -259,6 +259,38 @@ private struct ExternalStatusItemSnapshot: Sendable {
     let element: AXUIElement
 }
 
+struct ExternalStatusItemAttributes {
+    static let names = [
+        kAXPositionAttribute, kAXSizeAttribute, kAXRoleAttribute, kAXIdentifierAttribute,
+        kAXHelpAttribute, kAXDescriptionAttribute, kAXTitleAttribute
+    ]
+
+    let frame: CGRect
+    let role: String?
+    let identifier: String?
+    let label: String?
+
+    init?(values: [Any]) {
+        guard values.count == Self.names.count,
+              CFGetTypeID(values[0] as CFTypeRef) == AXValueGetTypeID(),
+              CFGetTypeID(values[1] as CFTypeRef) == AXValueGetTypeID() else { return nil }
+        let positionValue = values[0] as! AXValue
+        let sizeValue = values[1] as! AXValue
+        guard AXValueGetType(positionValue) == .cgPoint,
+              AXValueGetType(sizeValue) == .cgSize else { return nil }
+        var position = CGPoint.zero
+        var size = CGSize.zero
+        guard AXValueGetValue(positionValue, .cgPoint, &position),
+              AXValueGetValue(sizeValue, .cgSize, &size) else { return nil }
+        frame = CGRect(origin: position, size: size)
+        role = values[2] as? String
+        identifier = values[3] as? String
+        label = values[4...6].compactMap { $0 as? String }.first {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+}
+
 private enum ExternalStatusItemDiscovery {
     static func discover(
         applications: [ExternalStatusApplicationSnapshot],
@@ -286,33 +318,33 @@ private enum ExternalStatusItemDiscovery {
 
             for (childIndex, child) in children.enumerated() {
                 AXUIElementSetMessagingTimeout(child, 0.1)
-                guard let frame = frame(of: child),
+                var rawValues: CFArray?
+                guard AXUIElementCopyMultipleAttributeValues(
+                          child, ExternalStatusItemAttributes.names as CFArray, [], &rawValues
+                      ) == .success,
+                      let values = rawValues as? [Any],
+                      let attributes = ExternalStatusItemAttributes(values: values),
                       ExternalStatusItemPolicy.shouldInclude(
                           processIdentifier: application.processIdentifier,
                           bundleIdentifier: application.bundleIdentifier,
-                          role: attribute(child, kAXRoleAttribute),
-                          frame: frame,
+                          role: attributes.role,
+                          frame: attributes.frame,
                           ownProcessIdentifier: ownProcessIdentifier
                       ) else { continue }
+                let frame = attributes.frame
 
                 let baseItemID = ExternalStatusItemIdentity.make(
                     ownerIdentifier: ownerIdentifier,
-                    accessibilityIdentifier: attribute(child, kAXIdentifierAttribute),
+                    accessibilityIdentifier: attributes.identifier,
                     childIndex: childIndex
                 )
                 let occurrence = identifierOccurrences[baseItemID, default: 0]
                 identifierOccurrences[baseItemID] = occurrence + 1
                 let itemID = occurrence == 0 ? baseItemID : "\(baseItemID)#\(occurrence)"
-                let label = firstNonemptyString(
-                    attribute(child, kAXHelpAttribute),
-                    attribute(child, kAXDescriptionAttribute),
-                    attribute(child, kAXTitleAttribute),
-                    ownerName
-                )
                 items.append(ExternalStatusItemSnapshot(
                     id: itemID,
                     processIdentifier: application.processIdentifier,
-                    accessibilityLabel: label,
+                    accessibilityLabel: attributes.label ?? ownerName,
                     sourceFrame: frame,
                     captureWindow: statusItemWindows
                         .filter { $0.frame.minX <= frame.midX && $0.frame.maxX >= frame.midX }
@@ -443,16 +475,6 @@ private enum ExternalStatusItemDiscovery {
         )
     }
 
-    private static func frame(of element: AXUIElement) -> CGRect? {
-        guard let positionValue: AXValue = attribute(element, kAXPositionAttribute),
-              let sizeValue: AXValue = attribute(element, kAXSizeAttribute) else { return nil }
-        var position = CGPoint.zero
-        var size = CGSize.zero
-        guard AXValueGetValue(positionValue, .cgPoint, &position),
-              AXValueGetValue(sizeValue, .cgSize, &size) else { return nil }
-        return CGRect(origin: position, size: size)
-    }
-
     private static func element(_ element: AXUIElement, attribute name: String) -> AXUIElement? {
         var raw: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, name as CFString, &raw) == .success,
@@ -467,13 +489,6 @@ private enum ExternalStatusItemDiscovery {
         return raw as? T
     }
 
-    private static func firstNonemptyString(_ values: String?...) -> String {
-        values.compactMap { value -> String? in
-            guard let value,
-                  !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-            return value
-        }.first ?? "App"
-    }
 }
 
 @MainActor
