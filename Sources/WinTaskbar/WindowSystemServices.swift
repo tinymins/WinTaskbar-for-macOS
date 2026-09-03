@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import CoreGraphics
+import Darwin
 import Foundation
 
 enum TaskbarAppClickAction: Equatable {
@@ -29,6 +30,52 @@ struct TaskbarAppClickPolicy {
 struct TaskbarAppPrimaryClickPolicy {
     static func showsPreviewsImmediately(windowCount: Int, previewsEnabled: Bool) -> Bool {
         previewsEnabled && windowCount > 1
+    }
+}
+
+private enum AccessibilityWindowIdentity {
+    private typealias GetWindowID = @convention(c) (AXUIElement, UnsafeMutablePointer<CGWindowID>) -> AXError
+
+    // AX has no public window-ID attribute. Resolve this SPI optionally so its
+    // absence on a future macOS cannot prevent the application from launching.
+    private static let getWindowID: GetWindowID? = {
+        guard let handle = dlopen(nil, RTLD_LAZY) else { return nil }
+        defer { dlclose(handle) }
+        guard let symbol = dlsym(handle, "_AXUIElementGetWindow") else { return nil }
+        return unsafeBitCast(symbol, to: GetWindowID.self)
+    }()
+
+    static var isAvailable: Bool { getWindowID != nil }
+
+    static func windowID(of element: AXUIElement) -> CGWindowID? {
+        var windowID = kCGNullWindowID
+        guard getWindowID?(element, &windowID) == .success,
+              windowID != kCGNullWindowID else { return nil }
+        return windowID
+    }
+}
+
+struct WindowIdentityCandidate {
+    let windowID: CGWindowID?
+    let title: String?
+    let frame: CGRect?
+}
+
+struct WindowIdentityPolicy {
+    static func matchingIndex(for window: WindowInfo, in candidates: [WindowIdentityCandidate]) -> Int? {
+        if let index = candidates.firstIndex(where: { $0.windowID == window.windowID }) { return index }
+        let fallbackIndices = candidates.indices.filter { index in
+            let candidate = candidates[index]
+            guard candidate.windowID == nil,
+                  let frame = candidate.frame,
+                  abs(frame.minX - window.frame.minX) < 4,
+                  abs(frame.minY - window.frame.minY) < 4,
+                  abs(frame.width - window.frame.width) < 4,
+                  abs(frame.height - window.frame.height) < 4 else { return false }
+            return candidate.title == nil || candidate.title == window.title || window.title == "Window"
+        }
+        // Never guess which same-title/overlapping window to activate or close.
+        return fallbackIndices.count == 1 ? fallbackIndices.first : nil
     }
 }
 
@@ -109,18 +156,26 @@ final class WindowActivationService {
     }
 
     private func matchingWindow(for window: WindowInfo) -> AXUIElement? {
-        windows(of: AXUIElementCreateApplication(window.ownerPID)).first { matches($0, window) }
+        let elements = windows(of: AXUIElementCreateApplication(window.ownerPID))
+        let candidates = elements.map { element in
+            let windowID = AccessibilityWindowIdentity.windowID(of: element)
+            return WindowIdentityCandidate(
+                windowID: windowID,
+                title: windowID == nil ? attribute(element, kAXTitleAttribute) : nil,
+                frame: windowID == nil ? frame(of: element) : nil
+            )
+        }
+        guard let index = WindowIdentityPolicy.matchingIndex(for: window, in: candidates) else { return nil }
+        return elements[index]
     }
 
     private func isFocused(_ window: WindowInfo, in application: AXUIElement) -> Bool {
         guard let focusedWindow: AXUIElement = attribute(application, kAXFocusedWindowAttribute) else { return false }
-        return matches(focusedWindow, window)
-    }
-
-    private func matches(_ element: AXUIElement, _ window: WindowInfo) -> Bool {
-        let elementTitle: String? = attribute(element, kAXTitleAttribute)
-        let elementFrame = frame(of: element)
-        return elementTitle == window.title || elementFrame.map { framesMatch($0, window.frame) } == true
+        if let focusedWindowID = AccessibilityWindowIdentity.windowID(of: focusedWindow) {
+            return focusedWindowID == window.windowID
+        }
+        guard let match = matchingWindow(for: window) else { return false }
+        return CFEqual(match, focusedWindow)
     }
 
     private func frame(of element: AXUIElement) -> CGRect? {
@@ -131,11 +186,6 @@ final class WindowActivationService {
         guard AXValueGetValue(positionValue, .cgPoint, &origin),
               AXValueGetValue(sizeValue, .cgSize, &size) else { return nil }
         return CGRect(origin: origin, size: size)
-    }
-
-    private func framesMatch(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
-        abs(lhs.minX - rhs.minX) < 4 && abs(lhs.minY - rhs.minY) < 4
-            && abs(lhs.width - rhs.width) < 4 && abs(lhs.height - rhs.height) < 4
     }
 
     private func attribute<T>(_ element: AXUIElement, _ name: String) -> T? {
@@ -225,23 +275,23 @@ final class WindowsService {
             $0.map(\.windowID)
         }
 
-        let pidsWithOffscreenCandidates = Set(candidates.lazy.filter { !$0.isOnScreen }.map(\.pid))
-        let minimizedFramesByPID = Dictionary(uniqueKeysWithValues: pidsWithOffscreenCandidates.map {
-            ($0, minimizedWindowFrames(forPID: $0))
-        })
+        var accessibilityWindowsByPID: [pid_t: [CGWindowID: Bool]] = [:]
+        for pid in observedWindowIDsByPID.keys {
+            accessibilityWindowsByPID[pid] = accessibilityWindowStates(forPID: pid)
+        }
         var windowsByPID: [pid_t: [WindowInfo]] = [:]
         for candidate in candidates {
             guard WindowPreviewWindowPolicy.shouldInclude(
+                windowID: candidate.windowID,
                 isOnScreen: candidate.isOnScreen,
-                frame: candidate.frame,
-                minimizedWindowFrames: minimizedFramesByPID[candidate.pid] ?? []
+                accessibilityWindows: accessibilityWindowsByPID[candidate.pid]
             ) else { continue }
             windowsByPID[candidate.pid, default: []].append(WindowInfo(
                 windowID: candidate.windowID,
                 title: candidate.title,
                 ownerPID: candidate.pid,
                 frame: candidate.frame,
-                isMinimized: !candidate.isOnScreen
+                isMinimized: accessibilityWindowsByPID[candidate.pid]?[candidate.windowID] ?? false
             ))
         }
         for pid in requestedPIDs {
@@ -286,26 +336,27 @@ final class WindowsService {
         return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
     }
 
-    private func minimizedWindowFrames(forPID pid: pid_t) -> [CGRect] {
+    private func accessibilityWindowStates(forPID pid: pid_t) -> [CGWindowID: Bool]? {
+        guard AccessibilityWindowIdentity.isAvailable else { return nil }
         let application = AXUIElementCreateApplication(pid)
-        let windows: [AXUIElement] = attribute(application, kAXWindowsAttribute) ?? []
-        return windows.compactMap { window in
-            let minimized: Bool = attribute(window, kAXMinimizedAttribute) ?? false
-            guard minimized,
-                  let positionValue: AXValue = attribute(window, kAXPositionAttribute),
-                  let sizeValue: AXValue = attribute(window, kAXSizeAttribute) else { return nil }
-            var origin = CGPoint.zero
-            var size = CGSize.zero
-            guard AXValueGetValue(positionValue, .cgPoint, &origin),
-                  AXValueGetValue(sizeValue, .cgSize, &size) else { return nil }
-            return CGRect(origin: origin, size: size)
+        AXUIElementSetMessagingTimeout(application, 0.1)
+        var rawWindows: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &rawWindows) == .success,
+              let windows = rawWindows as? [AXUIElement] else { return nil }
+        let names = [kAXRoleAttribute, kAXSubroleAttribute, kAXMinimizedAttribute] as CFArray
+        var states: [CGWindowID: Bool] = [:]
+        for window in windows {
+            AXUIElementSetMessagingTimeout(window, 0.1)
+            var rawValues: CFArray?
+            guard AXUIElementCopyMultipleAttributeValues(window, names, [], &rawValues) == .success,
+                  let values = rawValues as? [Any], values.count == 3 else { return nil }
+            guard values[0] as? String == kAXWindowRole else { continue }
+            let subrole = values[1] as? String
+            guard subrole != kAXFloatingWindowSubrole else { continue }
+            guard let windowID = AccessibilityWindowIdentity.windowID(of: window) else { return nil }
+            states[windowID] = values[2] as? Bool ?? false
         }
-    }
-
-    private func attribute<T>(_ element: AXUIElement, _ name: String) -> T? {
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
-        return value as? T
+        return states
     }
 }
 
@@ -313,16 +364,14 @@ struct WindowPreviewWindowPolicy {
     static let listOptions: CGWindowListOption = [.excludeDesktopElements]
 
     static func shouldInclude(
+        windowID: CGWindowID,
         isOnScreen: Bool,
-        frame: CGRect,
-        minimizedWindowFrames: [CGRect]
+        accessibilityWindows: [CGWindowID: Bool]?
     ) -> Bool {
-        isOnScreen || minimizedWindowFrames.contains { minimizedFrame in
-            abs(minimizedFrame.minX - frame.minX) < 4
-                && abs(minimizedFrame.minY - frame.minY) < 4
-                && abs(minimizedFrame.width - frame.width) < 4
-                && abs(minimizedFrame.height - frame.height) < 4
-        }
+        // Unavailable AX data is different from a successfully read empty list.
+        guard let accessibilityWindows else { return isOnScreen }
+        guard let isMinimized = accessibilityWindows[windowID] else { return false }
+        return isOnScreen || isMinimized
     }
 }
 

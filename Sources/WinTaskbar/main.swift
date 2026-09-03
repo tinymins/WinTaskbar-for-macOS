@@ -2087,21 +2087,82 @@ func runSelfTest() async -> Int32 {
     let minimizedWindowFrame = CGRect(x: 40, y: 80, width: 900, height: 600)
     guard !WindowPreviewWindowPolicy.listOptions.contains(.optionOnScreenOnly),
           WindowPreviewWindowPolicy.shouldInclude(
+              windowID: 101,
               isOnScreen: true,
-              frame: CGRect(x: 10, y: 20, width: 800, height: 500),
-              minimizedWindowFrames: []
+              accessibilityWindows: [101: false]
           ),
           WindowPreviewWindowPolicy.shouldInclude(
+              windowID: 101,
               isOnScreen: false,
-              frame: minimizedWindowFrame,
-              minimizedWindowFrames: [minimizedWindowFrame]
+              accessibilityWindows: [101: true]
           ),
           !WindowPreviewWindowPolicy.shouldInclude(
+              windowID: 101,
               isOnScreen: false,
-              frame: minimizedWindowFrame,
-              minimizedWindowFrames: []
+              accessibilityWindows: [101: false]
+          ),
+          !WindowPreviewWindowPolicy.shouldInclude(
+              windowID: 202,
+              isOnScreen: false,
+              accessibilityWindows: [101: true]
+          ),
+          !WindowPreviewWindowPolicy.shouldInclude(
+              windowID: 202,
+              isOnScreen: true,
+              accessibilityWindows: [101: false]
+          ),
+          !WindowPreviewWindowPolicy.shouldInclude(
+              windowID: 101,
+              isOnScreen: true,
+              accessibilityWindows: [:]
+          ),
+          WindowPreviewWindowPolicy.shouldInclude(
+              windowID: 101,
+              isOnScreen: true,
+              accessibilityWindows: nil
+          ),
+          !WindowPreviewWindowPolicy.shouldInclude(
+              windowID: 101,
+              isOnScreen: false,
+              accessibilityWindows: nil
           ) else {
         fputs("SELF-TEST FAILED: minimized window preview policy mismatch\n", stderr)
+        return 1
+    }
+
+    let identityWindow = WindowInfo(
+        windowID: 202, title: "ChatGPT", ownerPID: 42,
+        frame: minimizedWindowFrame, isMinimized: false
+    )
+    let overlappingWindows = [101, 202, 303, 404].map { id in
+        WindowIdentityCandidate(windowID: CGWindowID(id), title: "ChatGPT", frame: minimizedWindowFrame)
+    }
+    let unidentifiedWindow = WindowIdentityCandidate(
+        windowID: nil, title: "ChatGPT", frame: minimizedWindowFrame
+    )
+    guard WindowIdentityPolicy.matchingIndex(for: identityWindow, in: overlappingWindows) == 1,
+          WindowIdentityPolicy.matchingIndex(for: identityWindow, in: overlappingWindows.reversed()) == 2,
+          WindowIdentityPolicy.matchingIndex(for: identityWindow, in: [overlappingWindows[0]]) == nil,
+          WindowIdentityPolicy.matchingIndex(for: identityWindow, in: [unidentifiedWindow]) == 0,
+          WindowIdentityPolicy.matchingIndex(
+              for: identityWindow, in: [unidentifiedWindow, unidentifiedWindow]
+          ) == nil,
+          WindowIdentityPolicy.matchingIndex(for: identityWindow, in: [
+              WindowIdentityCandidate(windowID: nil, title: "ChatGPT", frame: .zero),
+          ]) == nil,
+          WindowIdentityPolicy.matchingIndex(for: identityWindow, in: [
+              WindowIdentityCandidate(windowID: nil, title: "Other", frame: minimizedWindowFrame),
+          ]) == nil,
+          WindowIdentityPolicy.matchingIndex(for: identityWindow, in: [
+              WindowIdentityCandidate(windowID: 202, title: "Renamed", frame: .zero),
+          ]) == 0,
+          overlappingWindows.allSatisfy({ candidate in
+              WindowPreviewWindowPolicy.shouldInclude(
+                  windowID: candidate.windowID ?? 0, isOnScreen: true,
+                  accessibilityWindows: [101: false, 202: false, 303: false, 404: false]
+              )
+          }) else {
+        fputs("SELF-TEST FAILED: exact window identity and overlapping window policy mismatch\n", stderr)
         return 1
     }
 
