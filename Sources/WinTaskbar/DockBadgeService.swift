@@ -105,13 +105,32 @@ private struct BadgeReadResult: Sendable {
     let sourceWasAvailable: Bool
 }
 
+struct DockBadgeQueryTarget: Equatable, Sendable {
+    let bundleIdentifier: String
+    let processIdentifier: pid_t
+
+    static func snapshot(_ apps: [DiscoveredApp]) -> [Self] {
+        apps.compactMap { app -> Self? in
+            guard let bundleIdentifier = app.bundleIdentifier,
+                  let processIdentifier = app.processIdentifier, processIdentifier > 10 else { return nil }
+            return Self(bundleIdentifier: bundleIdentifier, processIdentifier: processIdentifier)
+        }.sorted {
+            ($0.bundleIdentifier, $0.processIdentifier) < ($1.bundleIdentifier, $1.processIdentifier)
+        }
+    }
+
+    var arguments: [String] {
+        ["info", "-only", "CFBundleIdentifier,StatusLabel", "-app", String(processIdentifier)]
+    }
+}
+
 @MainActor
 final class DockBadgeService: ObservableObject {
     @Published private(set) var badges: [String: String] = [:]
     @Published private(set) var attentionStates: [String: TaskbarAttentionState] = [:]
 
     private let interval: TimeInterval
-    private var runningBundleIDs: [String]
+    private var runningTargets: [DockBadgeQueryTarget]
     private var runningAppsCancellable: AnyCancellable?
     private var tracker = TaskbarAttentionTracker()
     private var timer: Timer?
@@ -127,13 +146,13 @@ final class DockBadgeService: ObservableObject {
 
     init(apps: AppDiscoveryService, interval: TimeInterval = 4) {
         self.interval = interval
-        runningBundleIDs = apps.runningApps.compactMap(\.bundleIdentifier).sorted()
+        runningTargets = DockBadgeQueryTarget.snapshot(apps.runningApps)
         runningAppsCancellable = apps.$runningApps
-            .map { $0.compactMap(\.bundleIdentifier).sorted() }
+            .map(DockBadgeQueryTarget.snapshot)
             .removeDuplicates()
             .dropFirst()
-            .sink { [weak self] bundleIDs in
-                self?.runningBundleIDs = bundleIDs
+            .sink { [weak self] targets in
+                self?.runningTargets = targets
                 self?.scheduleEventRefresh()
             }
         start()
@@ -167,11 +186,11 @@ final class DockBadgeService: ObservableObject {
             return
         }
 
-        let bundleIDs = runningBundleIDs
+        let targets = runningTargets
 
         refreshTask = Task { [weak self] in
             let result = await Task.detached(priority: .utility) {
-                let lsappinfo = Self.readBadgesWithLSAppInfo(bundleIDs: bundleIDs)
+                let lsappinfo = Self.readBadgesWithLSAppInfo(targets: targets)
                 if lsappinfo.sourceWasAvailable { return lsappinfo.badges }
                 return Self.readBadgesWithAccessibility()
             }.value
@@ -179,7 +198,7 @@ final class DockBadgeService: ObservableObject {
             guard let self, !Task.isCancelled else { return }
             let activeBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             tracker.apply(result, activeBundleID: activeBundleID)
-            tracker.retainRunning(Set(bundleIDs))
+            tracker.retainRunning(Set(targets.map(\.bundleIdentifier)))
             publishState()
             refreshTask = nil
             if refreshPending {
@@ -342,8 +361,8 @@ final class DockBadgeService: ObservableObject {
         }
     }
 
-    nonisolated private static func readBadgesWithLSAppInfo(bundleIDs: [String]) -> BadgeReadResult {
-        guard !bundleIDs.isEmpty else { return BadgeReadResult(badges: [:], sourceWasAvailable: true) }
+    nonisolated private static func readBadgesWithLSAppInfo(targets: [DockBadgeQueryTarget]) -> BadgeReadResult {
+        guard !targets.isEmpty else { return BadgeReadResult(badges: [:], sourceWasAvailable: true) }
         let executableURL = URL(fileURLWithPath: "/usr/bin/lsappinfo")
         guard FileManager.default.isExecutableFile(atPath: executableURL.path) else {
             return BadgeReadResult(badges: [:], sourceWasAvailable: false)
@@ -352,7 +371,7 @@ final class DockBadgeService: ObservableObject {
         let process = Process()
         let output = Pipe()
         process.executableURL = executableURL
-        process.arguments = bundleIDs.flatMap { ["info", "-only", "CFBundleIdentifier,StatusLabel", "-app", $0] }
+        process.arguments = targets.flatMap(\.arguments)
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
         do {
@@ -361,7 +380,7 @@ final class DockBadgeService: ObservableObject {
             process.waitUntilExit()
             // An exited application can resolve to the frontmost app; trust the returned identity.
             if let text = String(data: data, encoding: .utf8),
-               let badges = parseLSAppInfoBatchOutput(text, bundleIDs: Set(bundleIDs)) {
+               let badges = parseLSAppInfoBatchOutput(text, bundleIDs: Set(targets.map(\.bundleIdentifier))) {
                 return BadgeReadResult(badges: badges, sourceWasAvailable: true)
             }
         } catch {

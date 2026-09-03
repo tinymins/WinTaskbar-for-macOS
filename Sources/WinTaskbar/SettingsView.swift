@@ -32,6 +32,17 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 @MainActor
 final class SettingsNavigationState: ObservableObject {
     @Published var selectedPage: SettingsPage = .general
+    @Published var isWindowVisible = false
+}
+
+struct SettingsPreviewTimelineSchedule: TimelineSchedule {
+    let isVisible: Bool
+    let interval: TimeInterval
+
+    func entries(from startDate: Date, mode: Mode) -> AnySequence<Date> {
+        guard isVisible else { return AnySequence([]) }
+        return AnySequence(PeriodicTimelineSchedule(from: startDate, by: interval).entries(from: startDate, mode: mode))
+    }
 }
 
 struct SettingsView: View {
@@ -303,7 +314,10 @@ struct SettingsView: View {
     private var dateTime: some View {
         VStack(alignment: .leading, spacing: 22) {
             SettingsSection("Date & time") {
-                TimelineView(.periodic(from: .now, by: preferences.trayClockShowsSeconds ? 1 : 30)) { context in
+                TimelineView(SettingsPreviewTimelineSchedule(
+                    isVisible: navigation.isWindowVisible,
+                    interval: preferences.trayClockShowsSeconds ? 1 : 30
+                )) { context in
                     VStack(alignment: .leading, spacing: 3) {
                         Text(DateTimeFormatter.string(
                             from: context.date,

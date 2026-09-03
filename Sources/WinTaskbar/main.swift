@@ -2273,6 +2273,40 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    let previewStart = Date(timeIntervalSinceReferenceDate: 1_000)
+    let visiblePreviewSchedule = SettingsPreviewTimelineSchedule(isVisible: true, interval: 1)
+    let hiddenPreviewSchedule = SettingsPreviewTimelineSchedule(isVisible: false, interval: 1)
+    let resumedPreviewStart = previewStart.addingTimeInterval(60)
+    guard Array(visiblePreviewSchedule.entries(from: previewStart, mode: .normal).prefix(3))
+            == [previewStart, previewStart.addingTimeInterval(1), previewStart.addingTimeInterval(2)],
+          Array(hiddenPreviewSchedule.entries(from: previewStart, mode: .normal)).isEmpty,
+          Array(hiddenPreviewSchedule.entries(from: previewStart, mode: .lowFrequency)).isEmpty,
+          visiblePreviewSchedule.entries(from: resumedPreviewStart, mode: .normal).first(where: { _ in true })
+            == resumedPreviewStart,
+          Array(SettingsPreviewTimelineSchedule(isVisible: true, interval: 30)
+            .entries(from: previewStart, mode: .normal).prefix(2))
+            == [previewStart, previewStart.addingTimeInterval(30)] else {
+        fputs("SELF-TEST FAILED: settings preview must stop scheduling while hidden and resume at the current time\n", stderr)
+        return 1
+    }
+
+    var badgeQueryApp = DiscoveredApp(
+        name: "Chat", bundleIdentifier: "com.example.chat", url: URL(fileURLWithPath: "/Applications/Chat.app"),
+        category: nil, isRunning: true, isActive: false, processIdentifier: 123
+    )
+    let originalBadgeTargets = DockBadgeQueryTarget.snapshot([badgeQueryApp])
+    badgeQueryApp.processIdentifier = 456
+    let restartedBadgeTargets = DockBadgeQueryTarget.snapshot([badgeQueryApp])
+    badgeQueryApp.processIdentifier = nil
+    guard originalBadgeTargets != restartedBadgeTargets,
+          restartedBadgeTargets.first?.bundleIdentifier == "com.example.chat",
+          restartedBadgeTargets.flatMap(\.arguments)
+            == ["info", "-only", "CFBundleIdentifier,StatusLabel", "-app", "456"],
+          DockBadgeQueryTarget.snapshot([badgeQueryApp]).isEmpty else {
+        fputs("SELF-TEST FAILED: badge queries must use the current PID and retain returned bundle identity checks\n", stderr)
+        return 1
+    }
+
     let badgeBatch = """
     "CFBundleIdentifier"="com.example.chat"
     "StatusLabel"={ "label"="461" }

@@ -1860,9 +1860,22 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window?.center()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
+        updatePreviewVisibility()
     }
 
     func windowWillClose(_ notification: Notification) {
+        navigation.isWindowVisible = false
         onVisibilityChanged?(false)
+    }
+
+    func windowDidChangeOcclusionState(_ notification: Notification) {
+        updatePreviewVisibility()
+    }
+
+    private func updatePreviewVisibility() {
+        let isVisible = window?.isVisible == true
+            && window?.isMiniaturized == false
+            && window?.occlusionState.contains(.visible) == true
+        if navigation.isWindowVisible != isVisible { navigation.isWindowVisible = isVisible }
     }
 }
