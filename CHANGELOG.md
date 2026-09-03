@@ -2,6 +2,20 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.22] - 2026-09-03
+
+### Performance
+
+- Capture mirrored tray icons only while visible, share capture work, and adapt refresh frequency to changing content.
+- Reuse unchanged tray frames and batch Accessibility reads to reduce image processing and status-item discovery overhead.
+- Isolate clock updates from the taskbar, cache date formatting and text measurements, and build clock tooltips only when needed.
+- Batch Dock badge queries by process ID and reuse the shared running-app list to reduce subprocess and application lookup overhead.
+- Observe system status changes with a slower fallback refresh, and enable global pointer monitoring only while needed.
+
+### Fixed
+
+- Stop calendar work while its flyout is closed and pause date/time previews while the settings window is hidden, resuming with the current time and preserving the selected page and subpage when shown again.
+
 ## [0.0.21] - 2026-09-02
 
 ### Fixed
