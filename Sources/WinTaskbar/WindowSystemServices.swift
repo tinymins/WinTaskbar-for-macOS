@@ -219,6 +219,41 @@ final class WindowThumbnailCache {
     }
 }
 
+enum WindowLiveCaptureCadence {
+    static let thumbnailIntervalNanoseconds: UInt64 = 200_000_000
+}
+
+struct WindowLiveSnapshot: @unchecked Sendable {
+    let windowID: CGWindowID
+    let frame: CGRect
+    let image: CGImage
+}
+
+enum WindowLiveSnapshotCapture {
+    static func capture(
+        windowID: CGWindowID,
+        imageOptions: CGWindowImageOption = [.boundsIgnoreFraming, .bestResolution]
+    ) -> WindowLiveSnapshot? {
+        guard let image = CGWindowListCreateImage(
+            .null,
+            .optionIncludingWindow,
+            windowID,
+            imageOptions
+        ),
+        let raw = CGWindowListCopyWindowInfo(
+            [.optionIncludingWindow, .excludeDesktopElements],
+            windowID
+        ) as? [[String: Any]],
+        let info = raw.first(where: { $0[kCGWindowNumber as String] as? CGWindowID == windowID }),
+        (info[kCGWindowLayer as String] as? Int ?? 0) == 0,
+        let bounds = info[kCGWindowBounds as String] as? NSDictionary,
+        let frame = CGRect(dictionaryRepresentation: bounds),
+        frame.width > 0,
+        frame.height > 0 else { return nil }
+        return WindowLiveSnapshot(windowID: windowID, frame: frame, image: image)
+    }
+}
+
 struct WindowAppearanceOrder {
     private var orderedWindowIDsByPID: [pid_t: [CGWindowID]] = [:]
 

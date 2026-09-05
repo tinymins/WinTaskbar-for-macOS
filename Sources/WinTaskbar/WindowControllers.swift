@@ -504,6 +504,7 @@ final class WindowPreviewPanelController: ObservableObject {
         displayedOwnerID = nil
         panel?.orderOut(nil)
         hostingView.alphaValue = 1
+        hostingView.rootView = AnyView(EmptyView())
     }
 
     private func makePanel() -> WindowPreviewPanel {

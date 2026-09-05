@@ -2235,6 +2235,31 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    var peekRefreshSession = WindowPeekRefreshSession()
+    let firstPeekGeneration = peekRefreshSession.begin(windowID: firstPeekWindowID)
+    let secondPeekGeneration = peekRefreshSession.begin(windowID: secondPeekWindowID)
+    guard WindowLiveCaptureCadence.thumbnailIntervalNanoseconds == 200_000_000,
+          WindowPeekRefreshSession.intervalNanoseconds == 40_000_000,
+          !peekRefreshSession.isCurrent(
+              windowID: firstPeekWindowID,
+              generation: firstPeekGeneration
+          ),
+          peekRefreshSession.isCurrent(
+              windowID: secondPeekWindowID,
+              generation: secondPeekGeneration
+          ) else {
+        fputs("SELF-TEST FAILED: live window capture cadence or peek generation mismatch\n", stderr)
+        return 1
+    }
+    peekRefreshSession.end()
+    guard !peekRefreshSession.isCurrent(
+        windowID: secondPeekWindowID,
+        generation: secondPeekGeneration
+    ) else {
+        fputs("SELF-TEST FAILED: ended window peek accepted a stale frame\n", stderr)
+        return 1
+    }
+
     var optionGesture = WindowsKeyGestureState()
     guard !optionGesture.flagsChanged(to: [.option]),
           optionGesture.flagsChanged(to: []) else {

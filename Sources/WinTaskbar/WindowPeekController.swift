@@ -47,6 +47,28 @@ struct WindowPeekHoverSession {
     }
 }
 
+struct WindowPeekRefreshSession {
+    static let intervalNanoseconds: UInt64 = 40_000_000
+
+    private var windowID: CGWindowID?
+    private var generation: UInt64 = 0
+
+    mutating func begin(windowID: CGWindowID) -> UInt64 {
+        generation &+= 1
+        self.windowID = windowID
+        return generation
+    }
+
+    mutating func end() {
+        generation &+= 1
+        windowID = nil
+    }
+
+    func isCurrent(windowID: CGWindowID, generation: UInt64) -> Bool {
+        self.windowID == windowID && self.generation == generation
+    }
+}
+
 private final class WindowPeekPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
@@ -153,9 +175,11 @@ final class WindowPeekController {
     private var desktopImages: [URL: NSImage] = [:]
     private var currentWindowID: CGWindowID?
     private var hoverSession = WindowPeekHoverSession()
+    private var refreshSession = WindowPeekRefreshSession()
     private var delayedShowTask: Task<Void, Never>?
     private var delayedHideTask: Task<Void, Never>?
     private var orderOutTask: Task<Void, Never>?
+    private var liveRefreshTask: Task<Void, Never>?
 
     init(windowsService: WindowsService) {
         self.windowsService = windowsService
@@ -184,13 +208,53 @@ final class WindowPeekController {
     }
 
     private func present(window: WindowInfo) {
-        guard let image = windowsService.thumbnail(for: window) else {
-            hideImmediately()
-            return
-        }
-
+        liveRefreshTask?.cancel()
         currentWindowID = window.windowID
-        reconcilePanels(window: window, image: image)
+        let generation = refreshSession.begin(windowID: window.windowID)
+        liveRefreshTask = Task { @MainActor [weak self] in
+            var hasPresentedFrame = false
+            while !Task.isCancelled {
+                let snapshot = await Task.detached(priority: .userInitiated) {
+                    WindowLiveSnapshotCapture.capture(windowID: window.windowID)
+                }.value
+                guard let self,
+                      !Task.isCancelled,
+                      refreshSession.isCurrent(
+                          windowID: window.windowID,
+                          generation: generation
+                      ) else { return }
+
+                if let snapshot {
+                    let currentWindow = WindowInfo(
+                        windowID: window.windowID,
+                        title: window.title,
+                        ownerPID: window.ownerPID,
+                        frame: snapshot.frame,
+                        isMinimized: false
+                    )
+                    let image = NSImage(
+                        cgImage: snapshot.image,
+                        size: NSSize(width: snapshot.image.width, height: snapshot.image.height)
+                    )
+                    reconcilePanels(window: currentWindow, image: image)
+                    showPanels()
+                    hasPresentedFrame = true
+                } else if !hasPresentedFrame {
+                    guard let image = windowsService.thumbnail(for: window) else {
+                        hideImmediately()
+                        return
+                    }
+                    reconcilePanels(window: window, image: image)
+                    showPanels()
+                    hasPresentedFrame = true
+                }
+
+                try? await Task.sleep(nanoseconds: WindowPeekRefreshSession.intervalNanoseconds)
+            }
+        }
+    }
+
+    private func showPanels() {
         for panel in panels.values {
             if panel.isVisible {
                 panel.alphaValue = 1
@@ -228,6 +292,9 @@ final class WindowPeekController {
         delayedHideTask?.cancel()
         delayedHideTask = nil
         hoverSession.end()
+        liveRefreshTask?.cancel()
+        liveRefreshTask = nil
+        refreshSession.end()
         currentWindowID = nil
         orderOutTask?.cancel()
 
@@ -256,6 +323,9 @@ final class WindowPeekController {
         orderOutTask?.cancel()
         orderOutTask = nil
         hoverSession.end()
+        liveRefreshTask?.cancel()
+        liveRefreshTask = nil
+        refreshSession.end()
         currentWindowID = nil
         panels.values.forEach { panel in
             panel.orderOut(nil)

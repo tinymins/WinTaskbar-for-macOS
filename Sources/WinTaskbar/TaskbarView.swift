@@ -914,6 +914,9 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
                         position: preferences.position,
                         service: windowsService,
                         windowPeekController: windowPeekController,
+                        onRefresh: { windows in
+                            if previewWindows != windows { previewWindows = windows }
+                        },
                         onSelect: {
                             windowActivator.raise(window: $0)
                             windowPreviewPanelController.dismiss(ownerID: previewOwnerID)
@@ -1236,9 +1239,12 @@ private struct WindowPreviewPopover: View {
     let position: TaskbarPosition
     let service: WindowsService
     let windowPeekController: WindowPeekController
+    let onRefresh: ([WindowInfo]) -> Void
     let onSelect: (WindowInfo) -> Void
     let onClose: (WindowInfo) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var liveSnapshots: [CGWindowID: WindowLiveSnapshot] = [:]
+    @State private var reportedFrames: [CGWindowID: CGRect] = [:]
 
     @ViewBuilder
     var body: some View {
@@ -1262,21 +1268,66 @@ private struct WindowPreviewPopover: View {
             }
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: windows.map(\.id))
+        .task(id: windows.map(\.windowID)) {
+            await refreshLiveSnapshots()
+        }
     }
 
     private func previewButton(for window: WindowInfo) -> some View {
         WindowPreviewButton(
             window: window,
+            liveSnapshot: liveSnapshots[window.windowID],
             service: service,
             windowPeekController: windowPeekController,
             action: { onSelect(window) },
             closeAction: { onClose(window) }
         )
     }
+
+    private func refreshLiveSnapshots() async {
+        let windowIDs = Array(windows.prefix(6).map(\.windowID))
+        let visibleWindowIDs = Set(windowIDs)
+        while !Task.isCancelled {
+            let captures = await Task.detached(priority: .userInitiated) {
+                windowIDs.compactMap {
+                    WindowLiveSnapshotCapture.capture(
+                        windowID: $0,
+                        imageOptions: [.boundsIgnoreFraming, .nominalResolution]
+                    )
+                }
+            }.value
+            guard !Task.isCancelled else { return }
+
+            var updatedSnapshots = liveSnapshots.filter { visibleWindowIDs.contains($0.key) }
+            for capture in captures {
+                updatedSnapshots[capture.windowID] = capture
+            }
+            liveSnapshots = updatedSnapshots
+
+            let frames = updatedSnapshots.mapValues(\.frame)
+            if frames != reportedFrames {
+                reportedFrames = frames
+                let refreshedWindows = windows.map { window in
+                    guard let frame = frames[window.windowID], frame != window.frame else { return window }
+                    return WindowInfo(
+                        windowID: window.windowID,
+                        title: window.title,
+                        ownerPID: window.ownerPID,
+                        frame: frame,
+                        isMinimized: window.isMinimized
+                    )
+                }
+                if refreshedWindows != windows { onRefresh(refreshedWindows) }
+            }
+
+            try? await Task.sleep(nanoseconds: WindowLiveCaptureCadence.thumbnailIntervalNanoseconds)
+        }
+    }
 }
 
 private struct WindowPreviewButton: View {
     let window: WindowInfo
+    let liveSnapshot: WindowLiveSnapshot?
     let service: WindowsService
     let windowPeekController: WindowPeekController
     let action: () -> Void
@@ -1285,11 +1336,22 @@ private struct WindowPreviewButton: View {
     @State private var isCloseHovering = false
 
     private var thumbnailSize: CGSize {
-        WindowPreviewThumbnailGeometry.thumbnailSize(for: window.frame.size)
+        WindowPreviewThumbnailGeometry.thumbnailSize(for: displayedWindow.frame.size)
     }
 
     private var contentWidth: CGFloat {
-        WindowPreviewThumbnailGeometry.contentWidth(for: window.frame.size)
+        WindowPreviewThumbnailGeometry.contentWidth(for: displayedWindow.frame.size)
+    }
+
+    private var displayedWindow: WindowInfo {
+        guard let liveSnapshot else { return window }
+        return WindowInfo(
+            windowID: window.windowID,
+            title: window.title,
+            ownerPID: window.ownerPID,
+            frame: liveSnapshot.frame,
+            isMinimized: window.isMinimized
+        )
     }
 
     var body: some View {
@@ -1311,7 +1373,10 @@ private struct WindowPreviewButton: View {
                         )
                     }
                     thumbnail
-                        .padding(.horizontal, WindowPreviewThumbnailGeometry.horizontalInset(for: window.frame.size))
+                        .padding(
+                            .horizontal,
+                            WindowPreviewThumbnailGeometry.horizontalInset(for: displayedWindow.frame.size)
+                        )
                 }
                 .frame(width: contentWidth, alignment: .topLeading)
                 .padding(.horizontal, WindowPreviewMetrics.horizontalPadding)
@@ -1349,7 +1414,7 @@ private struct WindowPreviewButton: View {
             isHovering = hovering
             if !hovering { isCloseHovering = false }
             if hovering {
-                windowPeekController.show(window: window)
+                windowPeekController.show(window: displayedWindow)
             } else {
                 windowPeekController.scheduleHide()
             }
@@ -1373,7 +1438,11 @@ private struct WindowPreviewButton: View {
     @ViewBuilder
     private var thumbnail: some View {
         Group {
-            if let image = service.thumbnail(for: window) {
+            if let liveSnapshot {
+                Image(decorative: liveSnapshot.image, scale: 1, orientation: .up)
+                    .resizable()
+                    .scaledToFit()
+            } else if let image = service.thumbnail(for: window) {
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFit()
