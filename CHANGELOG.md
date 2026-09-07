@@ -2,6 +2,13 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.23] - 2026-09-07
+
+### Fixed
+
+- Match window previews, activation, and close actions by stable window identity, preventing duplicate previews and avoiding ambiguous same-title or overlapping window actions.
+- Refresh window thumbnails and Aero Peek continuously while previews are open so live content, movement, and resizing stay in sync.
+
 ## [0.0.22] - 2026-09-03
 
 ### Performance
