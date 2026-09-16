@@ -69,6 +69,43 @@ enum WindowsSpaceGestureAction: Equatable {
     case dismiss
 }
 
+enum AltTabGestureAction: Equatable {
+    case present(reverse: Bool)
+    case advance
+    case retreat
+    case commit
+    case cancel
+}
+
+struct AltTabGestureState {
+    private let altModifier: NSEvent.ModifierFlags
+    private(set) var isActive = false
+
+    init(altModifier: NSEvent.ModifierFlags = .option) {
+        self.altModifier = altModifier
+    }
+
+    mutating func press(reverse: Bool) -> AltTabGestureAction {
+        if isActive { return reverse ? .retreat : .advance }
+        isActive = true
+        return .present(reverse: reverse)
+    }
+
+    mutating func flagsChanged(to rawFlags: NSEvent.ModifierFlags) -> AltTabGestureAction? {
+        guard isActive else { return nil }
+        let flags = rawFlags.intersection(.deviceIndependentFlagsMask)
+        guard !flags.contains(altModifier) else { return nil }
+        isActive = false
+        return .commit
+    }
+
+    mutating func cancel() -> AltTabGestureAction? {
+        guard isActive else { return nil }
+        isActive = false
+        return .cancel
+    }
+}
+
 struct WindowsSpaceGestureState {
     static let presentationDelayMilliseconds = 300
 
@@ -120,8 +157,9 @@ private let windowsKeyEventTapHandler: CGEventTapCallBack = { _, eventType, even
     guard let userData else { return Unmanaged.passUnretained(event) }
     let service = Unmanaged<GlobalHotkeysService>.fromOpaque(userData).takeUnretainedValue()
     let rawFlags = event.flags.rawValue
+    let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
     MainActor.assumeIsolated {
-        service.handleWindowsKeyEvent(eventType, rawFlags: rawFlags)
+        service.handleWindowsKeyEvent(eventType, rawFlags: rawFlags, keyCode: keyCode)
     }
     return Unmanaged.passUnretained(event)
 }
@@ -151,9 +189,11 @@ final class GlobalHotkeysService: ObservableObject {
 
     var onInvoke: ((GlobalShortcutConfiguration) -> Void)?
     var onWindowsSpaceGesture: ((WindowsSpaceGestureAction) -> Void)?
+    var onAltTabGesture: ((AltTabGestureAction) -> Void)?
 
     @Published private(set) var registrationIssues: [String: String] = [:]
     @Published private(set) var windowsKeyIssue: String?
+    @Published private(set) var altTabIssue: String?
 
     private var handler: EventHandlerRef?
     private var hotKeys: [EventHotKeyRef] = []
@@ -163,6 +203,7 @@ final class GlobalHotkeysService: ObservableObject {
     private(set) var isEnabled = false
     private var configurations: [GlobalShortcutConfiguration] = []
     private var reverseWindowsSpaceHotKeyIDs: Set<Int> = []
+    private var altTabHotKeyIDs: Set<Int> = []
     private var windowsKeyMapping: WindowsKeyMapping = .option
     private var windowsKeyOpensStart = true
     private var windowsKeyGesture = WindowsKeyGestureState()
@@ -170,6 +211,12 @@ final class GlobalHotkeysService: ObservableObject {
     private var windowsSpacePresentationWorkItem: DispatchWorkItem?
     private var windowsSpacePresentationGeneration = 0
     private var windowsSpaceTrackingEnabled = false
+    private var altTabGesture = AltTabGestureState()
+    private var altTabTrackingEnabled = false
+    private var altTabModifierPollingTask: Task<Void, Never>?
+
+    private static let altTabForwardHotKeyID = Int(UInt32.max - 1)
+    private static let altTabReverseHotKeyID = Int(UInt32.max)
 
     private init() {
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -185,6 +232,7 @@ final class GlobalHotkeysService: ObservableObject {
 
     func setConfiguration(
         enabled: Bool,
+        altTabSwitcherEnabled: Bool,
         windowsKeyMapping: WindowsKeyMapping,
         windowsKeyOpensStart: Bool,
         configurations: [GlobalShortcutConfiguration]
@@ -195,11 +243,18 @@ final class GlobalHotkeysService: ObservableObject {
         unregisterAll()
         windowsKeyGesture = WindowsKeyGestureState(windowsModifier: windowsKeyMapping.eventModifier)
         windowsSpaceGesture = WindowsSpaceGestureState(windowsModifier: windowsKeyMapping.eventModifier)
+        altTabGesture = AltTabGestureState()
         var issues = Self.duplicateIssues(configurations: configurations, mapping: windowsKeyMapping)
+        if altTabSwitcherEnabled {
+            issues.merge(Self.altTabConflicts(configurations: configurations, mapping: windowsKeyMapping)) {
+                current, _ in current
+            }
+        }
         for configuration in configurations where configuration.isEnabled && issues[configuration.id] == nil {
             issues[configuration.id] = configuration.validationIssue
         }
         windowsKeyIssue = nil
+        altTabIssue = nil
         if enabled {
             for (index, configuration) in configurations.enumerated() where configuration.isEnabled {
                 guard issues[configuration.id] == nil else { continue }
@@ -234,6 +289,10 @@ final class GlobalHotkeysService: ObservableObject {
                 windowsKeyIssue = "Event monitoring unavailable"
             }
             windowsSpaceTrackingEnabled = tracksWindowsSpace && windowsKeyEventTap != nil
+            if altTabSwitcherEnabled {
+                altTabIssue = registerAltTabHotKeys()
+                altTabTrackingEnabled = altTabIssue == nil
+            }
         } else {
             removeWindowsKeyEventTap()
         }
@@ -271,7 +330,25 @@ final class GlobalHotkeysService: ObservableObject {
         return reverseShortcut
     }
 
+    static func altTabConflicts(
+        configurations: [GlobalShortcutConfiguration],
+        mapping: WindowsKeyMapping
+    ) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: configurations.compactMap { configuration in
+            guard configuration.isEnabled else { return nil }
+            let shortcut = configuration.resolvedShortcut(mapping: mapping)
+            let modifiers = shortcut.modifiers & ~UInt32(shiftKey)
+            guard shortcut.keyCode == 48, modifiers == UInt32(optionKey) else { return nil }
+            return (configuration.id, "Conflicts with Alt+Tab Window Switcher")
+        })
+    }
+
     fileprivate func handle(id: Int) {
+        if altTabTrackingEnabled, altTabHotKeyIDs.contains(id) {
+            onAltTabGesture?(altTabGesture.press(reverse: id == Self.altTabReverseHotKeyID))
+            startAltTabModifierPolling()
+            return
+        }
         guard let configuration = configurationByHotKeyID[id] else { return }
         if windowsSpaceTrackingEnabled,
            configuration.usesWindowsKey,
@@ -309,15 +386,75 @@ final class GlobalHotkeysService: ObservableObject {
 
     private func unregisterAll() {
         cancelWindowsSpacePresentation()
+        stopAltTabModifierPolling()
         if let action = windowsSpaceGesture.reset() {
             onWindowsSpaceGesture?(action)
+        }
+        if let action = altTabGesture.cancel() {
+            onAltTabGesture?(action)
         }
         hotKeys.forEach { _ = UnregisterEventHotKey($0) }
         hotKeys.removeAll()
         configurationByHotKeyID.removeAll()
         reverseWindowsSpaceHotKeyIDs.removeAll()
+        altTabHotKeyIDs.removeAll()
         windowsSpaceTrackingEnabled = false
+        altTabTrackingEnabled = false
         removeWindowsKeyEventTap()
+    }
+
+    private func startAltTabModifierPolling() {
+        altTabModifierPollingTask?.cancel()
+        altTabModifierPollingTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(16))
+                guard let self, self.altTabGesture.isActive else { break }
+                let flags = CGEventSource.flagsState(.combinedSessionState)
+                guard !flags.contains(.maskAlternate) else { continue }
+                if let action = self.altTabGesture.flagsChanged(to: []) {
+                    self.onAltTabGesture?(action)
+                }
+                break
+            }
+            self?.altTabModifierPollingTask = nil
+        }
+    }
+
+    private func stopAltTabModifierPolling() {
+        altTabModifierPollingTask?.cancel()
+        altTabModifierPollingTask = nil
+    }
+
+    private func registerAltTabHotKeys() -> String? {
+        let shortcuts = [
+            (Self.altTabForwardHotKeyID, HotkeyShortcut(
+                keyCode: 48, modifiers: UInt32(optionKey), keyLabel: "Tab"
+            )),
+            (Self.altTabReverseHotKeyID, HotkeyShortcut(
+                keyCode: 48, modifiers: UInt32(optionKey | shiftKey), keyLabel: "Tab"
+            )),
+        ]
+        var registered: [EventHotKeyRef] = []
+        for (id, shortcut) in shortcuts {
+            var reference: EventHotKeyRef?
+            let hotKeyID = EventHotKeyID(signature: winTaskbarHotKeySignature, id: UInt32(id))
+            let status = RegisterEventHotKey(
+                shortcut.keyCode,
+                shortcut.modifiers,
+                hotKeyID,
+                GetApplicationEventTarget(),
+                0,
+                &reference
+            )
+            guard status == noErr, let reference else {
+                registered.forEach { _ = UnregisterEventHotKey($0) }
+                return "Option+Tab is already in use by another application"
+            }
+            registered.append(reference)
+        }
+        hotKeys.append(contentsOf: registered)
+        altTabHotKeyIDs = Set(shortcuts.map(\.0))
+        return nil
     }
 
     private func scheduleWindowsSpacePresentation() {
@@ -376,23 +513,36 @@ final class GlobalHotkeysService: ObservableObject {
         windowsKeyEventTap = nil
     }
 
-    fileprivate func handleWindowsKeyEvent(_ eventType: CGEventType, rawFlags: UInt64) {
+    fileprivate func handleWindowsKeyEvent(_ eventType: CGEventType, rawFlags: UInt64, keyCode: Int64) {
         if eventType == .tapDisabledByTimeout || eventType == .tapDisabledByUserInput {
             cancelWindowsSpacePresentation()
             windowsKeyGesture.reset()
             if let action = windowsSpaceGesture.reset() {
                 onWindowsSpaceGesture?(action)
             }
+            if let action = altTabGesture.cancel() {
+                onAltTabGesture?(action)
+            }
+            stopAltTabModifierPolling()
             if let eventTap = windowsKeyEventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
             }
             return
         }
         let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(rawFlags))
+        if eventType == .keyDown, keyCode == 53, let action = altTabGesture.cancel() {
+            stopAltTabModifierPolling()
+            onAltTabGesture?(action)
+        }
         if eventType == .flagsChanged,
            let action = windowsSpaceGesture.flagsChanged(to: modifierFlags) {
             cancelWindowsSpacePresentation()
             onWindowsSpaceGesture?(action)
+        }
+        if eventType == .flagsChanged,
+           let action = altTabGesture.flagsChanged(to: modifierFlags) {
+            stopAltTabModifierPolling()
+            onAltTabGesture?(action)
         }
         if windowsKeyGesture.handle(eventType: eventType, modifierFlags: modifierFlags) {
             onInvoke?(GlobalShortcutConfiguration(

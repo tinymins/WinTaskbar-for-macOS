@@ -33,7 +33,7 @@ struct TaskbarAppPrimaryClickPolicy {
     }
 }
 
-private enum AccessibilityWindowIdentity {
+enum AccessibilityWindowIdentity {
     private typealias GetWindowID = @convention(c) (AXUIElement, UnsafeMutablePointer<CGWindowID>) -> AXError
 
     // AX has no public window-ID attribute. Resolve this SPI optionally so its
@@ -284,10 +284,20 @@ final class WindowsService {
     }
 
     func windows(forPIDs pids: [pid_t]) -> [pid_t: [WindowInfo]] {
+        windowSnapshot(forPIDs: pids).windowsByPID
+    }
+
+    func windowsInFrontToBackOrder(forPIDs pids: [pid_t]) -> [WindowInfo] {
+        windowSnapshot(forPIDs: pids).frontToBackWindows
+    }
+
+    private func windowSnapshot(
+        forPIDs pids: [pid_t]
+    ) -> (windowsByPID: [pid_t: [WindowInfo]], frontToBackWindows: [WindowInfo]) {
         let requestedPIDs = Set(pids)
-        guard !requestedPIDs.isEmpty else { return [:] }
+        guard !requestedPIDs.isEmpty else { return ([:], []) }
         guard let raw = CGWindowListCopyWindowInfo(WindowPreviewWindowPolicy.listOptions, kCGNullWindowID)
-                as? [[String: Any]] else { return [:] }
+                as? [[String: Any]] else { return ([:], []) }
         let candidates: [(pid: pid_t, windowID: CGWindowID, title: String, frame: CGRect, isOnScreen: Bool)]
         candidates = raw.compactMap { info in
             guard let ownerPID = info[kCGWindowOwnerPID as String] as? pid_t,
@@ -315,19 +325,22 @@ final class WindowsService {
             accessibilityWindowsByPID[pid] = accessibilityWindowStates(forPID: pid)
         }
         var windowsByPID: [pid_t: [WindowInfo]] = [:]
+        var frontToBackWindows: [WindowInfo] = []
         for candidate in candidates {
             guard WindowPreviewWindowPolicy.shouldInclude(
                 windowID: candidate.windowID,
                 isOnScreen: candidate.isOnScreen,
                 accessibilityWindows: accessibilityWindowsByPID[candidate.pid]
             ) else { continue }
-            windowsByPID[candidate.pid, default: []].append(WindowInfo(
+            let window = WindowInfo(
                 windowID: candidate.windowID,
                 title: candidate.title,
                 ownerPID: candidate.pid,
                 frame: candidate.frame,
                 isMinimized: accessibilityWindowsByPID[candidate.pid]?[candidate.windowID] ?? false
-            ))
+            )
+            windowsByPID[candidate.pid, default: []].append(window)
+            frontToBackWindows.append(window)
         }
         for pid in requestedPIDs {
             let orderedWindowIDs = appearanceOrder.reconcile(
@@ -343,7 +356,7 @@ final class WindowsService {
                 windowsByPID[pid] = orderedWindows
             }
         }
-        return windowsByPID
+        return (windowsByPID, frontToBackWindows)
     }
 
     func cacheThumbnails(forPID pid: pid_t) {

@@ -58,6 +58,7 @@ final class PreferencesStore: ObservableObject {
     @Published var windowPreviewsEnabled: Bool { didSet { defaults.set(windowPreviewsEnabled, forKey: "wintaskbar.feature.windowPreviews") } }
     @Published var showDesktopEnabled: Bool { didSet { defaults.set(showDesktopEnabled, forKey: "wintaskbar.feature.showDesktop") } }
     @Published var globalHotkeysEnabled: Bool { didSet { defaults.set(globalHotkeysEnabled, forKey: "wintaskbar.feature.globalHotkeys") } }
+    @Published var altTabSwitcherEnabled: Bool { didSet { defaults.set(altTabSwitcherEnabled, forKey: "wintaskbar.feature.altTabSwitcher") } }
     @Published var windowsKeyMapping: WindowsKeyMapping { didSet { defaults.set(windowsKeyMapping.rawValue, forKey: "wintaskbar.windowsKeyMapping") } }
     @Published var windowsKeyOpensStart: Bool { didSet { defaults.set(windowsKeyOpensStart, forKey: "wintaskbar.windowsKeyOpensStart") } }
     @Published var globalShortcutConfigurations: [GlobalShortcutConfiguration] {
@@ -164,6 +165,7 @@ final class PreferencesStore: ObservableObject {
         windowPreviewsEnabled = defaults.object(forKey: "wintaskbar.feature.windowPreviews") as? Bool ?? true
         showDesktopEnabled = defaults.object(forKey: "wintaskbar.feature.showDesktop") as? Bool ?? true
         globalHotkeysEnabled = defaults.object(forKey: "wintaskbar.feature.globalHotkeys") as? Bool ?? true
+        altTabSwitcherEnabled = defaults.object(forKey: "wintaskbar.feature.altTabSwitcher") as? Bool ?? true
         windowsKeyMapping = WindowsKeyMapping(rawValue: defaults.string(forKey: "wintaskbar.windowsKeyMapping") ?? "") ?? .option
         windowsKeyOpensStart = defaults.object(forKey: "wintaskbar.windowsKeyOpensStart") as? Bool ?? true
         let legacyShortcuts = Self.load([HotkeyShortcut].self, key: "wintaskbar.hotkeyShortcuts", defaults: defaults)
@@ -279,6 +281,7 @@ final class PreferencesStore: ObservableObject {
         windowPreviewsEnabled = true
         showDesktopEnabled = true
         globalHotkeysEnabled = true
+        altTabSwitcherEnabled = true
         windowsKeyMapping = .option
         windowsKeyOpensStart = true
         globalShortcutConfigurations = GlobalShortcutCatalog.defaults(

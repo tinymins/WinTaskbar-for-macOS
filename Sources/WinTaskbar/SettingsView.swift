@@ -530,6 +530,15 @@ struct SettingsView: View {
     private var hotkeySettings: some View {
         SettingsSection("Windows Global Shortcuts") {
             Toggle("Enable global shortcuts", isOn: $preferences.globalHotkeysEnabled)
+            Toggle("Enable Alt+Tab window switcher", isOn: $preferences.altTabSwitcherEnabled)
+                .disabled(!preferences.globalHotkeysEnabled)
+            if let issue = globalHotkeys.altTabIssue,
+               preferences.globalHotkeysEnabled,
+               preferences.altTabSwitcherEnabled {
+                Text(issue)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
             Picker("Windows key", selection: $preferences.windowsKeyMapping) {
                 ForEach(WindowsKeyMapping.allCases) { mapping in
                     Text(mapping.rawValue).tag(mapping)
@@ -544,7 +553,7 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
-            Text("Option preserves the existing WinTaskbar behavior. Command matches the Windows-logo key on most PC keyboards connected to a Mac.")
+            Text("Alt+Tab uses the Mac Option key. Option preserves the existing WinTaskbar Windows-key mapping; Command matches the Windows-logo key on most PC keyboards connected to a Mac.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text("Enabled mappings override matching macOS and application shortcuts.")

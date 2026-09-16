@@ -13,6 +13,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let actions = AppActions()
     private let windowsService = WindowsService()
     private lazy var windowActivator = WindowActivationService(windowsService: windowsService)
+    private let windowActivationHistory = WindowActivationHistory()
+    private lazy var windowSwitcherController = WindowSwitcherPanelController(
+        windowsService: windowsService,
+        activationService: windowActivator,
+        activationHistory: windowActivationHistory
+    )
     private let recentDocuments = RecentDocumentsService()
     private lazy var dockBadges = DockBadgeService(apps: apps)
     private let powerService = PowerService()
@@ -41,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dockToggleService.applyConfiguredStateOnLaunch()
         recentDocuments.start()
         clipboardHistoryService.start()
+        windowActivationHistory.start()
 
         let taskbar = TaskbarWindowController(
             preferences: preferences,
@@ -77,6 +84,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         globalHotkeysService.onWindowsSpaceGesture = { [weak taskbar] action in
             taskbar?.handleWindowsSpaceGesture(action)
         }
+        globalHotkeysService.onAltTabGesture = { [weak self] action in
+            self?.windowSwitcherController.handle(action)
+        }
         actions.showDesktopHandler = { [weak self] in self?.showDesktopService.toggle() }
         actions.powerHandler = { [weak self] action in self?.confirmAndPerform(action) }
         actions.showRunDialogHandler = { [weak self] in self?.runWindowController.show() }
@@ -100,15 +110,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .map { builtIn, custom in
                 builtIn + custom.compactMap { $0.registrationConfiguration() }
             }
-        Publishers.CombineLatest4(
-            preferences.$globalHotkeysEnabled,
-            preferences.$windowsKeyMapping,
-            preferences.$windowsKeyOpensStart,
-            registeredShortcutConfigurations
+        Publishers.CombineLatest(
+            Publishers.CombineLatest4(
+                preferences.$globalHotkeysEnabled,
+                preferences.$windowsKeyMapping,
+                preferences.$windowsKeyOpensStart,
+                registeredShortcutConfigurations
+            ),
+            preferences.$altTabSwitcherEnabled
         )
-            .sink { [weak self] enabled, mapping, opensStart, configurations in
+            .sink { [weak self] values, altTabSwitcherEnabled in
+                let (enabled, mapping, opensStart, configurations) = values
                 self?.globalHotkeysService.setConfiguration(
                     enabled: enabled,
+                    altTabSwitcherEnabled: altTabSwitcherEnabled,
                     windowsKeyMapping: mapping,
                     windowsKeyOpensStart: opensStart,
                     configurations: configurations
@@ -151,6 +166,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--settings-demo") {
             startMenu.toggle()
             settings.show()
+        }
+        if CommandLine.arguments.contains("--alt-tab-demo") {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(1))
+                self?.windowSwitcherController.handle(.present(reverse: false))
+            }
         }
 #endif
         windowFittingService.start()
@@ -2322,6 +2343,20 @@ func runSelfTest() async -> Int32 {
     var quickReverseWindowsSpaceGesture = WindowsSpaceGestureState()
     var heldWindowsSpaceGesture = WindowsSpaceGestureState()
     var interruptedWindowsSpaceGesture = WindowsSpaceGestureState()
+    var forwardAltTabGesture = AltTabGestureState()
+    var cancelledAltTabGesture = AltTabGestureState()
+    var windowActivationOrder = WindowActivationOrder()
+    let shortcutDefaults = GlobalShortcutCatalog.defaults(
+        legacyShortcuts: GlobalShortcutCatalog.defaultLegacyShortcuts
+    )
+    let optionAltTabConflicts = GlobalHotkeysService.altTabConflicts(
+        configurations: shortcutDefaults,
+        mapping: .option
+    )
+    let commandAltTabConflicts = GlobalHotkeysService.altTabConflicts(
+        configurations: shortcutDefaults,
+        mapping: .command
+    )
     guard let reverseWindowsSpaceShortcut,
           reverseWindowsSpaceShortcut.keyCode == forwardWindowsSpaceShortcut.keyCode,
           reverseWindowsSpaceShortcut.modifiers == UInt32(optionKey | shiftKey),
@@ -2343,8 +2378,41 @@ func runSelfTest() async -> Int32 {
           heldWindowsSpaceGesture.reset() == nil,
           interruptedWindowsSpaceGesture.press() == nil,
           interruptedWindowsSpaceGesture.presentationDelayElapsed() == .present,
-          interruptedWindowsSpaceGesture.reset() == .dismiss else {
-        fputs("SELF-TEST FAILED: Win+Space gesture lifecycle mismatch\n", stderr)
+          interruptedWindowsSpaceGesture.reset() == .dismiss,
+          forwardAltTabGesture.press(reverse: false) == .present(reverse: false),
+          forwardAltTabGesture.flagsChanged(to: [.option]) == nil,
+          forwardAltTabGesture.press(reverse: false) == .advance,
+          forwardAltTabGesture.press(reverse: true) == .retreat,
+          forwardAltTabGesture.flagsChanged(to: []) == .commit,
+          forwardAltTabGesture.cancel() == nil,
+          cancelledAltTabGesture.press(reverse: true) == .present(reverse: true),
+          cancelledAltTabGesture.cancel() == .cancel,
+          optionAltTabConflicts[GlobalShortcutCatalog.taskViewID]
+            == "Conflicts with Alt+Tab Window Switcher",
+          commandAltTabConflicts[GlobalShortcutCatalog.taskViewID] == nil,
+          windowActivationOrder.reconcile(
+              availableWindowIDs: [101, 202, 303],
+              fallbackWindowIDs: [202, 101, 303]
+          ) == [202, 101, 303] else {
+        fputs("SELF-TEST FAILED: held-key switcher gesture or initial MRU order mismatch\n", stderr)
+        return 1
+    }
+    windowActivationOrder.record(101)
+    guard windowActivationOrder.reconcile(
+        availableWindowIDs: [101, 202, 303],
+        fallbackWindowIDs: [202, 101, 303]
+    ) == [101, 202, 303],
+    windowActivationOrder.reconcile(
+        availableWindowIDs: [202, 303, 404],
+        fallbackWindowIDs: [404, 202, 303]
+    ) == [202, 303, 404],
+    WindowSwitcherLayout.columnCount(windowCount: 20, availableWidth: 1_920 * 0.88) == 5,
+    WindowSwitcherLayout.columnCount(windowCount: 6, availableWidth: 1_920 * 0.88) == 3,
+    WindowSwitcherLayout.panelSize(
+        windowCount: 20,
+        screenFrame: CGRect(x: 0, y: 0, width: 1_920, height: 1_080)
+    ).height <= 1_080 * 0.76 else {
+        fputs("SELF-TEST FAILED: Alt+Tab MRU reconciliation or panel geometry mismatch\n", stderr)
         return 1
     }
 
