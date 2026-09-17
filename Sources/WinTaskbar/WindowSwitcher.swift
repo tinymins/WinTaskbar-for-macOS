@@ -56,6 +56,8 @@ final class WindowActivationHistory {
     private var observations: [pid_t: Observation] = [:]
     private var workspaceObservers: [NSObjectProtocol] = []
     private var isStarted = false
+    private var focusedWindowCaptureTask: Task<Void, Never>?
+    private var focusedWindowCaptureGeneration = 0
 
     init(workspace: NSWorkspace = .shared) {
         self.workspace = workspace
@@ -128,17 +130,38 @@ final class WindowActivationHistory {
     }
 
     fileprivate func recordFocusedWindow(forPID pid: pid_t) {
-        let application = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(application, 0.1)
-        guard let window: AXUIElement = attribute(application, kAXFocusedWindowAttribute),
-        let windowID = AccessibilityWindowIdentity.windowID(of: window) else { return }
-        activationOrder.record(windowID)
+        focusedWindowCaptureGeneration &+= 1
+        let generation = focusedWindowCaptureGeneration
+        focusedWindowCaptureTask?.cancel()
+        focusedWindowCaptureTask = Task { [weak self] in
+            let windowID = await Task.detached(priority: .userInitiated) {
+                Self.focusedWindowID(forPID: pid)
+            }.value
+            guard let self else { return }
+            defer {
+                if focusedWindowCaptureGeneration == generation { focusedWindowCaptureTask = nil }
+            }
+            guard !Task.isCancelled,
+                  focusedWindowCaptureGeneration == generation,
+                  let windowID else { return }
+            activationOrder.record(windowID)
+        }
     }
 
-    private func attribute<T>(_ element: AXUIElement, _ name: String) -> T? {
+    private nonisolated static func focusedWindowID(forPID pid: pid_t) -> CGWindowID? {
+        let application = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(application, 0.1)
         var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
-        return value as? T
+        guard AXUIElementCopyAttributeValue(
+            application,
+            kAXFocusedWindowAttribute as CFString,
+            &value
+        ) == .success,
+        let value,
+        CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        let window = value as! AXUIElement
+        AXUIElementSetMessagingTimeout(window, 0.1)
+        return AccessibilityWindowIdentity.windowID(of: window)
     }
 
     private func eligibleApplications() -> [NSRunningApplication] {

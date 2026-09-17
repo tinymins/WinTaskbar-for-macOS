@@ -620,13 +620,16 @@ final class RecentDocumentsService: ObservableObject {
     private let maxPerApp = 10
     @Published private var store: [String: [String]]
     nonisolated(unsafe) private var observer: NSObjectProtocol?
+    private var captureTask: Task<Void, Never>?
+    private var captureGeneration = 0
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         store = defaults.dictionary(forKey: Self.storageKey) as? [String: [String]] ?? [:]
     }
 
-    deinit {
+    isolated deinit {
+        captureTask?.cancel()
         if let observer {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
@@ -642,12 +645,31 @@ final class RecentDocumentsService: ObservableObject {
             guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
                     as? NSRunningApplication,
                   let bundleID = application.bundleIdentifier,
-                  application.processIdentifier != ProcessInfo.processInfo.processIdentifier,
-                  let documentURL = Self.focusedDocumentURL(pid: application.processIdentifier) else { return }
-            let folder = ProjectFolder.resolve(forFile: documentURL).absoluteString
-            Task { @MainActor [weak self] in
-                self?.record(bundleID: bundleID, folder: folder)
+                  application.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+            let pid = application.processIdentifier
+            MainActor.assumeIsolated {
+                self?.captureFocusedDocument(pid: pid, bundleID: bundleID)
             }
+        }
+    }
+
+    private func captureFocusedDocument(pid: pid_t, bundleID: String) {
+        captureGeneration &+= 1
+        let generation = captureGeneration
+        captureTask?.cancel()
+        captureTask = Task { [weak self] in
+            let folder = await Task.detached(priority: .utility) {
+                guard let documentURL = Self.focusedDocumentURL(pid: pid) else { return nil as String? }
+                return ProjectFolder.resolve(forFile: documentURL).absoluteString
+            }.value
+            guard let self else { return }
+            defer {
+                if captureGeneration == generation { captureTask = nil }
+            }
+            guard !Task.isCancelled,
+                  captureGeneration == generation,
+                  let folder else { return }
+            record(bundleID: bundleID, folder: folder)
         }
     }
 
@@ -677,6 +699,7 @@ final class RecentDocumentsService: ObservableObject {
 
     private nonisolated static func focusedDocumentURL(pid: pid_t) -> URL? {
         let application = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(application, 0.1)
         var focusedRaw: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
             application,
@@ -687,6 +710,7 @@ final class RecentDocumentsService: ObservableObject {
         CFGetTypeID(focusedRaw) == AXUIElementGetTypeID() else { return nil }
 
         let focusedWindow = focusedRaw as! AXUIElement
+        AXUIElementSetMessagingTimeout(focusedWindow, 0.1)
         var documentRaw: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
             focusedWindow,

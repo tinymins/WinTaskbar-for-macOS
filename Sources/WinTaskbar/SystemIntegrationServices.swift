@@ -498,6 +498,7 @@ final class WindowFittingService {
     private var observedApplication: AXUIElement?
     private var observedWindow: AXUIElement?
     private var observedWindowKey: WindowKey?
+    private var pendingAttachment: DispatchWorkItem?
     private var pendingReservation: DispatchWorkItem?
     private var lastFrames: [WindowKey: CGRect] = [:]
     private var managedWindows: [WindowKey: WindowReservationState] = [:]
@@ -505,6 +506,7 @@ final class WindowFittingService {
     init(preferences: PreferencesStore) { self.preferences = preferences }
 
     isolated deinit {
+        pendingAttachment?.cancel()
         pendingReservation?.cancel()
         detach()
         if let workspaceObserver {
@@ -518,11 +520,12 @@ final class WindowFittingService {
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] notification in
+            let pid = (notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication)?.processIdentifier
             MainActor.assumeIsolated {
-                guard let self,
-                      let app = NSWorkspace.shared.frontmostApplication else { return }
-                self.attach(to: app)
+                guard let self, let pid else { return }
+                self.scheduleAttachment(toPID: pid)
             }
         }
         if let app = NSWorkspace.shared.frontmostApplication { attach(to: app) }
@@ -557,6 +560,8 @@ final class WindowFittingService {
     }
 
     private func attach(to app: NSRunningApplication) {
+        pendingAttachment?.cancel()
+        pendingAttachment = nil
         detach()
         guard AXIsProcessTrusted(),
               app.activationPolicy == .regular,
@@ -566,6 +571,7 @@ final class WindowFittingService {
         guard AXObserverCreate(app.processIdentifier, windowFittingAXCallback, &createdObserver) == .success,
               let createdObserver else { return }
         let application = AXUIElementCreateApplication(app.processIdentifier)
+        AXUIElementSetMessagingTimeout(application, 0.1)
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         guard AXObserverAddNotification(
             createdObserver,
@@ -577,6 +583,18 @@ final class WindowFittingService {
         observedApplication = application
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(createdObserver), .defaultMode)
         observeFocusedWindow()
+    }
+
+    private func scheduleAttachment(toPID pid: pid_t) {
+        pendingAttachment?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self,
+                  NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
+                  let application = NSRunningApplication(processIdentifier: pid) else { return }
+            self.attach(to: application)
+        }
+        pendingAttachment = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(400), execute: work)
     }
 
     private func detach() {
@@ -609,8 +627,13 @@ final class WindowFittingService {
         }
         guard let observer,
               let application = observedApplication,
-              let window = Self.element(application, attribute: kAXFocusedWindowAttribute as CFString),
-              let frame = Self.cocoaFrame(of: window, primaryHeight: primaryHeight()) else {
+              let window = Self.element(application, attribute: kAXFocusedWindowAttribute as CFString) else {
+            observedWindow = nil
+            observedWindowKey = nil
+            return
+        }
+        AXUIElementSetMessagingTimeout(window, 0.1)
+        guard let frame = Self.cocoaFrame(of: window, primaryHeight: primaryHeight()) else {
             observedWindow = nil
             observedWindowKey = nil
             return
