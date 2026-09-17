@@ -2671,6 +2671,21 @@ func runSelfTest() async -> Int32 {
         availableWindowIDs: [202, 303, 404],
         fallbackWindowIDs: [404, 202, 303]
     ) == [202, 303, 404],
+    WindowSwitcherSelection.indexAfterRemoving(
+        removedIndex: 0,
+        selectedIndex: 2,
+        remainingCount: 2
+    ) == 1,
+    WindowSwitcherSelection.indexAfterRemoving(
+        removedIndex: 1,
+        selectedIndex: 1,
+        remainingCount: 2
+    ) == 1,
+    WindowSwitcherSelection.indexAfterRemoving(
+        removedIndex: 0,
+        selectedIndex: 0,
+        remainingCount: 0
+    ) == 0,
     WindowSwitcherLayout.columnCount(windowCount: 20, availableWidth: 1_920 * 0.88) == 5,
     WindowSwitcherLayout.columnCount(windowCount: 6, availableWidth: 1_920 * 0.88) == 3,
     WindowSwitcherLayout.panelSize(

@@ -205,6 +205,56 @@ enum WindowSwitcherLayout {
     }
 }
 
+enum WindowSwitcherSelection {
+    static func indexAfterRemoving(
+        removedIndex: Int,
+        selectedIndex: Int,
+        remainingCount: Int
+    ) -> Int {
+        guard remainingCount > 0 else { return 0 }
+        if removedIndex < selectedIndex { return selectedIndex - 1 }
+        return min(selectedIndex, remainingCount - 1)
+    }
+}
+
+private enum WindowSwitcherWindowAction: CaseIterable {
+    case close
+    case toggleMinimized
+    case toggleFullScreen
+
+    var capability: WindowControlCapabilities {
+        switch self {
+        case .close: .close
+        case .toggleMinimized: .minimize
+        case .toggleFullScreen: .fullScreen
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .close: Color(red: 1, green: 0.37, blue: 0.34)
+        case .toggleMinimized: Color(red: 1, green: 0.74, blue: 0.18)
+        case .toggleFullScreen: Color(red: 0.15, green: 0.79, blue: 0.25)
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .close: "xmark"
+        case .toggleMinimized: "minus"
+        case .toggleFullScreen: "arrow.up.left.and.arrow.down.right"
+        }
+    }
+
+    var accessibilityLabel: String {
+        switch self {
+        case .close: "Close window"
+        case .toggleMinimized: "Minimize or restore window"
+        case .toggleFullScreen: "Enter or exit full screen"
+        }
+    }
+}
+
 private final class WindowSwitcherPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
@@ -221,6 +271,7 @@ final class WindowSwitcherPanelController {
     private let hostingView = NSHostingView(rootView: AnyView(EmptyView()))
     private var windows: [WindowInfo] = []
     private var thumbnails: [CGWindowID: NSImage] = [:]
+    private var controlCapabilities: [CGWindowID: WindowControlCapabilities] = [:]
     private var selectedIndex = 0
 
     init(
@@ -296,6 +347,9 @@ final class WindowSwitcherPanelController {
         thumbnails = Dictionary(uniqueKeysWithValues: windows.compactMap { window in
             windowsService.thumbnail(for: window).map { (window.windowID, $0) }
         })
+        controlCapabilities = Dictionary(uniqueKeysWithValues: windows.map { window in
+            (window.windowID, activationService.controlCapabilities(for: window))
+        })
         refreshContent()
 
         let screen = screenAtMouseLocation() ?? NSScreen.main ?? NSScreen.screens.first
@@ -337,11 +391,40 @@ final class WindowSwitcherPanelController {
         commitSelection()
     }
 
+    private func perform(_ action: WindowSwitcherWindowAction, on windowID: CGWindowID) {
+        guard panel.isVisible,
+              let index = windows.firstIndex(where: { $0.windowID == windowID }) else { return }
+        let window = windows[index]
+        switch action {
+        case .close:
+            guard activationService.close(window: window) else { return }
+            windows.remove(at: index)
+            thumbnails.removeValue(forKey: windowID)
+            controlCapabilities.removeValue(forKey: windowID)
+            guard !windows.isEmpty else {
+                dismiss()
+                return
+            }
+            selectedIndex = WindowSwitcherSelection.indexAfterRemoving(
+                removedIndex: index,
+                selectedIndex: selectedIndex,
+                remainingCount: windows.count
+            )
+            refreshContent()
+        case .toggleMinimized:
+            activationService.toggleMinimized(window: window)
+        case .toggleFullScreen:
+            activationService.toggleFullScreen(window: window)
+        }
+    }
+
     private func refreshContent() {
         hostingView.rootView = AnyView(WindowSwitcherView(
             windows: windows,
             thumbnails: thumbnails,
+            controlCapabilities: controlCapabilities,
             selectedWindowID: windows.indices.contains(selectedIndex) ? windows[selectedIndex].windowID : nil,
+            onWindowAction: { [weak self] action, windowID in self?.perform(action, on: windowID) },
             onSelect: { [weak self] windowID in self?.selectAndCommit(windowID: windowID) }
         ))
     }
@@ -351,6 +434,7 @@ final class WindowSwitcherPanelController {
         hostingView.rootView = AnyView(EmptyView())
         windows = []
         thumbnails = [:]
+        controlCapabilities = [:]
         selectedIndex = 0
     }
 
@@ -363,7 +447,9 @@ final class WindowSwitcherPanelController {
 private struct WindowSwitcherView: View {
     let windows: [WindowInfo]
     let thumbnails: [CGWindowID: NSImage]
+    let controlCapabilities: [CGWindowID: WindowControlCapabilities]
     let selectedWindowID: CGWindowID?
+    let onWindowAction: (WindowSwitcherWindowAction, CGWindowID) -> Void
     let onSelect: (CGWindowID) -> Void
 
     var body: some View {
@@ -384,7 +470,9 @@ private struct WindowSwitcherView: View {
                         WindowSwitcherTile(
                             window: window,
                             thumbnail: thumbnails[window.windowID],
+                            controlCapabilities: controlCapabilities[window.windowID] ?? [],
                             isSelected: selectedWindowID == window.windowID,
+                            onWindowAction: { onWindowAction($0, window.windowID) },
                             action: { onSelect(window.windowID) }
                         )
                     }
@@ -400,39 +488,77 @@ private struct WindowSwitcherView: View {
 private struct WindowSwitcherTile: View {
     let window: WindowInfo
     let thumbnail: NSImage?
+    let controlCapabilities: WindowControlCapabilities
     let isSelected: Bool
+    let onWindowAction: (WindowSwitcherWindowAction) -> Void
     let action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
+
+    private var availableActions: [WindowSwitcherWindowAction] {
+        WindowSwitcherWindowAction.allCases.filter { controlCapabilities.contains($0.capability) }
+    }
+
+    private var controlsWidth: CGFloat {
+        let count = availableActions.count
+        return CGFloat(count) * 16 + CGFloat(max(0, count - 1)) * 6
+    }
 
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 7) {
-                    appIcon
-                    Text(window.title)
-                        .font(.system(size: 12, weight: .medium))
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
+        ZStack(alignment: .topTrailing) {
+            Button(action: action) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 7) {
+                        appIcon
+                        Text(window.title)
+                            .font(.system(size: 12, weight: isHovering ? .semibold : .medium))
+                            .foregroundStyle(Color.white.opacity(isHovering ? 1 : 0.82))
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        if !availableActions.isEmpty {
+                            Color.clear.frame(width: controlsWidth, height: 16)
+                        }
+                    }
+                    .frame(height: 20)
+                    preview
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(height: 20)
-                preview
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(10)
+                .frame(
+                    width: WindowSwitcherLayout.tileSize.width,
+                    height: WindowSwitcherLayout.tileSize.height
+                )
+                .background(Color.black.opacity(isHovering ? 0.72 : 0.64))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .stroke(
+                            isSelected
+                                ? Color(red: 0.12, green: 0.63, blue: 1)
+                                : Color.white.opacity(isHovering ? 0.22 : 0),
+                            lineWidth: isSelected ? 3 : 1
+                        )
+                }
+                .contentShape(Rectangle())
             }
-            .padding(10)
-            .frame(
-                width: WindowSwitcherLayout.tileSize.width,
-                height: WindowSwitcherLayout.tileSize.height
-            )
-            .background(Color.black.opacity(0.64))
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(isSelected ? Color(red: 0.12, green: 0.63, blue: 1) : .clear, lineWidth: 3)
+            .buttonStyle(WindowSwitcherTileButtonStyle())
+            .accessibilityLabel(window.title)
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+
+            if isHovering, !availableActions.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(availableActions, id: \.self) { action in
+                        WindowSwitcherControlButton(action: action) {
+                            onWindowAction(action)
+                        }
+                    }
+                }
+                .padding(.top, 12)
+                .padding(.trailing, 10)
             }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(window.title)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .onHover { isHovering = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovering)
     }
 
     @ViewBuilder
@@ -458,5 +584,51 @@ private struct WindowSwitcherTile: View {
             }
         }
         .frame(width: 16, height: 16)
+    }
+}
+
+private struct WindowSwitcherTileButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: configuration.isPressed ? 0.06 : 0.10),
+                value: configuration.isPressed
+            )
+    }
+}
+
+private struct WindowSwitcherControlButton: View {
+    let action: WindowSwitcherWindowAction
+    let perform: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: perform) {
+            Image(systemName: action.systemImage)
+                .font(.system(size: 7, weight: .bold))
+                .foregroundStyle(Color.black.opacity(0.66))
+                .frame(width: 16, height: 16)
+                .background(action.color.opacity(isHovering ? 1 : 0.9), in: Circle())
+                .overlay {
+                    Circle().stroke(Color.black.opacity(0.18), lineWidth: 0.5)
+                }
+                .contentShape(Circle())
+        }
+        .buttonStyle(WindowSwitcherControlButtonStyle())
+        .onHover { isHovering = $0 }
+        .help(action.accessibilityLabel)
+        .accessibilityLabel(action.accessibilityLabel)
+    }
+}
+
+private struct WindowSwitcherControlButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.86 : 1)
+            .opacity(configuration.isPressed ? 0.78 : 1)
+            .animation(.easeOut(duration: 0.06), value: configuration.isPressed)
     }
 }
