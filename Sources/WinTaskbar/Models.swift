@@ -742,7 +742,7 @@ struct TaskbarItem: Identifiable, Hashable {
     var icon: NSImage { AppIconCache.icon(for: url) }
 }
 
-struct WindowInfo: Identifiable, Hashable {
+struct WindowInfo: Identifiable, Hashable, Sendable {
     let windowID: CGWindowID
     let title: String
     let ownerPID: pid_t

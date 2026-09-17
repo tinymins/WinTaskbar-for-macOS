@@ -89,7 +89,7 @@ struct WindowControlCapabilities: OptionSet, Sendable {
 
 @MainActor
 final class WindowActivationService {
-    private static let fullScreenAttribute = "AXFullScreen"
+    nonisolated private static let fullScreenAttribute = "AXFullScreen"
     private let windowsService: WindowsService
 
     init(windowsService: WindowsService) {
@@ -140,7 +140,7 @@ final class WindowActivationService {
         return AXUIElementPerformAction(closeButton, kAXPressAction as CFString) == .success
     }
 
-    func controlCapabilities(for window: WindowInfo) -> WindowControlCapabilities {
+    nonisolated func controlCapabilities(for window: WindowInfo) -> WindowControlCapabilities {
         guard let match = matchingWindow(for: window) else { return [] }
         var capabilities: WindowControlCapabilities = []
         let closeButton: AXUIElement? = attribute(match, kAXCloseButtonAttribute)
@@ -192,12 +192,15 @@ final class WindowActivationService {
         }
     }
 
-    private func windows(of application: AXUIElement) -> [AXUIElement] {
+    nonisolated private func windows(of application: AXUIElement) -> [AXUIElement] {
         attribute(application, kAXWindowsAttribute) ?? []
     }
 
-    private func matchingWindow(for window: WindowInfo) -> AXUIElement? {
-        let elements = windows(of: AXUIElementCreateApplication(window.ownerPID))
+    nonisolated private func matchingWindow(for window: WindowInfo) -> AXUIElement? {
+        let application = AXUIElementCreateApplication(window.ownerPID)
+        AXUIElementSetMessagingTimeout(application, 0.1)
+        let elements = windows(of: application)
+        elements.forEach { AXUIElementSetMessagingTimeout($0, 0.1) }
         let candidates = elements.map { element in
             let windowID = AccessibilityWindowIdentity.windowID(of: element)
             return WindowIdentityCandidate(
@@ -219,7 +222,7 @@ final class WindowActivationService {
         return CFEqual(match, focusedWindow)
     }
 
-    private func frame(of element: AXUIElement) -> CGRect? {
+    nonisolated private func frame(of element: AXUIElement) -> CGRect? {
         guard let positionValue: AXValue = attribute(element, kAXPositionAttribute),
               let sizeValue: AXValue = attribute(element, kAXSizeAttribute) else { return nil }
         var origin = CGPoint.zero
@@ -229,13 +232,13 @@ final class WindowActivationService {
         return CGRect(origin: origin, size: size)
     }
 
-    private func attribute<T>(_ element: AXUIElement, _ name: String) -> T? {
+    nonisolated private func attribute<T>(_ element: AXUIElement, _ name: String) -> T? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
         return value as? T
     }
 
-    private func isSettable(_ element: AXUIElement, _ name: String) -> Bool {
+    nonisolated private func isSettable(_ element: AXUIElement, _ name: String) -> Bool {
         var result = DarwinBoolean(false)
         guard AXUIElementIsAttributeSettable(element, name as CFString, &result) == .success else { return false }
         return result.boolValue
@@ -248,6 +251,14 @@ final class WindowThumbnailCache {
 
     init() {
         images.countLimit = 32
+    }
+
+    func cachedImage(for windowID: CGWindowID) -> NSImage? {
+        images.object(forKey: NSNumber(value: windowID))
+    }
+
+    func store(_ image: NSImage, for windowID: CGWindowID) {
+        images.setObject(image, forKey: NSNumber(value: windowID))
     }
 
     func image(for windowID: CGWindowID, capture: () -> NSImage?) -> NSImage? {
@@ -321,6 +332,14 @@ struct WindowAppearanceOrder {
     }
 }
 
+private struct WindowSnapshotCandidate: Sendable {
+    let pid: pid_t
+    let windowID: CGWindowID
+    let title: String
+    let frame: CGRect
+    let isOnScreen: Bool
+}
+
 @MainActor
 final class WindowsService {
     private let thumbnailCache = WindowThumbnailCache()
@@ -338,38 +357,62 @@ final class WindowsService {
         windowSnapshot(forPIDs: pids).frontToBackWindows
     }
 
+    nonisolated static func visibleWindowsInFrontToBackOrder(forPIDs pids: [pid_t]) -> [WindowInfo] {
+        windowCandidates(
+            forPIDs: pids,
+            options: [.optionOnScreenOnly, .excludeDesktopElements]
+        ).map { candidate in
+            WindowInfo(
+                windowID: candidate.windowID,
+                title: candidate.title,
+                ownerPID: candidate.pid,
+                frame: candidate.frame,
+                isMinimized: false
+            )
+        }
+    }
+
+    nonisolated static func detailedWindowsInFrontToBackOrder(forPIDs pids: [pid_t]) -> [WindowInfo] {
+        let candidates = windowCandidates(
+            forPIDs: pids,
+            options: WindowPreviewWindowPolicy.listOptions
+        )
+        let statesByPID = Dictionary(uniqueKeysWithValues: Set(candidates.map(\.pid)).map { pid in
+            (pid, accessibilityWindowStates(forPID: pid))
+        })
+        return candidates.compactMap { candidate in
+            let states = statesByPID[candidate.pid] ?? nil
+            guard WindowPreviewWindowPolicy.shouldInclude(
+                windowID: candidate.windowID,
+                isOnScreen: candidate.isOnScreen,
+                accessibilityWindows: states
+            ) else { return nil }
+            return WindowInfo(
+                windowID: candidate.windowID,
+                title: candidate.title,
+                ownerPID: candidate.pid,
+                frame: candidate.frame,
+                isMinimized: states?[candidate.windowID] ?? false
+            )
+        }
+    }
+
     private func windowSnapshot(
         forPIDs pids: [pid_t]
     ) -> (windowsByPID: [pid_t: [WindowInfo]], frontToBackWindows: [WindowInfo]) {
         let requestedPIDs = Set(pids)
         guard !requestedPIDs.isEmpty else { return ([:], []) }
-        guard let raw = CGWindowListCopyWindowInfo(WindowPreviewWindowPolicy.listOptions, kCGNullWindowID)
-                as? [[String: Any]] else { return ([:], []) }
-        let candidates: [(pid: pid_t, windowID: CGWindowID, title: String, frame: CGRect, isOnScreen: Bool)]
-        candidates = raw.compactMap { info in
-            guard let ownerPID = info[kCGWindowOwnerPID as String] as? pid_t,
-                  requestedPIDs.contains(ownerPID),
-                  let windowID = info[kCGWindowNumber as String] as? CGWindowID,
-                  let bounds = info[kCGWindowBounds as String] as? [String: CGFloat],
-                  (info[kCGWindowLayer as String] as? Int ?? 0) == 0 else { return nil }
-            let title = (info[kCGWindowName as String] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Window"
-            let frame = CGRect(
-                x: bounds["X"] ?? 0,
-                y: bounds["Y"] ?? 0,
-                width: bounds["Width"] ?? 0,
-                height: bounds["Height"] ?? 0
-            )
-            guard frame.width > 80, frame.height > 50 else { return nil }
-            let isOnScreen = info[kCGWindowIsOnscreen as String] as? Bool ?? false
-            return (ownerPID, windowID, title, frame, isOnScreen)
-        }
+        let candidates = Self.windowCandidates(
+            forPIDs: pids,
+            options: WindowPreviewWindowPolicy.listOptions
+        )
         let observedWindowIDsByPID = Dictionary(grouping: candidates, by: \.pid).mapValues {
             $0.map(\.windowID)
         }
 
         var accessibilityWindowsByPID: [pid_t: [CGWindowID: Bool]] = [:]
         for pid in observedWindowIDsByPID.keys {
-            accessibilityWindowsByPID[pid] = accessibilityWindowStates(forPID: pid)
+            accessibilityWindowsByPID[pid] = Self.accessibilityWindowStates(forPID: pid)
         }
         var windowsByPID: [pid_t: [WindowInfo]] = [:]
         var frontToBackWindows: [WindowInfo] = []
@@ -420,18 +463,66 @@ final class WindowsService {
         }
     }
 
-    private func captureThumbnail(for window: WindowInfo) -> NSImage? {
+    func cachedThumbnail(for window: WindowInfo) -> NSImage? {
+        thumbnailCache.cachedImage(for: window.windowID)
+    }
+
+    func storeThumbnail(_ image: NSImage, for windowID: CGWindowID) {
+        thumbnailCache.store(image, for: windowID)
+    }
+
+    nonisolated static func captureThumbnailImage(for window: WindowInfo) -> CGImage? {
         guard !window.isMinimized else { return nil }
-        guard let image = CGWindowListCreateImage(
+        return CGWindowListCreateImage(
             .null,
             .optionIncludingWindow,
             window.windowID,
             [.boundsIgnoreFraming, .bestResolution]
-        ) else { return nil }
+        )
+    }
+
+    private func captureThumbnail(for window: WindowInfo) -> NSImage? {
+        guard let image = Self.captureThumbnailImage(for: window) else { return nil }
         return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
     }
 
-    private func accessibilityWindowStates(forPID pid: pid_t) -> [CGWindowID: Bool]? {
+    nonisolated private static func windowCandidates(
+        forPIDs pids: [pid_t],
+        options: CGWindowListOption
+    ) -> [WindowSnapshotCandidate] {
+        let requestedPIDs = Set(pids)
+        guard !requestedPIDs.isEmpty,
+              let raw = CGWindowListCopyWindowInfo(options, kCGNullWindowID)
+                as? [[String: Any]] else { return [] }
+        return raw.compactMap { info in
+            guard let ownerPID = info[kCGWindowOwnerPID as String] as? pid_t,
+                  requestedPIDs.contains(ownerPID),
+                  let windowID = info[kCGWindowNumber as String] as? CGWindowID,
+                  let bounds = info[kCGWindowBounds as String] as? [String: CGFloat],
+                  (info[kCGWindowLayer as String] as? Int ?? 0) == 0 else { return nil }
+            let title = (info[kCGWindowName as String] as? String).flatMap {
+                $0.isEmpty ? nil : $0
+            } ?? "Window"
+            let frame = CGRect(
+                x: bounds["X"] ?? 0,
+                y: bounds["Y"] ?? 0,
+                width: bounds["Width"] ?? 0,
+                height: bounds["Height"] ?? 0
+            )
+            guard frame.width > 80, frame.height > 50 else { return nil }
+            return WindowSnapshotCandidate(
+                pid: ownerPID,
+                windowID: windowID,
+                title: title,
+                frame: frame,
+                isOnScreen: info[kCGWindowIsOnscreen as String] as? Bool ?? false
+            )
+        }
+    }
+
+    nonisolated private static func accessibilityWindowStates(
+        forPID pid: pid_t
+    ) -> [CGWindowID: Bool]? {
         guard AccessibilityWindowIdentity.isAvailable else { return nil }
         let application = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(application, 0.1)

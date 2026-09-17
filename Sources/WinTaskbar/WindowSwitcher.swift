@@ -366,6 +366,26 @@ enum WindowSwitcherSelection {
     }
 }
 
+enum WindowSwitcherWindowList {
+    static let detailedCacheLifetime: TimeInterval = 10
+
+    static func initialWindows(
+        visibleWindows: [WindowInfo],
+        cachedWindows: [WindowInfo],
+        activePIDs: Set<pid_t>,
+        usesDetailedCache: Bool
+    ) -> [WindowInfo] {
+        guard usesDetailedCache else { return visibleWindows }
+        var windowIDs = Set(visibleWindows.map(\.windowID))
+        let cachedMinimizedWindows = cachedWindows.filter { window in
+            window.isMinimized
+                && activePIDs.contains(window.ownerPID)
+                && windowIDs.insert(window.windowID).inserted
+        }
+        return visibleWindows + cachedMinimizedWindows
+    }
+}
+
 enum WindowSwitcherDismissalPolicy {
     static func shouldDismissForMouseDown(panelFrame: CGRect, mouseLocation: CGPoint) -> Bool {
         !panelFrame.contains(mouseLocation)
@@ -376,6 +396,23 @@ enum WindowSwitcherBackdrop {
     static let blurRadius: CGFloat = 8
     static let tint = Color(red: 0.52, green: 0.53, blue: 0.54).opacity(0.30)
     private static let context = CIContext(options: [.cacheIntermediates: false])
+
+    struct Request: Hashable, Sendable {
+        let displayID: CGDirectDisplayID
+        let pixelRect: CGRect
+        let windowListRect: CGRect
+        let imageSize: CGSize
+    }
+
+    struct Capture: @unchecked Sendable {
+        let image: CGImage
+        let size: CGSize
+    }
+
+    struct Source: @unchecked Sendable {
+        let image: CGImage
+        let size: CGSize
+    }
 
     static func captureRect(
         panelFrame: CGRect,
@@ -391,23 +428,80 @@ enum WindowSwitcherBackdrop {
         ).integral
     }
 
-    static func image(panelFrame: CGRect, on screen: NSScreen) -> NSImage? {
+    static func request(panelFrame: CGRect, on screen: NSScreen) -> Request? {
         guard let displayID = screen.deviceDescription[
             NSDeviceDescriptionKey("NSScreenNumber")
         ] as? CGDirectDisplayID else { return nil }
-        let pixelRect = captureRect(
-            panelFrame: panelFrame,
-            screenFrame: screen.frame,
-            displayPixelWidth: CGFloat(CGDisplayPixelsWide(displayID))
+        let displayBounds = CGDisplayBounds(displayID)
+        let displayScaleX = displayBounds.width / screen.frame.width
+        let displayScaleY = displayBounds.height / screen.frame.height
+        return Request(
+            displayID: displayID,
+            pixelRect: captureRect(
+                panelFrame: panelFrame,
+                screenFrame: screen.frame,
+                displayPixelWidth: CGFloat(CGDisplayPixelsWide(displayID))
+            ),
+            windowListRect: CGRect(
+                x: displayBounds.minX + (panelFrame.minX - screen.frame.minX) * displayScaleX,
+                y: displayBounds.minY + (screen.frame.maxY - panelFrame.maxY) * displayScaleY,
+                width: panelFrame.width * displayScaleX,
+                height: panelFrame.height * displayScaleY
+            ).integral,
+            imageSize: panelFrame.size
         )
-        guard let capture = CGDisplayCreateImage(displayID, rect: pixelRect) else { return nil }
-        let input = CIImage(cgImage: capture)
+    }
+
+    nonisolated static func captureSource(
+        _ request: Request,
+        below windowID: CGWindowID? = nil
+    ) -> Source? {
+        let source: CGImage?
+        if let windowID {
+            source = CGWindowListCreateImage(
+                request.windowListRect,
+                .optionOnScreenBelowWindow,
+                windowID,
+                [.boundsIgnoreFraming, .bestResolution]
+            )
+        } else {
+            source = CGDisplayCreateImage(request.displayID, rect: request.pixelRect)
+        }
+        guard let source else { return nil }
+        return Source(image: source, size: request.imageSize)
+    }
+
+    nonisolated static func blur(_ source: Source) -> Capture? {
+        let input = CIImage(cgImage: source.image)
         guard let filter = CIFilter(name: "CIGaussianBlur") else { return nil }
         filter.setValue(input.clampedToExtent(), forKey: kCIInputImageKey)
         filter.setValue(blurRadius, forKey: kCIInputRadiusKey)
         guard let output = filter.outputImage?.cropped(to: input.extent),
               let blurred = context.createCGImage(output, from: input.extent) else { return nil }
-        return NSImage(cgImage: blurred, size: panelFrame.size)
+        return Capture(image: blurred, size: source.size)
+    }
+
+    nonisolated static func capture(_ request: Request) -> Capture? {
+        guard let source = captureSource(request) else { return nil }
+        return blur(source)
+    }
+
+    nonisolated static func capture(
+        _ request: Request,
+        below windowID: CGWindowID
+    ) -> Capture? {
+        guard let source = captureSource(request, below: windowID) else { return nil }
+        return blur(source)
+    }
+
+    static func image(from capture: Capture) -> NSImage {
+        NSImage(cgImage: capture.image, size: capture.size)
+    }
+
+    static func image(panelFrame: CGRect, on screen: NSScreen) -> NSImage? {
+        guard let request = request(panelFrame: panelFrame, on: screen),
+              let capture = capture(request) else { return nil }
+        return image(from: capture)
     }
 }
 
@@ -459,6 +553,17 @@ private final class WindowSwitcherPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+private struct WindowSwitcherCapturedThumbnail: @unchecked Sendable {
+    let windowID: CGWindowID
+    let image: CGImage
+}
+
+private struct WindowSwitcherRefreshResult: @unchecked Sendable {
+    let thumbnails: [WindowSwitcherCapturedThumbnail]
+    let controlCapabilities: [CGWindowID: WindowControlCapabilities]
+    let backdrop: WindowSwitcherBackdrop.Capture?
+}
+
 @MainActor
 final class WindowSwitcherPanelController {
     private let windowsService: WindowsService
@@ -477,6 +582,14 @@ final class WindowSwitcherPanelController {
     private var globalMouseMonitor: Any?
     private var selectedIndex = 0
     private var tilePreviewHeight = WindowSwitcherLayout.previewHeight
+    private var presentationID: UInt = 0
+    private var contentRefreshTask: Task<Void, Never>?
+    private var refreshTask: Task<Void, Never>?
+    private var windowCacheTask: Task<Void, Never>?
+    private var detailedWindowsCache: [WindowInfo] = []
+    private var detailedWindowsCacheDate = Date.distantPast
+    private var controlCapabilitiesCache: [CGWindowID: WindowControlCapabilities] = [:]
+    private var backdropCache: [WindowSwitcherBackdrop.Request: NSImage] = [:]
 
     init(
         windowsService: WindowsService,
@@ -508,6 +621,12 @@ final class WindowSwitcherPanelController {
         backdrop.layer?.masksToBounds = true
         backdrop.layer?.borderWidth = 1
         backdrop.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
+        backdrop.layer?.backgroundColor = NSColor(
+            calibratedRed: 0.31,
+            green: 0.32,
+            blue: 0.33,
+            alpha: 1
+        ).cgColor
 
         hostingView.sizingOptions = []
         hostingView.translatesAutoresizingMaskIntoConstraints = false
@@ -531,15 +650,38 @@ final class WindowSwitcherPanelController {
         }
     }
 
-    private func present(reverse: Bool) {
+    func prewarm() {
         let applications = workspace.runningApplications.filter {
             WindowSwitcherApplicationPolicy.shouldInclude(
                 activationPolicy: $0.activationPolicy,
                 isTerminated: $0.isTerminated
             )
         }
-        let frontToBackWindows = windowsService.windowsInFrontToBackOrder(
-            forPIDs: applications.map(\.processIdentifier)
+        refreshWindowCache(forPIDs: applications.map(\.processIdentifier))
+    }
+
+    private func present(reverse: Bool) {
+        contentRefreshTask?.cancel()
+        refreshTask?.cancel()
+        presentationID &+= 1
+        let currentPresentationID = presentationID
+        let applications = workspace.runningApplications.filter {
+            WindowSwitcherApplicationPolicy.shouldInclude(
+                activationPolicy: $0.activationPolicy,
+                isTerminated: $0.isTerminated
+            )
+        }
+        let applicationPIDs = applications.map(\.processIdentifier)
+        let visibleWindows = WindowsService.visibleWindowsInFrontToBackOrder(
+            forPIDs: applicationPIDs
+        )
+        let cacheIsFresh = Date().timeIntervalSince(detailedWindowsCacheDate)
+            <= WindowSwitcherWindowList.detailedCacheLifetime
+        let frontToBackWindows = WindowSwitcherWindowList.initialWindows(
+            visibleWindows: visibleWindows,
+            cachedWindows: detailedWindowsCache,
+            activePIDs: Set(applicationPIDs),
+            usesDetailedCache: cacheIsFresh
         )
         windows = activationHistory.orderedWindows(from: frontToBackWindows)
         guard !windows.isEmpty else {
@@ -548,20 +690,36 @@ final class WindowSwitcherPanelController {
         }
         selectedIndex = reverse ? windows.count - 1 : min(1, windows.count - 1)
         thumbnails = Dictionary(uniqueKeysWithValues: windows.compactMap { window in
-            windowsService.thumbnail(for: window).map { (window.windowID, $0) }
+            windowsService.cachedThumbnail(for: window).map { (window.windowID, $0) }
         })
-        controlCapabilities = Dictionary(uniqueKeysWithValues: windows.map { window in
-            (window.windowID, activationService.controlCapabilities(for: window))
+        controlCapabilities = Dictionary(uniqueKeysWithValues: windows.compactMap { window in
+            controlCapabilitiesCache[window.windowID].map { (window.windowID, $0) }
         })
 
         let screen = screenAtMouseLocation() ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
         let targetFrame = panelFrame(on: screen)
-        backdropImage = WindowSwitcherBackdrop.image(panelFrame: targetFrame, on: screen)
-        panel.setFrame(targetFrame, display: true)
-        refreshContent()
+        let backdropRequest = WindowSwitcherBackdrop.request(panelFrame: targetFrame, on: screen)
+        backdropImage = backdropRequest.flatMap { backdropCache[$0] }
+        panel.setFrame(targetFrame, display: false)
         panel.orderFrontRegardless()
         installMouseMonitors()
+        contentRefreshTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self,
+                  !Task.isCancelled,
+                  self.panel.isVisible,
+                  self.presentationID == currentPresentationID else { return }
+            self.refreshContent()
+            self.contentRefreshTask = nil
+        }
+        refreshWindowCache(forPIDs: applicationPIDs)
+        refreshPresentation(
+            windows: windows,
+            backdropRequest: backdropRequest,
+            backdropWindowID: CGWindowID(panel.windowNumber),
+            presentationID: currentPresentationID
+        )
     }
 
     private func moveSelection(by step: Int) {
@@ -628,10 +786,98 @@ final class WindowSwitcherPanelController {
         ))
     }
 
+    private func refreshWindowCache(forPIDs pids: [pid_t]) {
+        windowCacheTask?.cancel()
+        windowCacheTask = Task { @MainActor [weak self] in
+            let worker = Task.detached(priority: .utility) {
+                WindowsService.detailedWindowsInFrontToBackOrder(forPIDs: pids)
+            }
+            let windows = await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.detailedWindowsCache = windows
+            self.detailedWindowsCacheDate = Date()
+            self.windowCacheTask = nil
+        }
+    }
+
+    private func refreshPresentation(
+        windows presentedWindows: [WindowInfo],
+        backdropRequest: WindowSwitcherBackdrop.Request?,
+        backdropWindowID: CGWindowID,
+        presentationID: UInt
+    ) {
+        let activationService = activationService
+        refreshTask = Task { @MainActor [weak self] in
+            let worker = Task.detached(priority: .userInitiated) {
+                var capturedThumbnails: [WindowSwitcherCapturedThumbnail] = []
+                var capabilities: [CGWindowID: WindowControlCapabilities] = [:]
+                for window in presentedWindows {
+                    guard !Task.isCancelled else { break }
+                    if let image = WindowsService.captureThumbnailImage(for: window) {
+                        capturedThumbnails.append(WindowSwitcherCapturedThumbnail(
+                            windowID: window.windowID,
+                            image: image
+                        ))
+                    }
+                    guard !Task.isCancelled else { break }
+                    capabilities[window.windowID] = activationService.controlCapabilities(for: window)
+                }
+                let backdrop = Task.isCancelled
+                    ? nil
+                    : backdropRequest.flatMap {
+                        WindowSwitcherBackdrop.capture($0, below: backdropWindowID)
+                    }
+                return WindowSwitcherRefreshResult(
+                    thumbnails: capturedThumbnails,
+                    controlCapabilities: capabilities,
+                    backdrop: backdrop
+                )
+            }
+            let result = await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
+            guard let self,
+                  !Task.isCancelled,
+                  self.panel.isVisible,
+                  self.presentationID == presentationID else { return }
+
+            let currentWindowIDs = Set(self.windows.map(\.windowID))
+            for capture in result.thumbnails where currentWindowIDs.contains(capture.windowID) {
+                let image = NSImage(
+                    cgImage: capture.image,
+                    size: NSSize(width: capture.image.width, height: capture.image.height)
+                )
+                self.windowsService.storeThumbnail(image, for: capture.windowID)
+                self.thumbnails[capture.windowID] = image
+            }
+            self.controlCapabilitiesCache.merge(result.controlCapabilities) { _, refreshed in refreshed }
+            self.controlCapabilities = self.controlCapabilitiesCache.filter {
+                currentWindowIDs.contains($0.key)
+            }
+            if let backdropRequest, let capture = result.backdrop {
+                let image = WindowSwitcherBackdrop.image(from: capture)
+                self.backdropCache[backdropRequest] = image
+                self.backdropImage = image
+            }
+            self.refreshContent()
+            self.refreshTask = nil
+        }
+    }
+
     private func dismiss() {
+        contentRefreshTask?.cancel()
+        contentRefreshTask = nil
+        refreshTask?.cancel()
+        refreshTask = nil
+        presentationID &+= 1
         removeMouseMonitors()
         panel.orderOut(nil)
-        hostingView.rootView = AnyView(EmptyView())
         windows = []
         thumbnails = [:]
         controlCapabilities = [:]

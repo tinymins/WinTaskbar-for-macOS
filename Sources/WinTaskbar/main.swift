@@ -145,6 +145,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
             .store(in: &cancellables)
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            self?.windowSwitcherController.prewarm()
+        }
         preferences.$externalStatusItemsEnabled
             .removeDuplicates()
             .sink { [weak self] enabled in
@@ -2367,10 +2371,12 @@ func runSelfTest() async -> Int32 {
     let capturedThumbnail = NSImage(size: NSSize(width: 320, height: 180))
     let refreshedThumbnail = NSImage(size: NSSize(width: 640, height: 360))
     var thumbnailCaptureCount = 0
-    guard thumbnailCache.image(for: 101, capture: {
+    guard thumbnailCache.cachedImage(for: 101) == nil,
+          thumbnailCache.image(for: 101, capture: {
         thumbnailCaptureCount += 1
         return capturedThumbnail
     }) === capturedThumbnail,
+          thumbnailCache.cachedImage(for: 101) === capturedThumbnail,
           thumbnailCache.image(for: 101, capture: {
               thumbnailCaptureCount += 1
               return refreshedThumbnail
@@ -2381,7 +2387,8 @@ func runSelfTest() async -> Int32 {
               return refreshedThumbnail
           }) === refreshedThumbnail,
           thumbnailCaptureCount == 2,
-          thumbnailCache.image(for: 202, capture: { nil }) == nil else {
+          thumbnailCache.image(for: 202, capture: { nil }) == nil,
+          thumbnailCache.cachedImage(for: 202) == nil else {
         fputs("SELF-TEST FAILED: window thumbnail cache mismatch\n", stderr)
         return 1
     }
@@ -2679,6 +2686,20 @@ func runSelfTest() async -> Int32 {
         screenFrame: switcherScreenFrame
     )
     let switcherVisibleFrame = CGRect(x: 100, y: 50, width: 1_200, height: 800)
+    let visibleSwitcherWindow = WindowInfo(
+        windowID: 501,
+        title: "Visible",
+        ownerPID: 50,
+        frame: landscapeWindowFrame,
+        isMinimized: false
+    )
+    let cachedMinimizedSwitcherWindow = WindowInfo(
+        windowID: 502,
+        title: "Minimized",
+        ownerPID: 50,
+        frame: landscapeWindowFrame,
+        isMinimized: true
+    )
     guard windowActivationOrder.reconcile(
         availableWindowIDs: [101, 202, 303],
         fallbackWindowIDs: [202, 101, 303]
@@ -2766,6 +2787,18 @@ func runSelfTest() async -> Int32 {
         taskbarThickness: 48,
         reservesTaskbar: false
     ) == switcherVisibleFrame,
+    WindowSwitcherWindowList.initialWindows(
+        visibleWindows: [visibleSwitcherWindow],
+        cachedWindows: [visibleSwitcherWindow, cachedMinimizedSwitcherWindow],
+        activePIDs: [50],
+        usesDetailedCache: true
+    ).map(\.windowID) == [501, 502],
+    WindowSwitcherWindowList.initialWindows(
+        visibleWindows: [visibleSwitcherWindow],
+        cachedWindows: [cachedMinimizedSwitcherWindow],
+        activePIDs: [50],
+        usesDetailedCache: false
+    ).map(\.windowID) == [501],
     singleRowSwitcherLayout.rows.count == 1,
     singleRowSwitcherLayout.previewHeight > WindowSwitcherLayout.previewHeight,
     crowdedSwitcherLayout.previewHeight < WindowSwitcherLayout.previewHeight,
