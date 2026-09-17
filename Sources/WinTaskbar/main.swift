@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recentDocuments.start()
         clipboardHistoryService.start()
         windowActivationHistory.start()
+        windowFittingService.start()
 
         let taskbar = TaskbarWindowController(
             preferences: preferences,
@@ -1274,6 +1275,54 @@ func runSelfTest() async -> Int32 {
         position: .bottom,
         barHeight: 48
     ) == nil,
+    WindowFittingGeometry.reservationTarget(
+        for: fittingScreen.visibleFrame,
+        on: fittingScreen,
+        position: .bottom,
+        barHeight: 48
+    ) == CGRect(x: 0, y: 51, width: 1200, height: 724),
+    WindowFittingGeometry.reservationTarget(
+        for: fittingScreen.visibleFrame,
+        on: fittingScreen,
+        position: .top,
+        barHeight: 48
+    ) == CGRect(x: 0, y: 0, width: 1200, height: 724),
+    WindowFittingGeometry.reservationTarget(
+        for: fittingScreen.visibleFrame,
+        on: fittingScreen,
+        position: .left,
+        barHeight: 48
+    ) == CGRect(x: 51, y: 0, width: 1149, height: 775),
+    WindowFittingGeometry.reservationTarget(
+        for: fittingScreen.visibleFrame,
+        on: fittingScreen,
+        position: .right,
+        barHeight: 48
+    ) == CGRect(x: 0, y: 0, width: 1149, height: 775),
+    WindowFittingGeometry.reservationTarget(
+        for: CGRect(x: 0, y: 0, width: 600, height: 387.5),
+        on: fittingScreen,
+        position: .bottom,
+        barHeight: 48
+    ) == CGRect(x: 0, y: 51, width: 600, height: 336.5),
+    WindowFittingGeometry.reservationTarget(
+        for: fittingScreen.frame,
+        on: fittingScreen,
+        position: .bottom,
+        barHeight: 48
+    ) == nil,
+    WindowFittingGeometry.reservationTarget(
+        for: fittingScreen.visibleFrame,
+        on: fittingScreen,
+        position: .bottom,
+        barHeight: 0
+    ) == nil,
+    WindowFittingGeometry.reservationTarget(
+        for: CGRect(x: 100, y: 0, width: 600, height: 500),
+        on: fittingScreen,
+        position: .bottom,
+        barHeight: 48
+    ) == nil,
     WindowFittingGeometry.cocoaFrame(
         axPosition: CGPoint(x: 80, y: 120),
         size: CGSize(width: 600, height: 400),
@@ -1289,6 +1338,63 @@ func runSelfTest() async -> Int32 {
         in: [fittingScreen]
     ) else {
         fputs("SELF-TEST FAILED: window fitting geometry mismatch\n", stderr)
+        return 1
+    }
+
+    let leftFittingScreen = WindowFittingScreenBox(
+        frame: CGRect(x: -1200, y: 0, width: 1200, height: 800),
+        visibleFrame: CGRect(x: -1200, y: 0, width: 1200, height: 775)
+    )
+    guard WindowFittingGeometry.reservationTarget(
+        for: leftFittingScreen.visibleFrame,
+        on: leftFittingScreen,
+        position: .bottom,
+        barHeight: 48
+    ) == CGRect(x: -1200, y: 51, width: 1200, height: 724) else {
+        fputs("SELF-TEST FAILED: multi-display window reservation mismatch\n", stderr)
+        return 1
+    }
+
+    let originalWindowFrame = CGRect(x: 140, y: 120, width: 720, height: 520)
+    let reservedWindowFrame = CGRect(x: 0, y: 51, width: 1200, height: 724)
+    let reservationState = WindowReservationState(
+        originalFrame: originalWindowFrame,
+        systemFrame: fittingScreen.visibleFrame,
+        reservedFrame: reservedWindowFrame
+    )
+    guard WindowReservationPolicy.action(
+        current: fittingScreen.visibleFrame,
+        previous: originalWindowFrame,
+        managed: nil,
+        screen: fittingScreen,
+        position: .bottom,
+        barHeight: 48
+    ) == .reserve(reservationState),
+    WindowReservationPolicy.action(
+        current: reservedWindowFrame,
+        previous: reservedWindowFrame,
+        managed: reservationState,
+        screen: fittingScreen,
+        position: .bottom,
+        barHeight: 48
+    ) == .none,
+    WindowReservationPolicy.action(
+        current: fittingScreen.visibleFrame,
+        previous: reservedWindowFrame,
+        managed: reservationState,
+        screen: fittingScreen,
+        position: .bottom,
+        barHeight: 48
+    ) == .restore(originalWindowFrame),
+    WindowReservationPolicy.action(
+        current: originalWindowFrame,
+        previous: reservedWindowFrame,
+        managed: reservationState,
+        screen: fittingScreen,
+        position: .bottom,
+        barHeight: 48
+    ) == .release else {
+        fputs("SELF-TEST FAILED: window reservation state mismatch\n", stderr)
         return 1
     }
 

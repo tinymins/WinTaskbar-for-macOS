@@ -282,6 +282,8 @@ struct WindowFittingScreenBox: Equatable, Sendable {
 enum WindowFittingGeometry {
     static let safetyInset: CGFloat = 3
     static let minimumWindowSize = CGSize(width: 100, height: 60)
+    private static let reservationTolerance: CGFloat = 8
+    private static let standardGridFractions: [CGFloat] = [0, 0.25, 1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1]
 
     static func freeRect(
         on screen: WindowFittingScreenBox,
@@ -357,10 +359,112 @@ enum WindowFittingGeometry {
 
     static func isFullScreen(_ rect: CGRect, in screens: [WindowFittingScreenBox]) -> Bool {
         guard let screen = box(containing: rect, in: screens) else { return false }
-        return abs(rect.minX - screen.frame.minX) < 2
-            && abs(rect.minY - screen.frame.minY) < 2
-            && abs(rect.width - screen.frame.width) < 2
-            && abs(rect.height - screen.frame.height) < 2
+        return approximatelyEqual(rect, screen.frame, tolerance: 2)
+    }
+
+    static func reservationTarget(
+        for rect: CGRect,
+        on screen: WindowFittingScreenBox,
+        position: TaskbarPosition,
+        barHeight: CGFloat
+    ) -> CGRect? {
+        guard barHeight > 0,
+              !approximatelyEqual(rect, screen.frame, tolerance: 2),
+              isStandardManagedFrame(rect, in: screen.visibleFrame),
+              touchesReservedEdge(rect, of: screen.visibleFrame, position: position) else { return nil }
+        let target = rect.intersection(freeRect(on: screen, position: position, barHeight: barHeight))
+        guard !target.isNull,
+              target.width > minimumWindowSize.width,
+              target.height > minimumWindowSize.height,
+              !approximatelyEqual(target, rect) else { return nil }
+        return target
+    }
+
+    static func approximatelyEqual(_ lhs: CGRect, _ rhs: CGRect, tolerance: CGFloat = 3) -> Bool {
+        abs(lhs.minX - rhs.minX) < tolerance
+            && abs(lhs.minY - rhs.minY) < tolerance
+            && abs(lhs.width - rhs.width) < tolerance
+            && abs(lhs.height - rhs.height) < tolerance
+    }
+
+    private static func isStandardManagedFrame(_ rect: CGRect, in visibleFrame: CGRect) -> Bool {
+        guard visibleFrame.insetBy(dx: -reservationTolerance, dy: -reservationTolerance).contains(rect) else {
+            return false
+        }
+        return isGridCoordinate(rect.minX, origin: visibleFrame.minX, length: visibleFrame.width)
+            && isGridCoordinate(rect.maxX, origin: visibleFrame.minX, length: visibleFrame.width)
+            && isGridCoordinate(rect.minY, origin: visibleFrame.minY, length: visibleFrame.height)
+            && isGridCoordinate(rect.maxY, origin: visibleFrame.minY, length: visibleFrame.height)
+    }
+
+    private static func isGridCoordinate(_ value: CGFloat, origin: CGFloat, length: CGFloat) -> Bool {
+        guard length > 0 else { return false }
+        return standardGridFractions.contains {
+            abs(value - (origin + length * $0)) < reservationTolerance
+        }
+    }
+
+    private static func touchesReservedEdge(
+        _ rect: CGRect,
+        of visibleFrame: CGRect,
+        position: TaskbarPosition
+    ) -> Bool {
+        switch position {
+        case .bottom: abs(rect.minY - visibleFrame.minY) < reservationTolerance
+        case .top: abs(rect.maxY - visibleFrame.maxY) < reservationTolerance
+        case .left: abs(rect.minX - visibleFrame.minX) < reservationTolerance
+        case .right: abs(rect.maxX - visibleFrame.maxX) < reservationTolerance
+        }
+    }
+}
+
+struct WindowReservationState: Equatable, Sendable {
+    let originalFrame: CGRect?
+    let systemFrame: CGRect
+    let reservedFrame: CGRect
+}
+
+enum WindowReservationAction: Equatable, Sendable {
+    case none
+    case reserve(WindowReservationState)
+    case restore(CGRect)
+    case release
+}
+
+enum WindowReservationPolicy {
+    static func action(
+        current: CGRect,
+        previous: CGRect?,
+        managed: WindowReservationState?,
+        screen: WindowFittingScreenBox,
+        position: TaskbarPosition,
+        barHeight: CGFloat
+    ) -> WindowReservationAction {
+        if let managed {
+            if WindowFittingGeometry.approximatelyEqual(current, managed.reservedFrame) {
+                return .none
+            }
+            if WindowFittingGeometry.approximatelyEqual(current, managed.systemFrame),
+               let originalFrame = managed.originalFrame {
+                return .restore(originalFrame)
+            }
+            return .release
+        }
+
+        guard let reservedFrame = WindowFittingGeometry.reservationTarget(
+            for: current,
+            on: screen,
+            position: position,
+            barHeight: barHeight
+        ) else { return .none }
+        let originalFrame = previous.flatMap {
+            WindowFittingGeometry.approximatelyEqual($0, current) ? nil : $0
+        }
+        return .reserve(WindowReservationState(
+            originalFrame: originalFrame,
+            systemFrame: current,
+            reservedFrame: reservedFrame
+        ))
     }
 }
 
@@ -371,12 +475,58 @@ private struct WindowFittingContext: Sendable {
     let screens: [WindowFittingScreenBox]
 }
 
+private let windowFittingAXCallback: AXObserverCallback = { _, _, notification, refcon in
+    guard let refcon else { return }
+    let service = Unmanaged<WindowFittingService>.fromOpaque(refcon).takeUnretainedValue()
+    let name = notification as String
+    DispatchQueue.main.async {
+        MainActor.assumeIsolated { service.handleAXNotification(name) }
+    }
+}
+
 @MainActor
 final class WindowFittingService {
+    private struct WindowKey: Hashable {
+        let pid: pid_t
+        let elementHash: CFHashCode
+    }
+
     private let preferences: PreferencesStore
     private let axQueue = DispatchQueue(label: "io.github.tinymins.WinTaskbar.windowfitting.ax", qos: .userInitiated)
+    private var workspaceObserver: NSObjectProtocol?
+    private var observer: AXObserver?
+    private var observedApplication: AXUIElement?
+    private var observedWindow: AXUIElement?
+    private var observedWindowKey: WindowKey?
+    private var pendingReservation: DispatchWorkItem?
+    private var lastFrames: [WindowKey: CGRect] = [:]
+    private var managedWindows: [WindowKey: WindowReservationState] = [:]
 
     init(preferences: PreferencesStore) { self.preferences = preferences }
+
+    isolated deinit {
+        pendingReservation?.cancel()
+        detach()
+        if let workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver)
+        }
+    }
+
+    func start() {
+        guard workspaceObserver == nil else { return }
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self,
+                      let app = NSWorkspace.shared.frontmostApplication else { return }
+                self.attach(to: app)
+            }
+        }
+        if let app = NSWorkspace.shared.frontmostApplication { attach(to: app) }
+    }
 
     func fitAllWindowsToFreeSpace() {
         guard ensureAccessibility(), let context = context() else { return }
@@ -391,10 +541,128 @@ final class WindowFittingService {
         }
     }
 
+    fileprivate func handleAXNotification(_ name: String) {
+        if name == kAXFocusedWindowChangedNotification {
+            observeFocusedWindow()
+            return
+        }
+        guard name == kAXMovedNotification || name == kAXResizedNotification else { return }
+        scheduleReservation()
+    }
+
     private func ensureAccessibility() -> Bool {
         guard !AXIsProcessTrusted() else { return true }
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
+    }
+
+    private func attach(to app: NSRunningApplication) {
+        detach()
+        guard AXIsProcessTrusted(),
+              app.activationPolicy == .regular,
+              !app.isTerminated,
+              app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+        var createdObserver: AXObserver?
+        guard AXObserverCreate(app.processIdentifier, windowFittingAXCallback, &createdObserver) == .success,
+              let createdObserver else { return }
+        let application = AXUIElementCreateApplication(app.processIdentifier)
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        guard AXObserverAddNotification(
+            createdObserver,
+            application,
+            kAXFocusedWindowChangedNotification as CFString,
+            refcon
+        ) == .success else { return }
+        observer = createdObserver
+        observedApplication = application
+        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(createdObserver), .defaultMode)
+        observeFocusedWindow()
+    }
+
+    private func detach() {
+        pendingReservation?.cancel()
+        pendingReservation = nil
+        if let observer, let observedWindow {
+            _ = AXObserverRemoveNotification(observer, observedWindow, kAXMovedNotification as CFString)
+            _ = AXObserverRemoveNotification(observer, observedWindow, kAXResizedNotification as CFString)
+        }
+        if let observer, let observedApplication {
+            _ = AXObserverRemoveNotification(
+                observer,
+                observedApplication,
+                kAXFocusedWindowChangedNotification as CFString
+            )
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode)
+        }
+        observedWindow = nil
+        observedWindowKey = nil
+        observedApplication = nil
+        observer = nil
+    }
+
+    private func observeFocusedWindow() {
+        pendingReservation?.cancel()
+        pendingReservation = nil
+        if let observer, let observedWindow {
+            _ = AXObserverRemoveNotification(observer, observedWindow, kAXMovedNotification as CFString)
+            _ = AXObserverRemoveNotification(observer, observedWindow, kAXResizedNotification as CFString)
+        }
+        guard let observer,
+              let application = observedApplication,
+              let window = Self.element(application, attribute: kAXFocusedWindowAttribute as CFString),
+              let frame = Self.cocoaFrame(of: window, primaryHeight: primaryHeight()) else {
+            observedWindow = nil
+            observedWindowKey = nil
+            return
+        }
+        let key = WindowKey(pid: pid(of: application), elementHash: CFHash(window))
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        _ = AXObserverAddNotification(observer, window, kAXMovedNotification as CFString, refcon)
+        _ = AXObserverAddNotification(observer, window, kAXResizedNotification as CFString, refcon)
+        observedWindow = window
+        observedWindowKey = key
+        if managedWindows[key] == nil { lastFrames[key] = frame }
+    }
+
+    private func scheduleReservation() {
+        pendingReservation?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.reserveFocusedWindowIfNeeded() }
+        pendingReservation = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200), execute: work)
+    }
+
+    private func reserveFocusedWindowIfNeeded() {
+        pendingReservation = nil
+        guard AXIsProcessTrusted(),
+              let window = observedWindow,
+              let key = observedWindowKey,
+              Self.isStandardResizableWindow(window),
+              let context = context(),
+              let current = Self.cocoaFrame(of: window, primaryHeight: context.primaryHeight),
+              let screen = WindowFittingGeometry.box(containing: current, in: context.screens) else { return }
+        let action = WindowReservationPolicy.action(
+            current: current,
+            previous: lastFrames[key],
+            managed: managedWindows[key],
+            screen: screen,
+            position: context.position,
+            barHeight: context.barHeight
+        )
+        switch action {
+        case .none:
+            lastFrames[key] = current
+        case let .reserve(state):
+            managedWindows[key] = state
+            lastFrames[key] = state.reservedFrame
+            Self.setFrame(window, from: current, to: state.reservedFrame, primaryHeight: context.primaryHeight)
+        case let .restore(frame):
+            managedWindows.removeValue(forKey: key)
+            lastFrames[key] = frame
+            Self.setFrame(window, from: current, to: frame, primaryHeight: context.primaryHeight)
+        case .release:
+            managedWindows.removeValue(forKey: key)
+            lastFrames[key] = current
+        }
     }
 
     private func context() -> WindowFittingContext? {
@@ -411,6 +679,19 @@ final class WindowFittingService {
             barHeight: preferences.autoHideTaskbar ? 0 : CGFloat(preferences.barHeight),
             screens: screens
         )
+    }
+
+    private func primaryHeight() -> CGFloat {
+        NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame.height
+            ?? NSScreen.main?.frame.height
+            ?? NSScreen.screens.first?.frame.height
+            ?? 0
+    }
+
+    private func pid(of application: AXUIElement) -> pid_t {
+        var result: pid_t = 0
+        AXUIElementGetPid(application, &result)
+        return result
     }
 
     nonisolated private static func clampWindows(pid: pid_t, context: WindowFittingContext) {
@@ -434,10 +715,15 @@ final class WindowFittingService {
     }
 
     nonisolated private static func isFittable(_ window: AXUIElement, context: WindowFittingContext) -> Bool {
-        guard string(window, attribute: kAXSubroleAttribute as CFString) == kAXStandardWindowSubrole,
-              !bool(window, attribute: kAXMinimizedAttribute as CFString),
+        guard isStandardResizableWindow(window),
               let frame = cocoaFrame(of: window, primaryHeight: context.primaryHeight) else { return false }
         return !WindowFittingGeometry.isFullScreen(frame, in: context.screens)
+    }
+
+    nonisolated private static func isStandardResizableWindow(_ window: AXUIElement) -> Bool {
+        string(window, attribute: kAXSubroleAttribute as CFString) == kAXStandardWindowSubrole
+            && !bool(window, attribute: kAXMinimizedAttribute as CFString)
+            && isSettable(window, attribute: kAXSizeAttribute as CFString)
     }
 
     nonisolated private static func setFrame(
@@ -474,6 +760,12 @@ final class WindowFittingService {
         return windows
     }
 
+    nonisolated private static func element(_ element: AXUIElement, attribute: CFString) -> AXUIElement? {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &raw) == .success else { return nil }
+        return raw as! AXUIElement?
+    }
+
     nonisolated private static func string(_ element: AXUIElement, attribute: CFString) -> String? {
         var raw: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute, &raw) == .success else { return nil }
@@ -484,6 +776,12 @@ final class WindowFittingService {
         var raw: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute, &raw) == .success else { return false }
         return raw as? Bool ?? false
+    }
+
+    nonisolated private static func isSettable(_ element: AXUIElement, attribute: CFString) -> Bool {
+        var result = DarwinBoolean(false)
+        guard AXUIElementIsAttributeSettable(element, attribute, &result) == .success else { return false }
+        return result.boolValue
     }
 
     nonisolated private static func point(_ element: AXUIElement, attribute: CFString) -> CGPoint? {
