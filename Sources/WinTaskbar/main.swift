@@ -174,7 +174,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 #endif
-        windowFittingService.start()
         var shouldShowOnboarding = !preferences.hasCompletedOnboarding
 #if DEBUG
         shouldShowOnboarding = shouldShowOnboarding
@@ -1244,13 +1243,31 @@ func runSelfTest() async -> Int32 {
         on: fittingScreen,
         position: .bottom,
         barHeight: 48
-    ) == CGRect(x: 100, y: 51, width: 600, height: 469),
+    ) == CGRect(x: 100, y: 51, width: 600, height: 500),
+    WindowFittingGeometry.clampedRect(
+        CGRect(x: 100, y: 300, width: 600, height: 500),
+        on: fittingScreen,
+        position: .top,
+        barHeight: 48
+    ) == CGRect(x: 100, y: 224, width: 600, height: 500),
+    WindowFittingGeometry.clampedRect(
+        CGRect(x: 20, y: 100, width: 600, height: 500),
+        on: fittingScreen,
+        position: .left,
+        barHeight: 48
+    ) == CGRect(x: 51, y: 100, width: 600, height: 500),
     WindowFittingGeometry.clampedRect(
         CGRect(x: 900, y: 100, width: 300, height: 400),
         on: fittingScreen,
         position: .right,
         barHeight: 48
-    ) == CGRect(x: 900, y: 100, width: 249, height: 400),
+    ) == CGRect(x: 849, y: 100, width: 300, height: 400),
+    WindowFittingGeometry.clampedRect(
+        CGRect(x: 100, y: -100, width: 600, height: 900),
+        on: fittingScreen,
+        position: .bottom,
+        barHeight: 48
+    ) == CGRect(x: 100, y: 51, width: 600, height: 724),
     WindowFittingGeometry.clampedRect(
         CGRect(x: 100, y: 100, width: 600, height: 500),
         on: fittingScreen,
@@ -1266,8 +1283,19 @@ func runSelfTest() async -> Int32 {
         cocoaFrame: CGRect(x: 80, y: 280, width: 600, height: 400),
         primaryHeight: 800
     ) == CGPoint(x: 80, y: 120),
-    WindowFittingGeometry.isFullScreen(fittingScreen.frame, in: [fittingScreen]) else {
+    WindowFittingGeometry.isFullScreen(fittingScreen.frame, in: [fittingScreen]),
+    !WindowFittingGeometry.isFullScreen(
+        fittingScreen.frame.offsetBy(dx: 0, dy: -10),
+        in: [fittingScreen]
+    ) else {
         fputs("SELF-TEST FAILED: window fitting geometry mismatch\n", stderr)
+        return 1
+    }
+
+    guard TaskbarPanel.desktopCollectionBehavior.contains(.canJoinAllSpaces),
+          TaskbarPanel.desktopCollectionBehavior.contains(.stationary),
+          !TaskbarPanel.desktopCollectionBehavior.contains(.fullScreenAuxiliary) else {
+        fputs("SELF-TEST FAILED: taskbar full-screen policy mismatch\n", stderr)
         return 1
     }
 

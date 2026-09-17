@@ -29,6 +29,11 @@ private enum WindowBlur {
 }
 
 final class TaskbarPanel: NSPanel {
+    static let desktopCollectionBehavior: NSWindow.CollectionBehavior = [
+        .canJoinAllSpaces,
+        .stationary,
+    ]
+
     var isAutoHidden = false
     var autoHideTask: Task<Void, Never>?
 
@@ -1027,7 +1032,7 @@ final class TaskbarWindowController {
             screen: screen
         )
         panel.level = .statusBar
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        panel.collectionBehavior = TaskbarPanel.desktopCollectionBehavior
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
