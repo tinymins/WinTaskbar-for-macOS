@@ -583,7 +583,6 @@ final class WindowSwitcherPanelController {
     private var selectedIndex = 0
     private var tilePreviewHeight = WindowSwitcherLayout.previewHeight
     private var presentationID: UInt = 0
-    private var contentRefreshTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
     private var windowCacheTask: Task<Void, Never>?
     private var detailedWindowsCache: [WindowInfo] = []
@@ -615,6 +614,7 @@ final class WindowSwitcherPanelController {
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.appearance = NSAppearance(named: .darkAqua)
+        panel.animationBehavior = .none
 
         backdrop.wantsLayer = true
         backdrop.layer?.cornerRadius = 8
@@ -661,7 +661,6 @@ final class WindowSwitcherPanelController {
     }
 
     private func present(reverse: Bool) {
-        contentRefreshTask?.cancel()
         refreshTask?.cancel()
         presentationID &+= 1
         let currentPresentationID = presentationID
@@ -702,17 +701,10 @@ final class WindowSwitcherPanelController {
         let backdropRequest = WindowSwitcherBackdrop.request(panelFrame: targetFrame, on: screen)
         backdropImage = backdropRequest.flatMap { backdropCache[$0] }
         panel.setFrame(targetFrame, display: false)
+        refreshContent(disablesAnimations: true)
+        backdrop.layoutSubtreeIfNeeded()
         panel.orderFrontRegardless()
         installMouseMonitors()
-        contentRefreshTask = Task { @MainActor [weak self] in
-            await Task.yield()
-            guard let self,
-                  !Task.isCancelled,
-                  self.panel.isVisible,
-                  self.presentationID == currentPresentationID else { return }
-            self.refreshContent()
-            self.contentRefreshTask = nil
-        }
         refreshWindowCache(forPIDs: applicationPIDs)
         refreshPresentation(
             windows: windows,
@@ -773,8 +765,8 @@ final class WindowSwitcherPanelController {
         }
     }
 
-    private func refreshContent() {
-        hostingView.rootView = AnyView(WindowSwitcherView(
+    private func refreshContent(disablesAnimations: Bool = false) {
+        let content = AnyView(WindowSwitcherView(
             windows: windows,
             thumbnails: thumbnails,
             controlCapabilities: controlCapabilities,
@@ -784,6 +776,15 @@ final class WindowSwitcherPanelController {
             onWindowAction: { [weak self] action, windowID in self?.perform(action, on: windowID) },
             onSelect: { [weak self] windowID in self?.selectAndCommit(windowID: windowID) }
         ))
+        guard disablesAnimations else {
+            hostingView.rootView = content
+            return
+        }
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            hostingView.rootView = content
+        }
     }
 
     private func refreshWindowCache(forPIDs pids: [pid_t]) {
@@ -871,8 +872,6 @@ final class WindowSwitcherPanelController {
     }
 
     private func dismiss() {
-        contentRefreshTask?.cancel()
-        contentRefreshTask = nil
         refreshTask?.cancel()
         refreshTask = nil
         presentationID &+= 1
@@ -1215,6 +1214,7 @@ private struct WindowSwitcherTile: View {
                 Color(red: 0.055, green: 0.055, blue: 0.06)
                 Image(nsImage: thumbnail)
                     .resizable()
+                    .interpolation(.high)
                     .scaledToFit()
             }
             .frame(
