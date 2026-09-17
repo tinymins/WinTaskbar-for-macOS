@@ -2,6 +2,22 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.25] - 2026-09-17
+
+### Added
+
+- Add automatic English and Chinese localization to the project website, with real taskbar hover-preview examples for ChatGPT, Finder, and Visual Studio Code.
+
+### Performance
+
+- Keep Alt-Tab activation observation and Accessibility queries off the main thread, update selection without rebuilding the grid, and isolate rapid switch sessions.
+- Render the acrylic backdrop before presenting Alt-Tab to avoid visible material changes during opening.
+
+### Fixed
+
+- Reconcile taskbar space as soon as a focused-window observer attaches, so windows that are already maximized when WinTaskbar launches or when an application becomes active immediately avoid the taskbar.
+- Prevent outside-click dismissal from activating a selected Alt-Tab window, and align the website taskbar and hover previews with the real application.
+
 ## [0.0.24] - 2026-09-17
 
 ### Added
