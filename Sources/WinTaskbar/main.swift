@@ -2686,6 +2686,14 @@ func runSelfTest() async -> Int32 {
         selectedIndex: 0,
         remainingCount: 0
     ) == 0,
+    !WindowSwitcherDismissalPolicy.shouldDismissForMouseDown(
+        panelFrame: CGRect(x: 100, y: 100, width: 400, height: 240),
+        mouseLocation: CGPoint(x: 300, y: 220)
+    ),
+    WindowSwitcherDismissalPolicy.shouldDismissForMouseDown(
+        panelFrame: CGRect(x: 100, y: 100, width: 400, height: 240),
+        mouseLocation: CGPoint(x: 99, y: 220)
+    ),
     WindowSwitcherLayout.tileHeight == 196,
     WindowSwitcherLayout.tileWidth(
         for: CGRect(x: 0, y: 0, width: 1_920, height: 1_080)

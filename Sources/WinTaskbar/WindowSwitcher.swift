@@ -251,6 +251,12 @@ enum WindowSwitcherSelection {
     }
 }
 
+enum WindowSwitcherDismissalPolicy {
+    static func shouldDismissForMouseDown(panelFrame: CGRect, mouseLocation: CGPoint) -> Bool {
+        !panelFrame.contains(mouseLocation)
+    }
+}
+
 private enum WindowSwitcherWindowAction: CaseIterable {
     case toggleMinimized
     case toggleFullScreen
@@ -311,6 +317,8 @@ final class WindowSwitcherPanelController {
     private var windows: [WindowInfo] = []
     private var thumbnails: [CGWindowID: NSImage] = [:]
     private var controlCapabilities: [CGWindowID: WindowControlCapabilities] = [:]
+    private var localMouseMonitor: Any?
+    private var globalMouseMonitor: Any?
     private var selectedIndex = 0
 
     init(
@@ -395,6 +403,7 @@ final class WindowSwitcherPanelController {
         guard let screen else { return }
         updatePanelFrame(on: screen)
         panel.orderFrontRegardless()
+        installMouseMonitors()
     }
 
     private func moveSelection(by step: Int) {
@@ -460,12 +469,49 @@ final class WindowSwitcherPanelController {
     }
 
     private func dismiss() {
+        removeMouseMonitors()
         panel.orderOut(nil)
         hostingView.rootView = AnyView(EmptyView())
         windows = []
         thumbnails = [:]
         controlCapabilities = [:]
         selectedIndex = 0
+    }
+
+    private func installMouseMonitors() {
+        removeMouseMonitors()
+        let mouseDownEvents: NSEvent.EventTypeMask = [
+            .leftMouseDown,
+            .rightMouseDown,
+            .otherMouseDown,
+        ]
+        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: mouseDownEvents) { [weak self] event in
+            MainActor.assumeIsolated {
+                guard let self, self.panel.isVisible else { return }
+                let mouseLocation = event.window?.convertPoint(toScreen: event.locationInWindow)
+                    ?? NSEvent.mouseLocation
+                if WindowSwitcherDismissalPolicy.shouldDismissForMouseDown(
+                    panelFrame: self.panel.frame,
+                    mouseLocation: mouseLocation
+                ) {
+                    self.dismiss()
+                }
+            }
+            return event
+        }
+        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: mouseDownEvents) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.panel.isVisible else { return }
+                self.dismiss()
+            }
+        }
+    }
+
+    private func removeMouseMonitors() {
+        if let localMouseMonitor { NSEvent.removeMonitor(localMouseMonitor) }
+        if let globalMouseMonitor { NSEvent.removeMonitor(globalMouseMonitor) }
+        localMouseMonitor = nil
+        globalMouseMonitor = nil
     }
 
     private func updatePanelFrame(on screen: NSScreen) {
