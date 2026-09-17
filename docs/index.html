@@ -18,60 +18,71 @@
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="#top" aria-label="WinTaskbar home">
+    <a class="brand" href="#top" aria-label="WinTaskbar home" data-i18n-aria-label="brand.home">
       <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
       <span>WinTaskbar</span>
     </a>
-    <nav aria-label="Primary navigation">
-      <a href="#demo">Demo</a>
-      <a href="#screenshots">Screenshots</a>
-      <a href="#features">Features</a>
+    <nav aria-label="Primary navigation" data-i18n-aria-label="nav.primary">
+      <a href="#demo" data-i18n="nav.demo">Demo</a>
+      <a href="#screenshots" data-i18n="nav.screenshots">Screenshots</a>
+      <a href="#features" data-i18n="nav.features">Features</a>
     </nav>
-    <a class="github-link" href="https://github.com/tinymins/WinTaskbar-for-macOS">GitHub <span aria-hidden="true">↗</span></a>
+    <div class="header-actions">
+      <a class="github-link" href="https://github.com/tinymins/WinTaskbar-for-macOS">GitHub <span aria-hidden="true">↗</span></a>
+      <label class="language-switch">
+        <span class="language-icon" aria-hidden="true">文</span>
+        <span class="sr-only" data-i18n="language.label">Language</span>
+        <select id="language-select" aria-label="Language" data-i18n-aria-label="language.label">
+          <option value="auto" data-i18n="language.auto">Auto</option>
+          <option value="zh-Hans">中文</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+    </div>
   </header>
 
   <main id="top">
     <section class="hero section-shell">
       <div class="hero-copy reveal">
-        <div class="eyebrow"><span></span> Actual app capture · native macOS</div>
-        <h1>Windows workflow.<br><em>Running on your Mac.</em></h1>
-        <p>WinTaskbar brings the taskbar, Start menu, live window previews, and a fast Alt+Tab switcher to macOS—without turning your Mac into a web mockup.</p>
+        <div class="eyebrow" data-i18n-html="hero.eyebrow"><span></span> Actual app capture · native macOS</div>
+        <h1 data-i18n-html="hero.title">Windows workflow.<br><em>Running on your Mac.</em></h1>
+        <p data-i18n="hero.description">WinTaskbar brings the taskbar, Start menu, live window previews, and a fast Alt+Tab switcher to macOS—without turning your Mac into a web mockup.</p>
         <div class="hero-actions">
-          <a class="button button-primary" href="https://github.com/tinymins/WinTaskbar-for-macOS/releases/latest">Download for macOS <span aria-hidden="true">↓</span></a>
-          <a class="button button-secondary" href="#demo">Try the interface</a>
+          <a class="button button-primary" href="https://github.com/tinymins/WinTaskbar-for-macOS/releases/latest" data-i18n-html="hero.download">Download for macOS <span aria-hidden="true">↓</span></a>
+          <a class="button button-secondary" href="#demo" data-i18n="hero.try">Try the interface</a>
         </div>
-        <div class="hero-proof" aria-label="Product facts">
-          <span><b>Native</b> AppKit + SwiftUI</span>
-          <span><b>Real</b> screenshots below</span>
-          <span><b>Open</b> source</span>
+        <div class="hero-proof" aria-label="Product facts" data-i18n-aria-label="hero.proofAria">
+          <span data-i18n-html="hero.proof.native"><b>Native</b> AppKit + SwiftUI</span>
+          <span data-i18n-html="hero.proof.real"><b>Real</b> screenshots below</span>
+          <span data-i18n-html="hero.proof.open"><b>Open</b> source</span>
         </div>
       </div>
 
-      <div class="hero-visual reveal" aria-label="WinTaskbar Alt+Tab screenshot">
+      <div class="hero-visual reveal" aria-label="WinTaskbar Alt+Tab screenshot" data-i18n-aria-label="hero.visualAria">
         <div class="capture-frame capture-frame-hero">
-          <div class="capture-label"><span></span> Running build · Alt+Tab</div>
-          <img src="screenshots/alt-tab-fullscreen.jpg" alt="WinTaskbar Alt+Tab switcher showing real macOS window thumbnails" fetchpriority="high">
+          <div class="capture-label" data-i18n-html="hero.captureLabel"><span></span> Running build · Alt+Tab</div>
+          <img src="screenshots/alt-tab-fullscreen.jpg" alt="WinTaskbar Alt+Tab switcher showing real macOS window thumbnails" data-i18n-alt="image.altTab" fetchpriority="high">
         </div>
-        <div class="hero-callout"><b>Alt + Tab</b><span>MRU ordered windows</span></div>
+        <div class="hero-callout"><b>Alt + Tab</b><span data-i18n="hero.mru">MRU ordered windows</span></div>
       </div>
     </section>
 
     <section id="demo" class="demo-section section-shell reveal">
       <div class="section-heading demo-heading">
         <div>
-          <div class="eyebrow"><span></span> Interactive product demo</div>
-          <h2>Use the interface.<br><em>See the actual pixels.</em></h2>
+          <div class="eyebrow" data-i18n-html="demo.eyebrow"><span></span> Interactive product demo</div>
+          <h2 data-i18n-html="demo.title">Use the interface.<br><em>See the actual pixels.</em></h2>
         </div>
-        <p>The controls switch between captures from the running app. Click the Start button in the taskbar, or open the full-screen Alt+Tab view.</p>
+        <p data-i18n="demo.description">The controls switch between captures from the running app. Click the Start button in the taskbar, or open the full-screen Alt+Tab view.</p>
       </div>
 
       <div class="product-demo" id="product-demo" data-mode="taskbar">
         <div class="demo-toolbar">
-          <div class="demo-toolbar-title"><i></i><span>WinTaskbar interactive preview</span><small>Captured UI</small></div>
-          <div class="demo-modes" role="group" aria-label="Choose a product view">
-            <button type="button" data-demo-mode="taskbar" aria-pressed="true"><span>01</span> Taskbar</button>
-            <button type="button" data-demo-mode="start" aria-pressed="false"><span>02</span> Start</button>
-            <button type="button" data-demo-mode="alt-tab" aria-pressed="false"><span>03</span> Alt+Tab</button>
+          <div class="demo-toolbar-title"><i></i><span data-i18n="demo.previewTitle">WinTaskbar interactive preview</span><small data-i18n="demo.captured">Captured UI</small></div>
+          <div class="demo-modes" role="group" aria-label="Choose a product view" data-i18n-aria-label="demo.chooseView">
+            <button type="button" data-demo-mode="taskbar" aria-pressed="true"><span>01</span> <b data-i18n="demo.mode.taskbar">Taskbar</b></button>
+            <button type="button" data-demo-mode="start" aria-pressed="false"><span>02</span> <b data-i18n="demo.mode.start">Start</b></button>
+            <button type="button" data-demo-mode="alt-tab" aria-pressed="false"><span>03</span> <b>Alt+Tab</b></button>
           </div>
         </div>
 
@@ -79,98 +90,98 @@
           <div class="demo-desktop" aria-hidden="true">
             <div class="wallpaper-light light-one"></div>
             <div class="wallpaper-light light-two"></div>
-            <div class="desktop-wordmark"><span class="brand-mark"><i></i><i></i><i></i><i></i></span><b>WinTaskbar</b><small>Native window workflow for macOS</small></div>
+            <div class="desktop-wordmark"><span class="brand-mark"><i></i><i></i><i></i><i></i></span><b>WinTaskbar</b><small data-i18n="demo.desktopSubtitle">Native window workflow for macOS</small></div>
           </div>
 
           <div class="start-capture" id="start-capture" aria-hidden="true">
-            <img src="screenshots/start-menu.jpg" alt="Actual WinTaskbar Start menu">
+            <img src="screenshots/start-menu.jpg" alt="Actual WinTaskbar Start menu" data-i18n-alt="image.start">
           </div>
 
           <div class="taskbar-capture" id="taskbar-capture">
-            <img src="screenshots/taskbar.jpg" alt="Actual WinTaskbar taskbar">
-            <button class="taskbar-hotspot start-hotspot" type="button" aria-label="Toggle the Start menu"><span>Start</span></button>
-            <button class="taskbar-hotspot app-hotspot app-one" type="button" aria-label="Activate Finder"><span>Finder</span></button>
-            <button class="taskbar-hotspot app-hotspot app-two" type="button" aria-label="Activate Activity Monitor"><span>Activity Monitor</span></button>
-            <button class="taskbar-hotspot app-hotspot app-three" type="button" aria-label="Activate ChatGPT"><span>ChatGPT</span></button>
+            <img src="screenshots/taskbar.jpg" alt="Actual WinTaskbar taskbar" data-i18n-alt="image.taskbar">
+            <button class="taskbar-hotspot start-hotspot" type="button" aria-label="Toggle the Start menu" data-i18n-aria-label="demo.toggleStart"><span data-i18n="demo.mode.start">Start</span></button>
+            <button class="taskbar-hotspot app-hotspot app-one" type="button" aria-label="Activate Finder" data-i18n-aria-label="demo.activateFinder"><span>Finder</span></button>
+            <button class="taskbar-hotspot app-hotspot app-two" type="button" aria-label="Activate Activity Monitor" data-i18n-aria-label="demo.activateActivity"><span data-i18n="app.activityMonitor">Activity Monitor</span></button>
+            <button class="taskbar-hotspot app-hotspot app-three" type="button" aria-label="Activate ChatGPT" data-i18n-aria-label="demo.activateChatGPT"><span>ChatGPT</span></button>
           </div>
 
           <figure class="alt-tab-capture" id="alt-tab-capture" aria-hidden="true">
-            <img src="screenshots/alt-tab-fullscreen.jpg" alt="Full-screen WinTaskbar Alt+Tab switcher with real window thumbnails">
-            <figcaption>Actual 3840 × 2160 capture · window titles redacted only</figcaption>
+            <img src="screenshots/alt-tab-fullscreen.jpg" alt="Full-screen WinTaskbar Alt+Tab switcher with real window thumbnails" data-i18n-alt="image.altTab">
+            <figcaption data-i18n="demo.caption">Actual 3840 × 2160 capture · window titles redacted only</figcaption>
           </figure>
 
-          <button class="alt-tab-trigger" id="alt-tab-trigger" type="button"><kbd>Alt</kbd><span>+</span><kbd>Tab</kbd><small>Open switcher</small></button>
-          <button class="demo-close" id="demo-close" type="button" aria-label="Close Alt+Tab view">Close <kbd>Esc</kbd></button>
-          <div class="demo-status" aria-live="polite"><i></i><span id="demo-status-text">Taskbar is ready — click the Start button</span></div>
+          <button class="alt-tab-trigger" id="alt-tab-trigger" type="button"><kbd>Alt</kbd><span>+</span><kbd>Tab</kbd><small data-i18n="demo.openSwitcher">Open switcher</small></button>
+          <button class="demo-close" id="demo-close" type="button" aria-label="Close Alt+Tab view" data-i18n-aria-label="demo.closeAria"><span data-i18n="demo.close">Close</span> <kbd>Esc</kbd></button>
+          <div class="demo-status" aria-live="polite"><i></i><span id="demo-status-text" data-i18n="status.taskbar">Taskbar is ready — click the Start button</span></div>
         </div>
       </div>
     </section>
 
     <section id="screenshots" class="screenshots-section section-shell">
       <div class="section-heading centered reveal">
-        <div class="eyebrow"><span></span> From the running app</div>
-        <h2>No concept render.<br><em>This is what you get.</em></h2>
+        <div class="eyebrow" data-i18n-html="screenshots.eyebrow"><span></span> From the running app</div>
+        <h2 data-i18n-html="screenshots.title">No concept render.<br><em>This is what you get.</em></h2>
       </div>
 
       <article class="alt-tab-showcase reveal">
         <div class="showcase-copy">
           <span class="number">01</span>
           <div>
-            <h3>Alt+Tab, rebuilt for your window history</h3>
-            <p>Hold the configured modifier, tap Tab to move through real window thumbnails in recent-use order, then release to activate.</p>
+            <h3 data-i18n="screenshots.altTabTitle">Alt+Tab, rebuilt for your window history</h3>
+            <p data-i18n="screenshots.altTabDescription">Hold the configured modifier, tap Tab to move through real window thumbnails in recent-use order, then release to activate.</p>
           </div>
-          <ul aria-label="Alt+Tab capabilities"><li>Real previews</li><li>MRU order</li><li>Forward + reverse</li></ul>
+          <ul aria-label="Alt+Tab capabilities" data-i18n-aria-label="screenshots.capabilities"><li data-i18n="screenshots.realPreviews">Real previews</li><li data-i18n="screenshots.mru">MRU order</li><li data-i18n="screenshots.directions">Forward + reverse</li></ul>
         </div>
-        <a class="fullscreen-shot" href="screenshots/alt-tab-fullscreen.jpg" aria-label="Open the full-resolution Alt+Tab screenshot">
-          <img src="screenshots/alt-tab-fullscreen.jpg" alt="Full-screen WinTaskbar Alt+Tab view" loading="lazy">
-          <span>View full 4K capture ↗</span>
+        <a class="fullscreen-shot" href="screenshots/alt-tab-fullscreen.jpg" aria-label="Open the full-resolution Alt+Tab screenshot" data-i18n-aria-label="screenshots.openFullAria">
+          <img src="screenshots/alt-tab-fullscreen.jpg" alt="Full-screen WinTaskbar Alt+Tab view" data-i18n-alt="image.altTab" loading="lazy">
+          <span data-i18n="screenshots.viewFull">View full 4K capture ↗</span>
         </a>
       </article>
 
       <div class="native-grid">
         <article class="native-card reveal">
-          <div class="native-card-copy"><span class="number">02</span><h3>The taskbar, exactly where muscle memory expects it</h3><p>Pinned and running apps, badges, drag ordering, previews, and active-state indicators.</p></div>
-          <div class="taskbar-shot"><img src="screenshots/taskbar.jpg" alt="Actual WinTaskbar taskbar" loading="lazy"></div>
+          <div class="native-card-copy"><span class="number">02</span><h3 data-i18n="screenshots.taskbarTitle">The taskbar, exactly where muscle memory expects it</h3><p data-i18n="screenshots.taskbarDescription">Pinned and running apps, badges, drag ordering, previews, and active-state indicators.</p></div>
+          <div class="taskbar-shot"><img src="screenshots/taskbar.jpg" alt="Actual WinTaskbar taskbar" data-i18n-alt="image.taskbar" loading="lazy"></div>
         </article>
         <article class="native-card reveal">
-          <div class="native-card-copy"><span class="number">03</span><h3>A compact, searchable Start menu</h3><p>Launch apps, search instantly, manage shortcuts, and reach system actions from one familiar surface.</p></div>
-          <div class="start-shot"><img src="screenshots/start-menu.jpg" alt="Actual WinTaskbar Start menu" loading="lazy"></div>
+          <div class="native-card-copy"><span class="number">03</span><h3 data-i18n="screenshots.startTitle">A compact, searchable Start menu</h3><p data-i18n="screenshots.startDescription">Launch apps, search instantly, manage shortcuts, and reach system actions from one familiar surface.</p></div>
+          <div class="start-shot"><img src="screenshots/start-menu.jpg" alt="Actual WinTaskbar Start menu" data-i18n-alt="image.start" loading="lazy"></div>
         </article>
       </div>
     </section>
 
     <section id="features" class="features section-shell">
       <div class="section-heading centered reveal">
-        <div class="eyebrow"><span></span> Built for daily use</div>
-        <h2>Familiar on day one.<br><em>Native all the way down.</em></h2>
+        <div class="eyebrow" data-i18n-html="features.eyebrow"><span></span> Built for daily use</div>
+        <h2 data-i18n-html="features.title">Familiar on day one.<br><em>Native all the way down.</em></h2>
       </div>
       <div class="feature-grid">
-        <article class="feature-card reveal"><span>⌥</span><h3>Windows-style Alt+Tab</h3><p>Real thumbnails, MRU ordering, reverse cycling, and activation when the modifier is released.</p></article>
-        <article class="feature-card reveal"><span>◫</span><h3>Any edge, any display</h3><p>Bottom, top, left, or right—with primary-only and all-display modes.</p></article>
-        <article class="feature-card reveal"><span>⌘</span><h3>Native and responsive</h3><p>Built with AppKit and SwiftUI for a lightweight, Mac-first experience.</p></article>
-        <article class="feature-card reveal"><span>◉</span><h3>Window intelligence</h3><p>Live thumbnails, hover previews, activation, minimization, and window fitting.</p></article>
-        <article class="feature-card reveal"><span>⌁</span><h3>System controls</h3><p>Calendar, battery, volume, Wi-Fi, input source, power actions, and Show Desktop.</p></article>
-        <article class="feature-card reveal"><span>↗</span><h3>Drag-and-drop setup</h3><p>Reorder apps, create folders, and drop apps or files directly into shortcuts.</p></article>
+        <article class="feature-card reveal"><span>⌥</span><h3 data-i18n="features.altTabTitle">Windows-style Alt+Tab</h3><p data-i18n="features.altTabDescription">Real thumbnails, MRU ordering, reverse cycling, and activation when the modifier is released.</p></article>
+        <article class="feature-card reveal"><span>◫</span><h3 data-i18n="features.edgeTitle">Any edge, any display</h3><p data-i18n="features.edgeDescription">Bottom, top, left, or right—with primary-only and all-display modes.</p></article>
+        <article class="feature-card reveal"><span>⌘</span><h3 data-i18n="features.nativeTitle">Native and responsive</h3><p data-i18n="features.nativeDescription">Built with AppKit and SwiftUI for a lightweight, Mac-first experience.</p></article>
+        <article class="feature-card reveal"><span>◉</span><h3 data-i18n="features.windowTitle">Window intelligence</h3><p data-i18n="features.windowDescription">Live thumbnails, hover previews, activation, minimization, and window fitting.</p></article>
+        <article class="feature-card reveal"><span>⌁</span><h3 data-i18n="features.systemTitle">System controls</h3><p data-i18n="features.systemDescription">Calendar, battery, volume, Wi-Fi, input source, power actions, and Show Desktop.</p></article>
+        <article class="feature-card reveal"><span>↗</span><h3 data-i18n="features.dragTitle">Drag-and-drop setup</h3><p data-i18n="features.dragDescription">Reorder apps, create folders, and drop apps or files directly into shortcuts.</p></article>
       </div>
     </section>
 
     <section id="download" class="download section-shell reveal">
       <div>
-        <div class="eyebrow"><span></span> Ready when you are</div>
-        <h2>Make your Mac<br><em>work your way.</em></h2>
-        <p>Choose the universal build for any modern Mac, or download an architecture-specific package.</p>
+        <div class="eyebrow" data-i18n-html="download.eyebrow"><span></span> Ready when you are</div>
+        <h2 data-i18n-html="download.title">Make your Mac<br><em>work your way.</em></h2>
+        <p data-i18n="download.description">Choose the universal build for any modern Mac, or download an architecture-specific package.</p>
       </div>
       <div class="download-actions">
-        <a class="button button-primary" href="https://github.com/tinymins/WinTaskbar-for-macOS/releases/latest">Get the latest release <span aria-hidden="true">↓</span></a>
-        <div><span>Universal</span><span>Apple Silicon</span><span>Intel</span></div>
-        <small>Open source · MIT License · macOS 13 or later</small>
+        <a class="button button-primary" href="https://github.com/tinymins/WinTaskbar-for-macOS/releases/latest" data-i18n-html="download.button">Get the latest release <span aria-hidden="true">↓</span></a>
+        <div><span data-i18n="download.universal">Universal</span><span>Apple Silicon</span><span>Intel</span></div>
+        <small data-i18n="download.note">Open source · MIT License · macOS 13 or later</small>
       </div>
     </section>
   </main>
 
   <footer class="section-shell">
     <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>WinTaskbar</span></a>
-    <p>A Windows-style workflow, thoughtfully rebuilt for macOS.</p>
+    <p data-i18n="footer.tagline">A Windows-style workflow, thoughtfully rebuilt for macOS.</p>
     <a href="https://github.com/tinymins/WinTaskbar-for-macOS">GitHub ↗</a>
   </footer>
 </body>
