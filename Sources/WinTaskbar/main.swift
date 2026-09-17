@@ -2663,6 +2663,20 @@ func runSelfTest() async -> Int32 {
         return 1
     }
     windowActivationOrder.record(101)
+    let switcherScreenFrame = CGRect(x: 0, y: 0, width: 1_920, height: 1_055)
+    let landscapeWindowFrame = CGRect(x: 0, y: 0, width: 1_920, height: 1_080)
+    let singleRowSwitcherLayout = WindowSwitcherLayout.metrics(
+        windowFrames: Array(repeating: landscapeWindowFrame, count: 4),
+        screenFrame: switcherScreenFrame
+    )
+    let crowdedSwitcherLayout = WindowSwitcherLayout.metrics(
+        windowFrames: Array(repeating: landscapeWindowFrame, count: 20),
+        screenFrame: switcherScreenFrame
+    )
+    let overflowingSwitcherLayout = WindowSwitcherLayout.metrics(
+        windowFrames: Array(repeating: landscapeWindowFrame, count: 80),
+        screenFrame: switcherScreenFrame
+    )
     guard windowActivationOrder.reconcile(
         availableWindowIDs: [101, 202, 303],
         fallbackWindowIDs: [202, 101, 303]
@@ -2720,21 +2734,20 @@ func runSelfTest() async -> Int32 {
         itemWidths: [277, 208, 320],
         maximumWidth: 500
     ) == [[0, 1], [2]],
-    WindowSwitcherLayout.panelSize(
-        windowFrames: [
-            CGRect(x: 0, y: 0, width: 1_920, height: 1_080),
-            CGRect(x: 0, y: 0, width: 1_024, height: 768),
-        ],
-        screenFrame: CGRect(x: 0, y: 0, width: 1_920, height: 1_080)
-    ) == CGSize(width: 533, height: 232),
-    WindowSwitcherLayout.panelSize(
-        windowFrames: Array(
-            repeating: CGRect(x: 0, y: 0, width: 1_920, height: 1_080),
-            count: 20
-        ),
-        screenFrame: CGRect(x: 0, y: 0, width: 1_920, height: 1_080)
-    ).height <= 1_080 * 0.76 else {
-        fputs("SELF-TEST FAILED: Alt+Tab MRU or fixed-height flow geometry mismatch\n", stderr)
+    singleRowSwitcherLayout.rows.count == 1,
+    singleRowSwitcherLayout.previewHeight > WindowSwitcherLayout.previewHeight,
+    crowdedSwitcherLayout.previewHeight < WindowSwitcherLayout.previewHeight,
+    crowdedSwitcherLayout.panelSize.height
+        <= switcherScreenFrame.height * WindowSwitcherLayout.maximumPanelHeightRatio,
+    overflowingSwitcherLayout.previewHeight == WindowSwitcherLayout.minimumPreviewHeight,
+    overflowingSwitcherLayout.rows.count > WindowSwitcherLayout.maximumFullyVisibleRows,
+    overflowingSwitcherLayout.panelSize.height
+        == CGFloat(WindowSwitcherLayout.maximumFullyVisibleRows)
+            * WindowSwitcherLayout.tileHeight(for: WindowSwitcherLayout.minimumPreviewHeight)
+            + CGFloat(WindowSwitcherLayout.maximumFullyVisibleRows) * WindowSwitcherLayout.spacing
+            + WindowSwitcherLayout.titleBarHeight
+            + WindowSwitcherLayout.panelPadding * 2 else {
+        fputs("SELF-TEST FAILED: Alt+Tab MRU or adaptive flow geometry mismatch\n", stderr)
         return 1
     }
 

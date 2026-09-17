@@ -183,20 +183,43 @@ final class WindowActivationHistory {
 enum WindowSwitcherLayout {
     static let titleBarHeight: CGFloat = 40
     static let previewHeight: CGFloat = 156
+    static let minimumPreviewHeight: CGFloat = 92
+    static let maximumPreviewHeight: CGFloat = 320
+    static let previewHeightStep: CGFloat = 4
     static let tileHeight = titleBarHeight + previewHeight
     static let minimumTileWidth: CGFloat = 160
     static let maximumTileWidth: CGFloat = 320
     static let fallbackTileWidth: CGFloat = 264
     static let spacing: CGFloat = 12
     static let panelPadding: CGFloat = 18
+    static let maximumPanelWidthRatio: CGFloat = 0.88
+    static let maximumPanelHeightRatio: CGFloat = 0.76
+    static let maximumFullyVisibleRows = 5
     static let captionButtonWidth: CGFloat = 26
     static let compactControlStripWidth = captionButtonWidth * 3
     static let scrollIndicatorWidth: CGFloat = 3
 
-    static func tileWidth(for windowFrame: CGRect) -> CGFloat {
-        guard windowFrame.width > 0, windowFrame.height > 0 else { return fallbackTileWidth }
+    struct Metrics {
+        let previewHeight: CGFloat
+        let itemWidths: [CGFloat]
+        let rows: [[Int]]
+        let panelSize: CGSize
+    }
+
+    static func tileHeight(for previewHeight: CGFloat) -> CGFloat {
+        titleBarHeight + previewHeight
+    }
+
+    static func tileWidth(
+        for windowFrame: CGRect,
+        previewHeight: CGFloat = previewHeight
+    ) -> CGFloat {
+        let scale = previewHeight / Self.previewHeight
+        let maximumWidth = (maximumTileWidth * scale).rounded()
+        let fallbackWidth = (fallbackTileWidth * scale).rounded()
+        guard windowFrame.width > 0, windowFrame.height > 0 else { return fallbackWidth }
         return min(
-            maximumTileWidth,
+            maximumWidth,
             max(minimumTileWidth, (previewHeight * windowFrame.width / windowFrame.height).rounded())
         )
     }
@@ -221,23 +244,88 @@ enum WindowSwitcherLayout {
         return rows
     }
 
-    static func panelSize(windowFrames: [CGRect], screenFrame: CGRect) -> CGSize {
-        let itemWidths = windowFrames.map(tileWidth)
+    static func metrics(windowFrames: [CGRect], screenFrame: CGRect) -> Metrics {
         let maximumContentWidth = max(
             minimumTileWidth,
-            screenFrame.width * 0.88 - panelPadding * 2
+            screenFrame.width * maximumPanelWidthRatio - panelPadding * 2
         )
-        let rows = rowIndices(itemWidths: itemWidths, maximumWidth: maximumContentWidth)
+        let maximumPanelHeight = screenFrame.height * maximumPanelHeightRatio
+        let screenLimitedMaximumPreviewHeight = max(
+            minimumPreviewHeight,
+            maximumPanelHeight - panelPadding * 2 - titleBarHeight
+        )
+        let largestPreviewHeight = min(maximumPreviewHeight, screenLimitedMaximumPreviewHeight)
+        let baselinePreviewHeight = min(previewHeight, largestPreviewHeight)
+
+        func geometry(for candidatePreviewHeight: CGFloat) -> (
+            itemWidths: [CGFloat],
+            rows: [[Int]],
+            contentHeight: CGFloat
+        ) {
+            let itemWidths = windowFrames.map {
+                tileWidth(for: $0, previewHeight: candidatePreviewHeight)
+            }
+            let rows = rowIndices(itemWidths: itemWidths, maximumWidth: maximumContentWidth)
+            let rowCount = max(1, rows.count)
+            let contentHeight = CGFloat(rowCount) * Self.tileHeight(for: candidatePreviewHeight)
+                + CGFloat(max(0, rowCount - 1)) * spacing
+            return (itemWidths, rows, contentHeight)
+        }
+
+        let baseline = geometry(for: baselinePreviewHeight)
+        let maximumContentHeight = maximumPanelHeight - panelPadding * 2
+        var selectedPreviewHeight = baselinePreviewHeight
+
+        if baseline.contentHeight <= maximumContentHeight {
+            let baselineRowCount = baseline.rows.count
+            var candidatePreviewHeight = baselinePreviewHeight + previewHeightStep
+            while candidatePreviewHeight <= largestPreviewHeight {
+                let candidate = geometry(for: candidatePreviewHeight)
+                guard candidate.rows.count == baselineRowCount,
+                      candidate.contentHeight <= maximumContentHeight else { break }
+                selectedPreviewHeight = candidatePreviewHeight
+                candidatePreviewHeight += previewHeightStep
+            }
+        } else {
+            var candidatePreviewHeight = baselinePreviewHeight - previewHeightStep
+            selectedPreviewHeight = minimumPreviewHeight
+            while candidatePreviewHeight >= minimumPreviewHeight {
+                let candidate = geometry(for: candidatePreviewHeight)
+                if candidate.contentHeight <= maximumContentHeight {
+                    selectedPreviewHeight = candidatePreviewHeight
+                    break
+                }
+                candidatePreviewHeight -= previewHeightStep
+            }
+        }
+
+        let selected = geometry(for: selectedPreviewHeight)
+        let rows = selected.rows
+        let itemWidths = selected.itemWidths
         let contentWidth = rows.map { row in
             row.reduce(CGFloat.zero) { $0 + itemWidths[$1] }
                 + CGFloat(max(0, row.count - 1)) * spacing
         }.max() ?? minimumTileWidth
-        let contentHeight = CGFloat(max(1, rows.count)) * tileHeight
-            + CGFloat(max(0, rows.count - 1)) * spacing
-        return CGSize(
-            width: contentWidth + panelPadding * 2,
-            height: min(contentHeight + panelPadding * 2, screenFrame.height * 0.76)
+        let tileHeight = Self.tileHeight(for: selectedPreviewHeight)
+        let overflowPeekHeight = CGFloat(maximumFullyVisibleRows) * tileHeight
+            + CGFloat(maximumFullyVisibleRows) * spacing
+            + titleBarHeight
+        let visibleContentHeight = rows.count > maximumFullyVisibleRows
+            ? min(selected.contentHeight, overflowPeekHeight)
+            : selected.contentHeight
+        return Metrics(
+            previewHeight: selectedPreviewHeight,
+            itemWidths: itemWidths,
+            rows: rows,
+            panelSize: CGSize(
+                width: contentWidth + panelPadding * 2,
+                height: min(visibleContentHeight + panelPadding * 2, maximumPanelHeight)
+            )
         )
+    }
+
+    static func panelSize(windowFrames: [CGRect], screenFrame: CGRect) -> CGSize {
+        metrics(windowFrames: windowFrames, screenFrame: screenFrame).panelSize
     }
 }
 
@@ -362,6 +450,7 @@ final class WindowSwitcherPanelController {
     private var localMouseMonitor: Any?
     private var globalMouseMonitor: Any?
     private var selectedIndex = 0
+    private var tilePreviewHeight = WindowSwitcherLayout.previewHeight
 
     init(
         windowsService: WindowsService,
@@ -505,6 +594,7 @@ final class WindowSwitcherPanelController {
             controlCapabilities: controlCapabilities,
             backdropImage: backdropImage,
             selectedWindowID: windows.indices.contains(selectedIndex) ? windows[selectedIndex].windowID : nil,
+            previewHeight: tilePreviewHeight,
             onWindowAction: { [weak self] action, windowID in self?.perform(action, on: windowID) },
             onSelect: { [weak self] windowID in self?.selectAndCommit(windowID: windowID) }
         ))
@@ -519,6 +609,7 @@ final class WindowSwitcherPanelController {
         controlCapabilities = [:]
         backdropImage = nil
         selectedIndex = 0
+        tilePreviewHeight = WindowSwitcherLayout.previewHeight
     }
 
     private func installMouseMonitors() {
@@ -562,10 +653,12 @@ final class WindowSwitcherPanelController {
     }
 
     private func panelFrame(on screen: NSScreen) -> CGRect {
-        let size = WindowSwitcherLayout.panelSize(
+        let layout = WindowSwitcherLayout.metrics(
             windowFrames: windows.map(\.frame),
             screenFrame: screen.visibleFrame
         )
+        tilePreviewHeight = layout.previewHeight
+        let size = layout.panelSize
         return CGRect(
             x: screen.visibleFrame.midX - size.width / 2,
             y: screen.visibleFrame.midY - size.height / 2,
@@ -586,6 +679,7 @@ private struct WindowSwitcherView: View {
     let controlCapabilities: [CGWindowID: WindowControlCapabilities]
     let backdropImage: NSImage?
     let selectedWindowID: CGWindowID?
+    let previewHeight: CGFloat
     let onWindowAction: (WindowSwitcherWindowAction, CGWindowID) -> Void
     let onSelect: (CGWindowID) -> Void
 
@@ -598,6 +692,7 @@ private struct WindowSwitcherView: View {
                         thumbnail: thumbnails[window.windowID],
                         controlCapabilities: controlCapabilities[window.windowID] ?? [],
                         isSelected: selectedWindowID == window.windowID,
+                        previewHeight: previewHeight,
                         onWindowAction: { onWindowAction($0, window.windowID) },
                         action: { onSelect(window.windowID) }
                     )
@@ -750,6 +845,7 @@ private struct WindowSwitcherTile: View {
     let thumbnail: NSImage?
     let controlCapabilities: WindowControlCapabilities
     let isSelected: Bool
+    let previewHeight: CGFloat
     let onWindowAction: (WindowSwitcherWindowAction) -> Void
     let action: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -784,8 +880,11 @@ private struct WindowSwitcherTile: View {
                     preview
                 }
                 .frame(
-                    width: WindowSwitcherLayout.tileWidth(for: window.frame),
-                    height: WindowSwitcherLayout.tileHeight
+                    width: WindowSwitcherLayout.tileWidth(
+                        for: window.frame,
+                        previewHeight: previewHeight
+                    ),
+                    height: WindowSwitcherLayout.tileHeight(for: previewHeight)
                 )
                 .background(Color(red: 0.08, green: 0.08, blue: 0.085))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -806,8 +905,11 @@ private struct WindowSwitcherTile: View {
             }
         }
         .frame(
-            width: WindowSwitcherLayout.tileWidth(for: window.frame),
-            height: WindowSwitcherLayout.tileHeight
+            width: WindowSwitcherLayout.tileWidth(
+                for: window.frame,
+                previewHeight: previewHeight
+            ),
+            height: WindowSwitcherLayout.tileHeight(for: previewHeight)
         )
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
@@ -834,8 +936,11 @@ private struct WindowSwitcherTile: View {
                     .scaledToFit()
             }
             .frame(
-                width: WindowSwitcherLayout.tileWidth(for: window.frame),
-                height: WindowSwitcherLayout.previewHeight
+                width: WindowSwitcherLayout.tileWidth(
+                    for: window.frame,
+                    previewHeight: previewHeight
+                ),
+                height: previewHeight
             )
             .clipped()
         } else {
@@ -844,8 +949,11 @@ private struct WindowSwitcherTile: View {
                 appIcon.frame(width: 48, height: 48)
             }
             .frame(
-                width: WindowSwitcherLayout.tileWidth(for: window.frame),
-                height: WindowSwitcherLayout.previewHeight
+                width: WindowSwitcherLayout.tileWidth(
+                    for: window.frame,
+                    previewHeight: previewHeight
+                ),
+                height: previewHeight
             )
         }
     }
