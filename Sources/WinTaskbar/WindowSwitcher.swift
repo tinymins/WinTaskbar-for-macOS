@@ -565,6 +565,11 @@ private struct WindowSwitcherRefreshResult: @unchecked Sendable {
 }
 
 @MainActor
+private final class WindowSwitcherSelectionModel: ObservableObject {
+    @Published var windowID: CGWindowID?
+}
+
+@MainActor
 final class WindowSwitcherPanelController {
     private let windowsService: WindowsService
     private let activationService: WindowActivationService
@@ -574,6 +579,7 @@ final class WindowSwitcherPanelController {
     private let panel: WindowSwitcherPanel
     private let backdrop = NSView()
     private let hostingView = NSHostingView(rootView: AnyView(EmptyView()))
+    private let selection = WindowSwitcherSelectionModel()
     private var windows: [WindowInfo] = []
     private var thumbnails: [CGWindowID: NSImage] = [:]
     private var controlCapabilities: [CGWindowID: WindowControlCapabilities] = [:]
@@ -688,6 +694,7 @@ final class WindowSwitcherPanelController {
             return
         }
         selectedIndex = reverse ? windows.count - 1 : min(1, windows.count - 1)
+        updateSelection(disablesAnimations: true)
         thumbnails = Dictionary(uniqueKeysWithValues: windows.compactMap { window in
             windowsService.cachedThumbnail(for: window).map { (window.windowID, $0) }
         })
@@ -717,7 +724,7 @@ final class WindowSwitcherPanelController {
     private func moveSelection(by step: Int) {
         guard panel.isVisible, !windows.isEmpty else { return }
         selectedIndex = (selectedIndex + step + windows.count) % windows.count
-        refreshContent()
+        updateSelection(disablesAnimations: true)
     }
 
     private func commitSelection() {
@@ -768,8 +775,24 @@ final class WindowSwitcherPanelController {
                 selectedIndex: selectedIndex,
                 remainingCount: windows.count
             )
+            updateSelection(disablesAnimations: true)
             if let screen = panel.screen { updatePanelFrame(on: screen) }
             refreshContent()
+        }
+    }
+
+    private func updateSelection(disablesAnimations: Bool) {
+        let selectedWindowID = windows.indices.contains(selectedIndex)
+            ? windows[selectedIndex].windowID
+            : nil
+        guard disablesAnimations else {
+            selection.windowID = selectedWindowID
+            return
+        }
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            selection.windowID = selectedWindowID
         }
     }
 
@@ -779,7 +802,7 @@ final class WindowSwitcherPanelController {
             thumbnails: thumbnails,
             controlCapabilities: controlCapabilities,
             backdropImage: backdropImage,
-            selectedWindowID: windows.indices.contains(selectedIndex) ? windows[selectedIndex].windowID : nil,
+            selection: selection,
             previewHeight: tilePreviewHeight,
             onWindowAction: { [weak self] action, windowID in self?.perform(action, on: windowID) },
             onSelect: { [weak self] windowID in self?.selectAndCommit(windowID: windowID) }
@@ -967,7 +990,7 @@ private struct WindowSwitcherView: View {
     let thumbnails: [CGWindowID: NSImage]
     let controlCapabilities: [CGWindowID: WindowControlCapabilities]
     let backdropImage: NSImage?
-    let selectedWindowID: CGWindowID?
+    @ObservedObject var selection: WindowSwitcherSelectionModel
     let previewHeight: CGFloat
     let onWindowAction: (WindowSwitcherWindowAction, CGWindowID) -> Void
     let onSelect: (CGWindowID) -> Void
@@ -980,7 +1003,7 @@ private struct WindowSwitcherView: View {
                         window: window,
                         thumbnail: thumbnails[window.windowID],
                         controlCapabilities: controlCapabilities[window.windowID] ?? [],
-                        isSelected: selectedWindowID == window.windowID,
+                        isSelected: selection.windowID == window.windowID,
                         previewHeight: previewHeight,
                         onWindowAction: { onWindowAction($0, window.windowID) },
                         action: { onSelect(window.windowID) }
