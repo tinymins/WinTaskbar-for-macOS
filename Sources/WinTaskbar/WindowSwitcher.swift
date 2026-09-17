@@ -397,10 +397,9 @@ enum WindowSwitcherBackdrop {
     static let tint = Color(red: 0.52, green: 0.53, blue: 0.54).opacity(0.30)
     private static let context = CIContext(options: [.cacheIntermediates: false])
 
-    struct Request: Hashable, Sendable {
+    struct Request: Sendable {
         let displayID: CGDirectDisplayID
         let pixelRect: CGRect
-        let windowListRect: CGRect
         let imageSize: CGSize
     }
 
@@ -432,9 +431,6 @@ enum WindowSwitcherBackdrop {
         guard let displayID = screen.deviceDescription[
             NSDeviceDescriptionKey("NSScreenNumber")
         ] as? CGDirectDisplayID else { return nil }
-        let displayBounds = CGDisplayBounds(displayID)
-        let displayScaleX = displayBounds.width / screen.frame.width
-        let displayScaleY = displayBounds.height / screen.frame.height
         return Request(
             displayID: displayID,
             pixelRect: captureRect(
@@ -442,31 +438,12 @@ enum WindowSwitcherBackdrop {
                 screenFrame: screen.frame,
                 displayPixelWidth: CGFloat(CGDisplayPixelsWide(displayID))
             ),
-            windowListRect: CGRect(
-                x: displayBounds.minX + (panelFrame.minX - screen.frame.minX) * displayScaleX,
-                y: displayBounds.minY + (screen.frame.maxY - panelFrame.maxY) * displayScaleY,
-                width: panelFrame.width * displayScaleX,
-                height: panelFrame.height * displayScaleY
-            ).integral,
             imageSize: panelFrame.size
         )
     }
 
-    nonisolated static func captureSource(
-        _ request: Request,
-        below windowID: CGWindowID? = nil
-    ) -> Source? {
-        let source: CGImage?
-        if let windowID {
-            source = CGWindowListCreateImage(
-                request.windowListRect,
-                .optionOnScreenBelowWindow,
-                windowID,
-                [.boundsIgnoreFraming, .bestResolution]
-            )
-        } else {
-            source = CGDisplayCreateImage(request.displayID, rect: request.pixelRect)
-        }
+    nonisolated static func captureSource(_ request: Request) -> Source? {
+        let source = CGDisplayCreateImage(request.displayID, rect: request.pixelRect)
         guard let source else { return nil }
         return Source(image: source, size: request.imageSize)
     }
@@ -486,22 +463,8 @@ enum WindowSwitcherBackdrop {
         return blur(source)
     }
 
-    nonisolated static func capture(
-        _ request: Request,
-        below windowID: CGWindowID
-    ) -> Capture? {
-        guard let source = captureSource(request, below: windowID) else { return nil }
-        return blur(source)
-    }
-
     static func image(from capture: Capture) -> NSImage {
         NSImage(cgImage: capture.image, size: capture.size)
-    }
-
-    static func image(panelFrame: CGRect, on screen: NSScreen) -> NSImage? {
-        guard let request = request(panelFrame: panelFrame, on: screen),
-              let capture = capture(request) else { return nil }
-        return image(from: capture)
     }
 }
 
@@ -561,7 +524,6 @@ private struct WindowSwitcherCapturedThumbnail: @unchecked Sendable {
 private struct WindowSwitcherRefreshResult: @unchecked Sendable {
     let thumbnails: [WindowSwitcherCapturedThumbnail]
     let controlCapabilities: [CGWindowID: WindowControlCapabilities]
-    let backdrop: WindowSwitcherBackdrop.Capture?
 }
 
 @MainActor
@@ -596,7 +558,6 @@ final class WindowSwitcherPanelController {
     private var detailedWindowsCache: [WindowInfo] = []
     private var detailedWindowsCacheDate = Date.distantPast
     private var controlCapabilitiesCache: [CGWindowID: WindowControlCapabilities] = [:]
-    private var backdropCache: [WindowSwitcherBackdrop.Request: NSImage] = [:]
 
     init(
         windowsService: WindowsService,
@@ -711,7 +672,9 @@ final class WindowSwitcherPanelController {
         guard let screen else { return }
         let targetFrame = panelFrame(on: screen)
         let backdropRequest = WindowSwitcherBackdrop.request(panelFrame: targetFrame, on: screen)
-        backdropImage = backdropRequest.flatMap { backdropCache[$0] }
+        backdropImage = backdropRequest
+            .flatMap { WindowSwitcherBackdrop.capture($0) }
+            .map { WindowSwitcherBackdrop.image(from: $0) }
         panel.setFrame(targetFrame, display: false)
         refreshContent(disablesAnimations: true)
         backdrop.layoutSubtreeIfNeeded()
@@ -720,8 +683,6 @@ final class WindowSwitcherPanelController {
         refreshWindowCache(forPIDs: applicationPIDs)
         refreshPresentation(
             windows: windows,
-            backdropRequest: backdropRequest,
-            backdropWindowID: CGWindowID(panel.windowNumber),
             presentationID: currentPresentationID
         )
     }
@@ -854,8 +815,6 @@ final class WindowSwitcherPanelController {
 
     private func refreshPresentation(
         windows presentedWindows: [WindowInfo],
-        backdropRequest: WindowSwitcherBackdrop.Request?,
-        backdropWindowID: CGWindowID,
         presentationID: UInt
     ) {
         let activationService = activationService
@@ -874,15 +833,9 @@ final class WindowSwitcherPanelController {
                     guard !Task.isCancelled else { break }
                     capabilities[window.windowID] = activationService.controlCapabilities(for: window)
                 }
-                let backdrop = Task.isCancelled
-                    ? nil
-                    : backdropRequest.flatMap {
-                        WindowSwitcherBackdrop.capture($0, below: backdropWindowID)
-                    }
                 return WindowSwitcherRefreshResult(
                     thumbnails: capturedThumbnails,
-                    controlCapabilities: capabilities,
-                    backdrop: backdrop
+                    controlCapabilities: capabilities
                 )
             }
             let result = await withTaskCancellationHandler {
@@ -907,11 +860,6 @@ final class WindowSwitcherPanelController {
             self.controlCapabilitiesCache.merge(result.controlCapabilities) { _, refreshed in refreshed }
             self.controlCapabilities = self.controlCapabilitiesCache.filter {
                 currentWindowIDs.contains($0.key)
-            }
-            if let backdropRequest, let capture = result.backdrop {
-                let image = WindowSwitcherBackdrop.image(from: capture)
-                self.backdropCache[backdropRequest] = image
-                self.backdropImage = image
             }
             self.refreshContent()
             self.refreshTask = nil
