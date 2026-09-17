@@ -78,7 +78,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             startMenu?.setSettingsObservationMode(visible)
             taskbar?.setSettingsObservationMode(visible)
         }
-        actions.openSettingsHandler = { [weak settings] page in settings?.show(page: page) }
+        actions.openSettingsHandler = { [weak startMenu, weak settings] page, context in
+            guard let settings else { return }
+            if SettingsOpeningPolicy.shouldDismissStartMenu(
+                context: context,
+                isSettingsOpen: settings.isOpen
+            ) {
+                startMenu?.hide()
+            }
+            settings.show(page: page)
+        }
         actions.fitWindowsHandler = { [weak self] in
             self?.windowFittingService.fitAllWindowsToFreeSpace()
         }
@@ -588,6 +597,18 @@ func runSelfTest() async -> Int32 {
         "Shortcut Mappings",
         "About"
     ],
+          SettingsOpeningPolicy.shouldDismissStartMenu(
+              context: .startMenu,
+              isSettingsOpen: false
+          ),
+          !SettingsOpeningPolicy.shouldDismissStartMenu(
+              context: .startMenu,
+              isSettingsOpen: true
+          ),
+          !SettingsOpeningPolicy.shouldDismissStartMenu(
+              context: .standard,
+              isSettingsOpen: false
+          ),
           TransientSurfaceDismissalPolicy.shouldDismissForOutsideInteraction(
               keepsVisibleForSettings: false
           ),

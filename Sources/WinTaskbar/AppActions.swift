@@ -82,11 +82,25 @@ enum FinderDialogCommand {
     case connectToServer
 }
 
+enum SettingsOpeningContext {
+    case standard
+    case startMenu
+}
+
+enum SettingsOpeningPolicy {
+    static func shouldDismissStartMenu(
+        context: SettingsOpeningContext,
+        isSettingsOpen: Bool
+    ) -> Bool {
+        context == .startMenu && !isSettingsOpen
+    }
+}
+
 @MainActor
 final class AppActions: ObservableObject {
     var toggleStartMenuHandler: ((NSScreen?) -> Void)?
     var toggleQuickLinkMenuHandler: ((NSScreen?) -> Void)?
-    var openSettingsHandler: ((SettingsPage?) -> Void)?
+    var openSettingsHandler: ((SettingsPage?, SettingsOpeningContext) -> Void)?
     var closeStartMenuHandler: (() -> Void)?
     var fitWindowsHandler: (() -> Void)?
     var showDesktopHandler: (() -> Void)?
@@ -98,7 +112,12 @@ final class AppActions: ObservableObject {
 
     func toggleStartMenu(on screen: NSScreen? = nil) { toggleStartMenuHandler?(screen) }
     func toggleQuickLinkMenu(on screen: NSScreen? = nil) { toggleQuickLinkMenuHandler?(screen) }
-    func openSettings(page: SettingsPage? = nil) { openSettingsHandler?(page) }
+    func openSettings(
+        page: SettingsPage? = nil,
+        context: SettingsOpeningContext = .standard
+    ) {
+        openSettingsHandler?(page, context)
+    }
     func closeStartMenu() { closeStartMenuHandler?() }
     func fitWindows() { fitWindowsHandler?() }
     func showDesktop() { showDesktopHandler?() }

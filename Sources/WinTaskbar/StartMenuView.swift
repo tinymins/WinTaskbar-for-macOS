@@ -179,7 +179,7 @@ struct StartMenuView: View {
     private var actionRail: some View {
         VStack(spacing: 4) {
             HoveringIconButton(systemName: "gearshape", help: "Settings") {
-                actions.openSettings()
+                actions.openSettings(context: .startMenu)
             }
             HoveringIconButton(systemName: "rectangle.arrowtriangle.2.inward", help: "Fit windows") {
                 actions.fitWindows()
