@@ -589,6 +589,8 @@ final class WindowSwitcherPanelController {
     private var selectedIndex = 0
     private var tilePreviewHeight = WindowSwitcherLayout.previewHeight
     private var presentationID: UInt = 0
+    private var activationGeneration: UInt = 0
+    private var activationTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
     private var windowCacheTask: Task<Void, Never>?
     private var detailedWindowsCache: [WindowInfo] = []
@@ -667,6 +669,9 @@ final class WindowSwitcherPanelController {
     }
 
     private func present(reverse: Bool) {
+        activationGeneration &+= 1
+        activationTask?.cancel()
+        activationTask = nil
         refreshTask?.cancel()
         presentationID &+= 1
         let currentPresentationID = presentationID
@@ -735,14 +740,25 @@ final class WindowSwitcherPanelController {
         let selectedWindow = windows[selectedIndex]
         activationHistory.record(selectedWindow.windowID)
         dismiss()
+        activationGeneration &+= 1
+        let currentActivationGeneration = activationGeneration
         let activationService = activationService
-        Task { @MainActor in
+        activationTask?.cancel()
+        activationTask = Task { @MainActor [weak self] in
             let worker = Task.detached(priority: .userInitiated) {
                 activationService.raiseAccessibilityWindow(selectedWindow)
             }
-            await worker.value
-            guard !Task.isCancelled else { return }
+            await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
+            guard let self,
+                  !Task.isCancelled,
+                  self.activationGeneration == currentActivationGeneration,
+                  !self.panel.isVisible else { return }
             activationService.activateApplication(for: selectedWindow)
+            self.activationTask = nil
         }
     }
 

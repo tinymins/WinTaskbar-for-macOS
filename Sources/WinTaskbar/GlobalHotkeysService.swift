@@ -240,6 +240,7 @@ final class GlobalHotkeysService: ObservableObject {
     private var altTabGesture = AltTabGestureState()
     private var altTabTrackingEnabled = false
     private var altTabModifierPollingTask: Task<Void, Never>?
+    private var altTabModifierPollingGeneration: UInt = 0
     private var altTabSwitcherEnabled = false
     private var altTabModifier: AltTabModifier = .option
     private var shortcutCaptureEventTap: CFMachPort?
@@ -519,10 +520,19 @@ final class GlobalHotkeysService: ObservableObject {
 
     private func startAltTabModifierPolling() {
         altTabModifierPollingTask?.cancel()
+        altTabModifierPollingGeneration &+= 1
+        let generation = altTabModifierPollingGeneration
         altTabModifierPollingTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(16))
-                guard let self, self.altTabGesture.isActive else { break }
+                do {
+                    try await Task.sleep(for: .milliseconds(16))
+                } catch {
+                    break
+                }
+                guard !Task.isCancelled,
+                      let self,
+                      self.altTabModifierPollingGeneration == generation,
+                      self.altTabGesture.isActive else { break }
                 let flags = CGEventSource.flagsState(.combinedSessionState)
                 let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(flags.rawValue))
                 if let action = self.altTabGesture.flagsChanged(to: modifierFlags) {
@@ -530,7 +540,8 @@ final class GlobalHotkeysService: ObservableObject {
                     break
                 }
             }
-            self?.altTabModifierPollingTask = nil
+            guard let self, self.altTabModifierPollingGeneration == generation else { return }
+            self.altTabModifierPollingTask = nil
         }
     }
 
@@ -543,6 +554,7 @@ final class GlobalHotkeysService: ObservableObject {
     }
 
     private func stopAltTabModifierPolling() {
+        altTabModifierPollingGeneration &+= 1
         altTabModifierPollingTask?.cancel()
         altTabModifierPollingTask = nil
     }
