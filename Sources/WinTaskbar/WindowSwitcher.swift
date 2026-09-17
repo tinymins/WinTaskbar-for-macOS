@@ -342,7 +342,7 @@ final class WindowSwitcherPanelController {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
-        panel.appearance = NSAppearance(named: .darkAqua)
+        panel.appearance = NSAppearance(named: .aqua)
 
         backdrop.material = .underWindowBackground
         backdrop.blendingMode = .behindWindow
@@ -351,7 +351,7 @@ final class WindowSwitcherPanelController {
         backdrop.layer?.cornerRadius = 8
         backdrop.layer?.masksToBounds = true
         backdrop.layer?.borderWidth = 1
-        backdrop.layer?.borderColor = NSColor.white.withAlphaComponent(0.10).cgColor
+        backdrop.layer?.borderColor = NSColor.black.withAlphaComponent(0.16).cgColor
 
         hostingView.sizingOptions = []
         hostingView.translatesAutoresizingMaskIntoConstraints = false
@@ -558,7 +558,7 @@ private struct WindowSwitcherView: View {
             .padding(WindowSwitcherLayout.panelPadding)
         }
         .scrollIndicators(.visible)
-        .background(Color(red: 0.12, green: 0.12, blue: 0.13).opacity(0.88))
+        .background(Color.white.opacity(0.10))
     }
 }
 
