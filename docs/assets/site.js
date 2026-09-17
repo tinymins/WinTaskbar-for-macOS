@@ -24,7 +24,7 @@ const translations = {
     'hero.mru': 'MRU ordered windows',
     'demo.eyebrow': '<span></span> Interactive product demo',
     'demo.title': 'Use the interface.<br><em>See the actual pixels.</em>',
-    'demo.description': 'The controls switch between captures from the running app. Click the Start button in the taskbar, or open the full-screen Alt+Tab view.',
+    'demo.description': 'Hover a running app for its real window preview, click Start, or open the full-screen Alt+Tab view.',
     'demo.previewTitle': 'WinTaskbar interactive preview',
     'demo.captured': 'Captured UI',
     'demo.chooseView': 'Choose a product view',
@@ -33,17 +33,17 @@ const translations = {
     'demo.desktopSubtitle': 'Native window workflow for macOS',
     'demo.toggleStart': 'Toggle the Start menu',
     'demo.activateFinder': 'Activate Finder',
-    'demo.activateActivity': 'Activate Activity Monitor',
     'demo.activateChatGPT': 'Activate ChatGPT',
+    'demo.activateCode': 'Activate Visual Studio Code',
+    'demo.closePreview': 'Close window preview',
     'demo.caption': 'Actual 3840 × 2160 capture · window titles redacted only',
     'demo.openSwitcher': 'Open switcher',
     'demo.close': 'Close',
     'demo.closeAria': 'Close Alt+Tab view',
-    'app.activityMonitor': 'Activity Monitor',
     'status.taskbar': 'Taskbar is ready — click the Start button',
     'status.start': 'Start is open — click Start again to close it',
     'status.altTab': 'Alt+Tab is active — press Escape to return',
-    'status.selected': '{app} selected — hover labels follow the live taskbar pattern',
+    'status.selected': '{app} selected — hover the icon for its window preview',
     'screenshots.eyebrow': '<span></span> From the running app',
     'screenshots.title': 'No concept render.<br><em>This is what you get.</em>',
     'screenshots.altTabTitle': 'Alt+Tab, rebuilt for your window history',
@@ -108,7 +108,7 @@ const translations = {
     'hero.mru': '按最近使用顺序排列',
     'demo.eyebrow': '<span></span> 可交互产品演示',
     'demo.title': '直接操作界面。<br><em>看到真实渲染效果。</em>',
-    'demo.description': '控制区会切换当前应用的真实捕获画面。点击任务栏里的开始按钮，或打开全屏 Alt+Tab 视图。',
+    'demo.description': '悬停运行中的应用可查看真实窗口预览，也可以点击开始按钮或打开全屏 Alt+Tab。',
     'demo.previewTitle': 'WinTaskbar 交互预览',
     'demo.captured': '实机界面',
     'demo.chooseView': '选择产品界面',
@@ -117,17 +117,17 @@ const translations = {
     'demo.desktopSubtitle': 'macOS 上的原生窗口工作流',
     'demo.toggleStart': '打开或关闭开始菜单',
     'demo.activateFinder': '激活 Finder',
-    'demo.activateActivity': '激活活动监视器',
     'demo.activateChatGPT': '激活 ChatGPT',
+    'demo.activateCode': '激活 Visual Studio Code',
+    'demo.closePreview': '关闭窗口预览',
     'demo.caption': '真实 3840 × 2160 捕获 · 仅对窗口标题脱敏',
     'demo.openSwitcher': '打开切换器',
     'demo.close': '关闭',
     'demo.closeAria': '关闭 Alt+Tab 视图',
-    'app.activityMonitor': '活动监视器',
     'status.taskbar': '任务栏已就绪——点击开始按钮试试',
     'status.start': '开始菜单已打开——再次点击开始按钮即可关闭',
     'status.altTab': 'Alt+Tab 已打开——按 Escape 返回',
-    'status.selected': '已选择 {app}——悬停标签遵循真实任务栏交互',
+    'status.selected': '已选择 {app}——悬停图标可查看窗口预览',
     'screenshots.eyebrow': '<span></span> 来自正在运行的应用',
     'screenshots.title': '不是概念渲染。<br><em>安装后就是这个效果。</em>',
     'screenshots.altTabTitle': 'Alt+Tab，按照你的窗口使用历史重新设计',
@@ -182,8 +182,16 @@ const closeButton = document.querySelector('#demo-close');
 const statusText = document.querySelector('#demo-status-text');
 const startCapture = document.querySelector('#start-capture');
 const altTabCapture = document.querySelector('#alt-tab-capture');
+const demoStage = document.querySelector('.demo-stage');
+const taskbarCapture = document.querySelector('#taskbar-capture');
+const windowPreview = document.querySelector('#window-preview');
+const windowPreviewImage = document.querySelector('#window-preview-image');
+const windowPreviewIcon = document.querySelector('#window-preview-icon');
+const windowPreviewTitle = document.querySelector('#window-preview-title');
+const windowPreviewClose = document.querySelector('#window-preview-close');
 let languagePreference = readLanguagePreference();
 let currentLanguage = resolveLanguage(languagePreference);
+let previewHideTimer;
 
 function readLanguagePreference() {
   try {
@@ -251,11 +259,44 @@ function setLanguagePreference(preference, persist = true) {
 function setMode(mode) {
   const statusKeyByMode = { taskbar: 'status.taskbar', start: 'status.start', 'alt-tab': 'status.altTab' };
   if (!demo || !statusKeyByMode[mode]) return;
+  hideWindowPreview();
   demo.dataset.mode = mode;
   modeButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.demoMode === mode)));
   startCapture?.setAttribute('aria-hidden', String(mode !== 'start'));
   altTabCapture?.setAttribute('aria-hidden', String(mode !== 'alt-tab'));
   updateStatusForMode();
+}
+
+function showWindowPreview(button) {
+  if (!windowPreview || !windowPreviewImage || !windowPreviewIcon || !windowPreviewTitle || !demoStage || !taskbarCapture) return;
+  window.clearTimeout(previewHideTimer);
+  windowPreviewImage.src = button.dataset.previewImage;
+  windowPreviewImage.alt = `${button.dataset.previewTitle} window preview`;
+  windowPreviewIcon.src = button.dataset.previewIcon;
+  windowPreviewTitle.textContent = button.dataset.previewTitle;
+  windowPreview.classList.add('visible');
+  windowPreview.setAttribute('aria-hidden', 'false');
+  windowPreview.removeAttribute('inert');
+
+  const stageRect = demoStage.getBoundingClientRect();
+  const taskbarRect = taskbarCapture.getBoundingClientRect();
+  const buttonRect = button.getBoundingClientRect();
+  const previewWidth = windowPreview.getBoundingClientRect().width;
+  const centeredLeft = buttonRect.left + buttonRect.width / 2 - stageRect.left - previewWidth / 2;
+  windowPreview.style.left = `${Math.max(8, Math.min(centeredLeft, stageRect.width - previewWidth - 8))}px`;
+  windowPreview.style.bottom = `${stageRect.bottom - taskbarRect.top + 8}px`;
+}
+
+function hideWindowPreview() {
+  window.clearTimeout(previewHideTimer);
+  windowPreview?.classList.remove('visible');
+  windowPreview?.setAttribute('aria-hidden', 'true');
+  windowPreview?.setAttribute('inert', '');
+}
+
+function scheduleWindowPreviewHide() {
+  window.clearTimeout(previewHideTimer);
+  previewHideTimer = window.setTimeout(hideWindowPreview, 80);
 }
 
 languageSelect?.addEventListener('change', () => setLanguagePreference(languageSelect.value));
@@ -278,10 +319,14 @@ altTabTrigger?.addEventListener('click', () => setMode('alt-tab'));
 closeButton?.addEventListener('click', () => setMode('taskbar'));
 
 appHotspots.forEach((button) => {
+  button.addEventListener('mouseenter', () => showWindowPreview(button));
+  button.addEventListener('mouseleave', scheduleWindowPreviewHide);
+  button.addEventListener('focus', () => showWindowPreview(button));
+  button.addEventListener('blur', scheduleWindowPreviewHide);
   button.addEventListener('click', () => {
     setMode('taskbar');
     appHotspots.forEach((item) => item.classList.toggle('active', item === button));
-    const appName = button.querySelector('span')?.textContent?.trim() ?? '';
+    const appName = button.dataset.appName ?? '';
     if (statusText) statusText.textContent = translate('status.selected').replace('{app}', appName);
     if (!reducedMotion) {
       button.animate(
@@ -291,6 +336,10 @@ appHotspots.forEach((button) => {
     }
   });
 });
+
+windowPreview?.addEventListener('mouseenter', () => window.clearTimeout(previewHideTimer));
+windowPreview?.addEventListener('mouseleave', scheduleWindowPreviewHide);
+windowPreviewClose?.addEventListener('click', hideWindowPreview);
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && demo?.dataset.mode !== 'taskbar') setMode('taskbar');

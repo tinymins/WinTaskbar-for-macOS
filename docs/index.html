@@ -97,12 +97,21 @@
             <img src="screenshots/start-menu.jpg" alt="Actual WinTaskbar Start menu" data-i18n-alt="image.start">
           </div>
 
+          <figure class="window-preview" id="window-preview" aria-hidden="true" inert>
+            <figcaption>
+              <img id="window-preview-icon" src="screenshots/preview-finder-icon.jpg" alt="">
+              <span id="window-preview-title">Finder</span>
+              <button id="window-preview-close" type="button" aria-label="Close window preview" data-i18n-aria-label="demo.closePreview">×</button>
+            </figcaption>
+            <img id="window-preview-image" src="screenshots/preview-finder.jpg" alt="Finder window preview">
+          </figure>
+
           <div class="taskbar-capture" id="taskbar-capture">
             <img src="screenshots/taskbar-fullwidth.jpg" alt="Actual WinTaskbar taskbar" data-i18n-alt="image.taskbar">
-            <button class="taskbar-hotspot start-hotspot" type="button" aria-label="Toggle the Start menu" data-i18n-aria-label="demo.toggleStart"><span data-i18n="demo.mode.start">Start</span></button>
-            <button class="taskbar-hotspot app-hotspot app-one" type="button" aria-label="Activate Finder" data-i18n-aria-label="demo.activateFinder"><span>Finder</span></button>
-            <button class="taskbar-hotspot app-hotspot app-two" type="button" aria-label="Activate Activity Monitor" data-i18n-aria-label="demo.activateActivity"><span data-i18n="app.activityMonitor">Activity Monitor</span></button>
-            <button class="taskbar-hotspot app-hotspot app-three" type="button" aria-label="Activate ChatGPT" data-i18n-aria-label="demo.activateChatGPT"><span>ChatGPT</span></button>
+            <button class="taskbar-hotspot start-hotspot" type="button" aria-label="Toggle the Start menu" data-i18n-aria-label="demo.toggleStart"></button>
+            <button class="taskbar-hotspot app-hotspot app-one" type="button" aria-label="Activate Finder" data-i18n-aria-label="demo.activateFinder" data-app-name="Finder" data-preview-title="Finder" data-preview-image="screenshots/preview-finder.jpg" data-preview-icon="screenshots/preview-finder-icon.jpg"></button>
+            <button class="taskbar-hotspot app-hotspot app-two" type="button" aria-label="Activate ChatGPT" data-i18n-aria-label="demo.activateChatGPT" data-app-name="ChatGPT" data-preview-title="ChatGPT" data-preview-image="screenshots/preview-chatgpt.jpg" data-preview-icon="screenshots/preview-chatgpt-icon.jpg"></button>
+            <button class="taskbar-hotspot app-hotspot app-three" type="button" aria-label="Activate Visual Studio Code" data-i18n-aria-label="demo.activateCode" data-app-name="Visual Studio Code" data-preview-title="Visual Studio Code" data-preview-image="screenshots/preview-vscode.jpg" data-preview-icon="screenshots/preview-vscode-icon.jpg"></button>
           </div>
 
           <figure class="alt-tab-capture" id="alt-tab-capture" aria-hidden="true">

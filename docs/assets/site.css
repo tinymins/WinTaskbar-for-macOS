@@ -130,14 +130,20 @@ h1 em, h2 em { font-style: normal; color: transparent; background: linear-gradie
 .taskbar-capture { position: absolute; z-index: 8; right: 0; bottom: 0; left: 0; width: 100%; overflow: visible; border-top: 1px solid rgba(255,255,255,.15); box-shadow: 0 -12px 30px rgba(0,0,0,.3); transition: .28s ease; }
 .taskbar-capture img { width: 100%; }
 .taskbar-hotspot { position: absolute; top: 0; height: 100%; padding: 0; border: 0; background: transparent; cursor: pointer; }
-.taskbar-hotspot::after { content: ""; position: absolute; inset: 5px; opacity: 0; border: 1px solid rgba(92,201,255,.58); border-radius: 13px; background: rgba(74,169,255,.1); transition: .18s ease; }
-.taskbar-hotspot:hover::after, .taskbar-hotspot.active::after { opacity: 1; }
-.taskbar-hotspot span { position: absolute; bottom: calc(100% + 11px); left: 50%; z-index: 2; opacity: 0; padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; color: #dfe7f0; background: rgba(9,13,19,.92); box-shadow: 0 10px 25px rgba(0,0,0,.35); font-size: 9px; white-space: nowrap; transform: translate(-50%,5px); transition: .18s ease; pointer-events: none; }
-.taskbar-hotspot:hover span { opacity: 1; transform: translate(-50%,0); }
+.taskbar-hotspot:focus-visible { outline: 1px solid rgba(255,255,255,.72); outline-offset: -2px; border-radius: 4px; }
 .start-hotspot { left: 0; width: 2.2%; min-width: 28px; }
-.app-one { left: 1.8%; width: 2%; min-width: 27px; }
-.app-two { left: 6.1%; width: 2%; min-width: 27px; }
-.app-three { left: 8.1%; width: 2%; min-width: 27px; }
+.app-one { left: 3.3%; width: 2.2%; min-width: 27px; }
+.app-two { left: 14.6%; width: 2.2%; min-width: 27px; }
+.app-three { left: 17%; width: 2.2%; min-width: 27px; }
+.window-preview { position: absolute; z-index: 13; left: 8px; bottom: 52px; width: clamp(168px, 16vw, 210px); margin: 0; overflow: hidden; opacity: 0; border: .5px solid rgba(255,255,255,.2); border-radius: 7px; color: #f2f5f8; background: rgba(37,42,48,.96); box-shadow: 0 14px 34px rgba(0,0,0,.48); transform: translateY(7px) scale(.985); transform-origin: bottom center; transition: opacity .14s ease, transform .18s ease; pointer-events: none; }
+.window-preview.visible { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+.window-preview figcaption { display: grid; grid-template-columns: 16px minmax(0,1fr) 20px; align-items: center; gap: 6px; height: 28px; padding: 0 6px 0 8px; font-size: 10px; }
+.window-preview figcaption > img { width: 14px; height: 14px; border-radius: 3px; }
+.window-preview figcaption span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.window-preview figcaption button { width: 20px; height: 20px; padding: 0; border: 0; border-radius: 3px; opacity: 0; color: #d7dce2; background: transparent; font-size: 15px; line-height: 20px; cursor: pointer; transition: opacity .12s ease, background .12s ease; }
+.window-preview:hover figcaption button, .window-preview:focus-within figcaption button { opacity: 1; }
+.window-preview figcaption button:hover { color: white; background: #d84646; }
+.window-preview > img { display: block; width: calc(100% - 12px); aspect-ratio: 16 / 9; margin: 0 6px 6px; border-radius: 3px; object-fit: cover; object-position: top center; }
 .start-capture { position: absolute; z-index: 7; left: 0; bottom: max(28px, 2.92vw); width: min(32%, 400px); opacity: 0; filter: drop-shadow(0 30px 50px rgba(0,0,0,.52)); transform: translateY(18px) scale(.97); transform-origin: bottom left; transition: opacity .22s ease, transform .28s cubic-bezier(.2,.8,.2,1); pointer-events: none; }
 .start-capture img { width: 100%; border-radius: 16px; }
 .product-demo[data-mode="start"] .start-capture { opacity: 1; transform: translateY(0) scale(1); }
