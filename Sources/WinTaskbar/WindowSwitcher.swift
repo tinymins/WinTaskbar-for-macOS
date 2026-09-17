@@ -344,7 +344,7 @@ final class WindowSwitcherPanelController {
         panel.hasShadow = true
         panel.appearance = NSAppearance(named: .darkAqua)
 
-        backdrop.material = .hudWindow
+        backdrop.material = .underWindowBackground
         backdrop.blendingMode = .behindWindow
         backdrop.state = .active
         backdrop.wantsLayer = true
@@ -558,7 +558,7 @@ private struct WindowSwitcherView: View {
             .padding(WindowSwitcherLayout.panelPadding)
         }
         .scrollIndicators(.visible)
-        .background(Color.white.opacity(0.12))
+        .background(Color.white.opacity(0.06))
     }
 }
 
