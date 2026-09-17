@@ -77,6 +77,13 @@ enum AltTabGestureAction: Equatable {
     case cancel
 }
 
+enum ShortcutCaptureAction: Equatable {
+    case passThrough
+    case suppress
+    case cancel
+    case capture(HotkeyShortcut)
+}
+
 struct AltTabGestureState {
     private let altModifier: NSEvent.ModifierFlags
     private(set) var isActive = false
@@ -164,6 +171,23 @@ private let windowsKeyEventTapHandler: CGEventTapCallBack = { _, eventType, even
     return Unmanaged.passUnretained(event)
 }
 
+private let shortcutCaptureEventTapHandler: CGEventTapCallBack = { _, eventType, event, userData in
+    guard let userData else { return Unmanaged.passUnretained(event) }
+    let service = Unmanaged<GlobalHotkeysService>.fromOpaque(userData).takeUnretainedValue()
+    let rawFlags = event.flags.rawValue
+    let keyCode = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
+    let keyLabel = NSEvent(cgEvent: event)?.charactersIgnoringModifiers?.uppercased()
+    let shouldSuppress = MainActor.assumeIsolated {
+        service.handleShortcutCaptureEvent(
+            eventType,
+            rawFlags: rawFlags,
+            keyCode: keyCode,
+            keyLabel: keyLabel
+        )
+    }
+    return shouldSuppress ? nil : Unmanaged.passUnretained(event)
+}
+
 private let winTaskbarHotKeyHandler: EventHandlerUPP = { _, event, userData in
     guard let event, let userData else { return OSStatus(eventNotHandledErr) }
     var hotKeyID = EventHotKeyID()
@@ -194,6 +218,7 @@ final class GlobalHotkeysService: ObservableObject {
     @Published private(set) var registrationIssues: [String: String] = [:]
     @Published private(set) var windowsKeyIssue: String?
     @Published private(set) var altTabIssue: String?
+    @Published private(set) var isCapturingShortcut = false
 
     private var handler: EventHandlerRef?
     private var hotKeys: [EventHotKeyRef] = []
@@ -202,6 +227,7 @@ final class GlobalHotkeysService: ObservableObject {
     private var windowsKeyEventTapSource: CFRunLoopSource?
     private(set) var isEnabled = false
     private var configurations: [GlobalShortcutConfiguration] = []
+    private var requestedEnabled = false
     private var reverseWindowsSpaceHotKeyIDs: Set<Int> = []
     private var altTabHotKeyIDs: Set<Int> = []
     private var windowsKeyMapping: WindowsKeyMapping = .option
@@ -214,6 +240,13 @@ final class GlobalHotkeysService: ObservableObject {
     private var altTabGesture = AltTabGestureState()
     private var altTabTrackingEnabled = false
     private var altTabModifierPollingTask: Task<Void, Never>?
+    private var altTabSwitcherEnabled = false
+    private var shortcutCaptureEventTap: CFMachPort?
+    private var shortcutCaptureEventTapSource: CFRunLoopSource?
+    private var shortcutCaptureOwner: UUID?
+    private var shortcutCaptureCompletion: ((HotkeyShortcut?) -> Void)?
+    private var workspaceTerminationObserver: NSObjectProtocol?
+    private var registrationRetryTask: Task<Void, Never>?
 
     private static let altTabForwardHotKeyID = Int(UInt32.max - 1)
     private static let altTabReverseHotKeyID = Int(UInt32.max)
@@ -228,6 +261,13 @@ final class GlobalHotkeysService: ObservableObject {
             Unmanaged.passUnretained(self).toOpaque(),
             &handler
         )
+        workspaceTerminationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didTerminateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.retryUnavailableRegistrationsAfterApplicationExit() }
+        }
     }
 
     func setConfiguration(
@@ -238,14 +278,44 @@ final class GlobalHotkeysService: ObservableObject {
         configurations: [GlobalShortcutConfiguration]
     ) {
         self.configurations = configurations
+        requestedEnabled = enabled
         self.windowsKeyMapping = windowsKeyMapping
         self.windowsKeyOpensStart = windowsKeyOpensStart
+        self.altTabSwitcherEnabled = altTabSwitcherEnabled
+        applyConfiguration()
+    }
+
+    @discardableResult
+    func beginShortcutCapture(
+        owner: UUID,
+        completion: @escaping (HotkeyShortcut?) -> Void
+    ) -> Bool {
+        if isCapturingShortcut {
+            completeShortcutCapture(with: nil)
+        }
+        shortcutCaptureOwner = owner
+        shortcutCaptureCompletion = completion
+        isCapturingShortcut = true
+        applyConfiguration()
+        return installShortcutCaptureEventTap()
+    }
+
+    func finishShortcutCapture(owner: UUID, with shortcut: HotkeyShortcut?) {
+        guard shortcutCaptureOwner == owner else { return }
+        completeShortcutCapture(with: shortcut)
+    }
+
+    func cancelShortcutCapture(owner: UUID) {
+        finishShortcutCapture(owner: owner, with: nil)
+    }
+
+    private func applyConfiguration() {
         unregisterAll()
         windowsKeyGesture = WindowsKeyGestureState(windowsModifier: windowsKeyMapping.eventModifier)
         windowsSpaceGesture = WindowsSpaceGestureState(windowsModifier: windowsKeyMapping.eventModifier)
         altTabGesture = AltTabGestureState()
         var issues = Self.duplicateIssues(configurations: configurations, mapping: windowsKeyMapping)
-        if altTabSwitcherEnabled {
+        if self.altTabSwitcherEnabled {
             issues.merge(Self.altTabConflicts(configurations: configurations, mapping: windowsKeyMapping)) {
                 current, _ in current
             }
@@ -255,7 +325,7 @@ final class GlobalHotkeysService: ObservableObject {
         }
         windowsKeyIssue = nil
         altTabIssue = nil
-        if enabled {
+        if requestedEnabled && !isCapturingShortcut {
             for (index, configuration) in configurations.enumerated() where configuration.isEnabled {
                 guard issues[configuration.id] == nil else { continue }
                 let shortcut = configuration.resolvedShortcut(mapping: windowsKeyMapping)
@@ -289,15 +359,15 @@ final class GlobalHotkeysService: ObservableObject {
                 windowsKeyIssue = "Event monitoring unavailable"
             }
             windowsSpaceTrackingEnabled = tracksWindowsSpace && windowsKeyEventTap != nil
-            if altTabSwitcherEnabled {
+            if self.altTabSwitcherEnabled {
                 altTabIssue = registerAltTabHotKeys()
                 altTabTrackingEnabled = altTabIssue == nil
             }
-        } else {
+        } else if !isCapturingShortcut {
             removeWindowsKeyEventTap()
         }
         registrationIssues = issues
-        isEnabled = enabled
+        isEnabled = requestedEnabled && !isCapturingShortcut
     }
 
     static func duplicateIssues(
@@ -343,6 +413,39 @@ final class GlobalHotkeysService: ObservableObject {
         })
     }
 
+    static func registrationIssue(for status: OSStatus) -> String {
+        status == OSStatus(eventHotKeyExistsErr)
+            ? "Already in use by another application"
+            : "Unavailable (\(status))"
+    }
+
+    static func shouldRetryRegistration(
+        registrationIssues: [String: String],
+        altTabIssue: String?
+    ) -> Bool {
+        altTabIssue != nil || registrationIssues.values.contains {
+            $0 == registrationIssue(for: OSStatus(eventHotKeyExistsErr))
+        }
+    }
+
+    static func shortcutCaptureAction(
+        eventType: CGEventType,
+        keyCode: UInt32,
+        modifiers: UInt32,
+        keyLabel: String?
+    ) -> ShortcutCaptureAction {
+        guard eventType == .keyDown else {
+            return eventType == .keyUp || eventType == .flagsChanged ? .suppress : .passThrough
+        }
+        if keyCode == 53 { return .cancel }
+        guard modifiers != 0 else { return .suppress }
+        return .capture(HotkeyShortcut(
+            keyCode: keyCode,
+            modifiers: modifiers,
+            keyLabel: Self.keyLabel(keyCode: keyCode, fallback: keyLabel)
+        ))
+    }
+
     fileprivate func handle(id: Int) {
         if altTabTrackingEnabled, altTabHotKeyIDs.contains(id) {
             onAltTabGesture?(altTabGesture.press(reverse: id == Self.altTabReverseHotKeyID))
@@ -378,7 +481,7 @@ final class GlobalHotkeysService: ObservableObject {
             0,
             &reference
         )
-        guard status == noErr, let reference else { return "Unavailable (\(status))" }
+        guard status == noErr, let reference else { return Self.registrationIssue(for: status) }
         hotKeys.append(reference)
         configurationByHotKeyID[id] = configuration
         return nil
@@ -511,6 +614,123 @@ final class GlobalHotkeysService: ObservableObject {
         }
         windowsKeyEventTapSource = nil
         windowsKeyEventTap = nil
+    }
+
+    private func retryUnavailableRegistrationsAfterApplicationExit() {
+        guard !isCapturingShortcut,
+              Self.shouldRetryRegistration(
+                registrationIssues: registrationIssues,
+                altTabIssue: altTabIssue
+              ) else { return }
+        registrationRetryTask?.cancel()
+        registrationRetryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, let self, !self.isCapturingShortcut else { return }
+            self.applyConfiguration()
+            self.registrationRetryTask = nil
+        }
+    }
+
+    private func installShortcutCaptureEventTap() -> Bool {
+        guard shortcutCaptureEventTap == nil else { return true }
+        let eventMask = (CGEventMask(1) << CGEventType.flagsChanged.rawValue)
+            | (CGEventMask(1) << CGEventType.keyDown.rawValue)
+            | (CGEventMask(1) << CGEventType.keyUp.rawValue)
+        guard let eventTap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: eventMask,
+            callback: shortcutCaptureEventTapHandler,
+            userInfo: Unmanaged.passUnretained(self).toOpaque()
+        ),
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0) else {
+            return false
+        }
+        shortcutCaptureEventTap = eventTap
+        shortcutCaptureEventTapSource = source
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: eventTap, enable: true)
+        return true
+    }
+
+    private func removeShortcutCaptureEventTap() {
+        if let source = shortcutCaptureEventTapSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        }
+        if let eventTap = shortcutCaptureEventTap {
+            CFMachPortInvalidate(eventTap)
+        }
+        shortcutCaptureEventTapSource = nil
+        shortcutCaptureEventTap = nil
+    }
+
+    private func completeShortcutCapture(with shortcut: HotkeyShortcut?) {
+        guard isCapturingShortcut else { return }
+        removeShortcutCaptureEventTap()
+        let completion = shortcutCaptureCompletion
+        shortcutCaptureCompletion = nil
+        shortcutCaptureOwner = nil
+        isCapturingShortcut = false
+        completion?(shortcut)
+        applyConfiguration()
+    }
+
+    fileprivate func handleShortcutCaptureEvent(
+        _ eventType: CGEventType,
+        rawFlags: UInt64,
+        keyCode: UInt32,
+        keyLabel: String?
+    ) -> Bool {
+        guard isCapturingShortcut else { return false }
+        if eventType == .tapDisabledByTimeout || eventType == .tapDisabledByUserInput {
+            if let eventTap = shortcutCaptureEventTap {
+                CGEvent.tapEnable(tap: eventTap, enable: true)
+            }
+            return false
+        }
+        let action = Self.shortcutCaptureAction(
+            eventType: eventType,
+            keyCode: keyCode,
+            modifiers: Self.carbonModifiers(CGEventFlags(rawValue: rawFlags)),
+            keyLabel: keyLabel
+        )
+        switch action {
+        case .passThrough:
+            return false
+        case .suppress:
+            if eventType == .keyDown { NSSound.beep() }
+            return true
+        case .cancel:
+            completeShortcutCapture(with: nil)
+            return true
+        case let .capture(shortcut):
+            completeShortcutCapture(with: shortcut)
+            return true
+        }
+    }
+
+    private static func carbonModifiers(_ flags: CGEventFlags) -> UInt32 {
+        var result: UInt32 = 0
+        if flags.contains(.maskControl) { result |= UInt32(controlKey) }
+        if flags.contains(.maskAlternate) { result |= UInt32(optionKey) }
+        if flags.contains(.maskShift) { result |= UInt32(shiftKey) }
+        if flags.contains(.maskCommand) { result |= UInt32(cmdKey) }
+        return result
+    }
+
+    private static func keyLabel(keyCode: UInt32, fallback: String?) -> String {
+        switch keyCode {
+        case 36: return "↩"
+        case 48: return "⇥"
+        case 49: return "Space"
+        case 51: return "⌫"
+        case 123: return "←"
+        case 124: return "→"
+        case 125: return "↓"
+        case 126: return "↑"
+        default: return fallback ?? "?"
+        }
     }
 
     fileprivate func handleWindowsKeyEvent(_ eventType: CGEventType, rawFlags: UInt64, keyCode: Int64) {

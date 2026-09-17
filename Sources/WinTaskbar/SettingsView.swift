@@ -854,6 +854,7 @@ private struct GlobalShortcutRow: View {
                 GlobalHotkeyRecorder(
                     displayValue: configuration.displayValue(mapping: windowsKeyMapping),
                     resetTitle: "Restore default shortcut",
+                    canReset: !GlobalShortcutCatalog.usesDefaultTrigger(configuration),
                     onCapture: { shortcut in
                         configuration.shortcut = shortcut
                         configuration.usesWindowsKey = false
@@ -918,6 +919,7 @@ private struct CustomShortcutRow: View {
                 GlobalHotkeyRecorder(
                     displayValue: configuration.shortcut?.displayValue ?? "Set shortcut",
                     resetTitle: "Clear shortcut",
+                    canReset: configuration.shortcut != nil,
                     onCapture: { configuration.shortcut = $0 },
                     onResetTrigger: { configuration.shortcut = nil }
                 )
@@ -1008,24 +1010,46 @@ private struct CustomShortcutRow: View {
 private struct GlobalHotkeyRecorder: View {
     let displayValue: String
     let resetTitle: String
+    let canReset: Bool
     let onCapture: (HotkeyShortcut) -> Void
     let onResetTrigger: () -> Void
+    @ObservedObject private var globalHotkeys = GlobalHotkeysService.shared
+    @State private var captureOwner = UUID()
     @State private var isRecording = false
+    @State private var usesGlobalCapture = false
 
     var body: some View {
-        Button(isRecording ? "Type shortcut" : displayValue) {
-            isRecording = true
-        }
-        .font(.system(.body, design: .monospaced))
-        .contextMenu {
-            Button(resetTitle, action: onResetTrigger)
-        }
-        .background(ShortcutCaptureView(isRecording: isRecording) { captured in
-            if let captured {
-                onCapture(captured)
+        HStack(spacing: 5) {
+            Button(isRecording ? "Type shortcut" : displayValue, action: beginRecording)
+                .font(.system(.body, design: .monospaced))
+                .contextMenu {
+                    Button(resetTitle, action: onResetTrigger)
+                        .disabled(!canReset)
+                }
+            Button(action: onResetTrigger) {
+                Image(systemName: "arrow.counterclockwise")
             }
-            isRecording = false
+            .buttonStyle(.borderless)
+            .disabled(!canReset || isRecording)
+            .help(resetTitle)
+        }
+        .background(ShortcutCaptureView(isRecording: isRecording && !usesGlobalCapture) { captured in
+            globalHotkeys.finishShortcutCapture(owner: captureOwner, with: captured)
         })
+        .onDisappear {
+            if isRecording {
+                globalHotkeys.cancelShortcutCapture(owner: captureOwner)
+            }
+        }
+    }
+
+    private func beginRecording() {
+        isRecording = true
+        usesGlobalCapture = globalHotkeys.beginShortcutCapture(owner: captureOwner) { captured in
+            if let captured { onCapture(captured) }
+            isRecording = false
+            usesGlobalCapture = false
+        }
     }
 }
 

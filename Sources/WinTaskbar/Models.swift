@@ -571,6 +571,18 @@ enum GlobalShortcutCatalog {
         defaults(legacyShortcuts: legacyShortcuts).first { $0.id == id }
     }
 
+    static func usesDefaultTrigger(
+        _ configuration: GlobalShortcutConfiguration,
+        legacyShortcuts: [HotkeyShortcut] = defaultLegacyShortcuts
+    ) -> Bool {
+        guard let defaultConfiguration = defaultConfiguration(
+            id: configuration.id,
+            legacyShortcuts: legacyShortcuts
+        ) else { return false }
+        return configuration.shortcut == defaultConfiguration.shortcut
+            && configuration.usesWindowsKey == defaultConfiguration.usesWindowsKey
+    }
+
     static let defaultLegacyShortcuts: [HotkeyShortcut] = {
         let modifiers = UInt32(cmdKey | optionKey)
         return [

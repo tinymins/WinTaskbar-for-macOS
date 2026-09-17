@@ -2491,6 +2491,20 @@ func runSelfTest() async -> Int32 {
         configurations: shortcutDefaults,
         mapping: .command
     )
+    var customizedTaskView = shortcutDefaults.first {
+        $0.id == GlobalShortcutCatalog.taskViewID
+    }!
+    customizedTaskView.shortcut = HotkeyShortcut(
+        keyCode: 48,
+        modifiers: UInt32(controlKey),
+        keyLabel: "⇥"
+    )
+    customizedTaskView.usesWindowsKey = false
+    let capturedControlTab = HotkeyShortcut(
+        keyCode: 48,
+        modifiers: UInt32(controlKey),
+        keyLabel: "⇥"
+    )
     guard let reverseWindowsSpaceShortcut,
           reverseWindowsSpaceShortcut.keyCode == forwardWindowsSpaceShortcut.keyCode,
           reverseWindowsSpaceShortcut.modifiers == UInt32(optionKey | shiftKey),
@@ -2524,6 +2538,42 @@ func runSelfTest() async -> Int32 {
           optionAltTabConflicts[GlobalShortcutCatalog.taskViewID]
             == "Conflicts with Alt+Tab Window Switcher",
           commandAltTabConflicts[GlobalShortcutCatalog.taskViewID] == nil,
+          GlobalShortcutCatalog.usesDefaultTrigger(
+            shortcutDefaults.first { $0.id == GlobalShortcutCatalog.taskViewID }!
+          ),
+          !GlobalShortcutCatalog.usesDefaultTrigger(customizedTaskView),
+          GlobalHotkeysService.registrationIssue(for: OSStatus(eventHotKeyExistsErr))
+            == "Already in use by another application",
+          GlobalHotkeysService.shouldRetryRegistration(
+            registrationIssues: [customizedTaskView.id: "Already in use by another application"],
+            altTabIssue: nil
+          ),
+          !GlobalHotkeysService.shouldRetryRegistration(
+            registrationIssues: [customizedTaskView.id: "Conflicts with Task View"],
+            altTabIssue: nil
+          ),
+          GlobalHotkeysService.shortcutCaptureAction(
+            eventType: .keyDown,
+            keyCode: 48,
+            modifiers: UInt32(controlKey),
+            keyLabel: "⇥"
+          ) == .capture(capturedControlTab),
+          GlobalHotkeysService.shortcutCaptureAction(
+            eventType: .keyDown,
+            keyCode: 48,
+            modifiers: UInt32(optionKey),
+            keyLabel: "⇥"
+          ) == .capture(HotkeyShortcut(
+            keyCode: 48,
+            modifiers: UInt32(optionKey),
+            keyLabel: "⇥"
+          )),
+          GlobalHotkeysService.shortcutCaptureAction(
+            eventType: .keyUp,
+            keyCode: 48,
+            modifiers: UInt32(controlKey),
+            keyLabel: "⇥"
+          ) == .suppress,
           windowActivationOrder.reconcile(
               availableWindowIDs: [101, 202, 303],
               fallbackWindowIDs: [202, 101, 303]
