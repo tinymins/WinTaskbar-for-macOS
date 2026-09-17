@@ -728,7 +728,15 @@ final class WindowSwitcherPanelController {
         let selectedWindow = windows[selectedIndex]
         activationHistory.record(selectedWindow.windowID)
         dismiss()
-        activationService.raise(window: selectedWindow)
+        let activationService = activationService
+        Task { @MainActor in
+            let worker = Task.detached(priority: .userInitiated) {
+                activationService.raiseAccessibilityWindow(selectedWindow)
+            }
+            await worker.value
+            guard !Task.isCancelled else { return }
+            activationService.activateApplication(for: selectedWindow)
+        }
     }
 
     private func selectAndCommit(windowID: CGWindowID) {

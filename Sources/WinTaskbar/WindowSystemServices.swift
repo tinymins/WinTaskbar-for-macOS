@@ -127,9 +127,17 @@ final class WindowActivationService {
     }
 
     func raise(window: WindowInfo) {
+        raiseAccessibilityWindow(window)
+        activateApplication(for: window)
+    }
+
+    nonisolated func raiseAccessibilityWindow(_ window: WindowInfo) {
         guard let match = matchingWindow(for: window) else { return }
         AXUIElementSetAttributeValue(match, kAXMinimizedAttribute as CFString, false as CFBoolean)
         AXUIElementPerformAction(match, kAXRaiseAction as CFString)
+    }
+
+    func activateApplication(for window: WindowInfo) {
         NSRunningApplication(processIdentifier: window.ownerPID)?.activate(options: [.activateIgnoringOtherApps])
     }
 

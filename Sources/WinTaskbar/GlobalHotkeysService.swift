@@ -457,8 +457,10 @@ final class GlobalHotkeysService: ObservableObject {
 
     fileprivate func handle(id: Int) {
         if altTabTrackingEnabled, altTabHotKeyIDs.contains(id) {
-            onAltTabGesture?(altTabGesture.press(reverse: id == Self.altTabReverseHotKeyID))
+            let action = altTabGesture.press(reverse: id == Self.altTabReverseHotKeyID)
             startAltTabModifierPolling()
+            onAltTabGesture?(action)
+            commitAltTabIfModifierWasReleased()
             return
         }
         guard let configuration = configurationByHotKeyID[id] else { return }
@@ -530,6 +532,14 @@ final class GlobalHotkeysService: ObservableObject {
             }
             self?.altTabModifierPollingTask = nil
         }
+    }
+
+    private func commitAltTabIfModifierWasReleased() {
+        let flags = CGEventSource.flagsState(.combinedSessionState)
+        let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(flags.rawValue))
+        guard let action = altTabGesture.flagsChanged(to: modifierFlags) else { return }
+        stopAltTabModifierPolling()
+        onAltTabGesture?(action)
     }
 
     private func stopAltTabModifierPolling() {
