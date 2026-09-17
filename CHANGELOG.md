@@ -2,6 +2,25 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.24] - 2026-09-17
+
+### Added
+
+- Add a Windows 11-style Alt-Tab switcher with configurable modifier keys, MRU window ordering, hold-to-cycle behavior, and mouse selection.
+- Add compact hover controls for minimizing, maximizing or restoring, and closing supported windows.
+
+### Performance
+
+- Present cached window thumbnails and acrylic content immediately, then refresh captures and Accessibility capabilities in the background.
+- Build the current switcher layout before presentation and disable opening rescaling to prevent thumbnail moire and screen flicker.
+
+### Fixed
+
+- Adapt thumbnail size to the window count, keep dense lists within five full rows plus an overflow title row, and use a consistently thin scrollbar.
+- Center the switcher within the usable area after excluding the taskbar, including taskbars placed on either side of the screen.
+- Dismiss Alt-Tab without switching windows when clicking outside it, while preserving hover highlighting, compact controls, borders, and pressed feedback.
+- Respect fullscreen state and window geometry during window actions, make shortcut capture exclusive, invoke Mission Control directly, and close Start when opening Settings.
+
 ## [0.0.23] - 2026-09-07
 
 ### Fixed
