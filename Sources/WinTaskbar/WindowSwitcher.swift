@@ -191,6 +191,7 @@ enum WindowSwitcherLayout {
     static let panelPadding: CGFloat = 18
     static let captionButtonWidth: CGFloat = 26
     static let compactControlStripWidth = captionButtonWidth * 3
+    static let scrollIndicatorWidth: CGFloat = 3
 
     static func tileWidth(for windowFrame: CGRect) -> CGFloat {
         guard windowFrame.width > 0, windowFrame.height > 0 else { return fallbackTileWidth }
@@ -603,6 +604,7 @@ private struct WindowSwitcherView: View {
                 }
             }
             .padding(WindowSwitcherLayout.panelPadding)
+            .background(WindowSwitcherScrollViewConfigurator())
         }
         .scrollIndicators(.visible)
         .background {
@@ -618,6 +620,74 @@ private struct WindowSwitcherView: View {
             .overlay(WindowSwitcherBackdrop.tint)
             .clipped()
         }
+    }
+}
+
+private struct WindowSwitcherScrollViewConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> WindowSwitcherScrollViewProbe {
+        WindowSwitcherScrollViewProbe()
+    }
+
+    func updateNSView(_ nsView: WindowSwitcherScrollViewProbe, context: Context) {
+        nsView.configureEnclosingScrollView()
+    }
+}
+
+private final class WindowSwitcherScrollViewProbe: NSView {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        configureEnclosingScrollView()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    func configureEnclosingScrollView() {
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let scrollView = self?.enclosingScrollView else { return }
+            scrollView.scrollerStyle = .legacy
+            scrollView.autohidesScrollers = false
+            scrollView.hasHorizontalScroller = false
+            let contentHeight = scrollView.documentView?.frame.height ?? 0
+            let needsScroller = contentHeight > scrollView.contentView.bounds.height + 1
+            if needsScroller, !(scrollView.verticalScroller is WindowSwitcherThinScroller) {
+                let scroller = WindowSwitcherThinScroller()
+                scroller.scrollerStyle = .legacy
+                scroller.controlSize = .mini
+                scrollView.verticalScroller = scroller
+            }
+            scrollView.hasVerticalScroller = needsScroller
+            scrollView.tile()
+        }
+    }
+}
+
+private final class WindowSwitcherThinScroller: NSScroller {
+    override class func scrollerWidth(
+        for controlSize: NSControl.ControlSize,
+        scrollerStyle: NSScroller.Style
+    ) -> CGFloat {
+        7
+    }
+
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
+
+    override func drawKnob() {
+        let knobRect = rect(for: .knob)
+        guard !knobRect.isEmpty else { return }
+        let width = WindowSwitcherLayout.scrollIndicatorWidth
+        let visibleKnob = CGRect(
+            x: bounds.maxX - width - 2,
+            y: knobRect.minY + 2,
+            width: width,
+            height: max(12, knobRect.height - 4)
+        )
+        NSColor.white.withAlphaComponent(0.42).setFill()
+        NSBezierPath(
+            roundedRect: visibleKnob,
+            xRadius: width / 2,
+            yRadius: width / 2
+        ).fill()
     }
 }
 
