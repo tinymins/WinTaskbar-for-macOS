@@ -392,7 +392,21 @@ final class ActiveWindowShortcutService {
 final class SystemShortcutService {
     enum DesktopDirection { case left, right }
 
-    func showTaskView() { postKey(keyCode: 126, flags: .maskControl) }
+    static let taskViewBundleIdentifier = "com.apple.exposelauncher"
+
+    func showTaskView() {
+        guard let applicationURL = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: Self.taskViewBundleIdentifier
+        ) else {
+            NSSound.beep()
+            return
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: applicationURL, configuration: configuration) { _, error in
+            if error != nil { NSSound.beep() }
+        }
+    }
     func switchDesktop(_ direction: DesktopDirection) {
         postKey(keyCode: direction == .left ? 123 : 124, flags: .maskControl)
     }

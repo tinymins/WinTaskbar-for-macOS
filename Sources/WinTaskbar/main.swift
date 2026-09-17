@@ -839,10 +839,15 @@ func runSelfTest() async -> Int32 {
     }
 
     let placementArea = CGRect(x: 10, y: 20, width: 1000, height: 700)
+    let taskViewApplicationURL = NSWorkspace.shared.urlForApplication(
+        withBundleIdentifier: SystemShortcutService.taskViewBundleIdentifier
+    )
     guard WindowPlacementGeometry.frame(for: .leftHalf, in: placementArea)
             == CGRect(x: 10, y: 20, width: 500, height: 700),
           WindowPlacementGeometry.frame(for: .topRight, in: placementArea)
             == CGRect(x: 510, y: 370, width: 500, height: 350),
+          (taskViewApplicationURL.flatMap { Bundle(url: $0)?.bundleIdentifier })
+            == SystemShortcutService.taskViewBundleIdentifier,
           ClipboardHistoryService.recording(" second ", in: ["first", "second"])
             == ["second", "first"],
           ClipboardHistoryService.recording("", in: ["first"]) == ["first"] else {
