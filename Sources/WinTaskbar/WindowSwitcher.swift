@@ -327,6 +327,31 @@ enum WindowSwitcherLayout {
     static func panelSize(windowFrames: [CGRect], screenFrame: CGRect) -> CGSize {
         metrics(windowFrames: windowFrames, screenFrame: screenFrame).panelSize
     }
+
+    static func workArea(
+        visibleFrame: CGRect,
+        taskbarPosition: TaskbarPosition,
+        taskbarThickness: CGFloat,
+        reservesTaskbar: Bool
+    ) -> CGRect {
+        guard reservesTaskbar else { return visibleFrame }
+        var workArea = visibleFrame
+        switch taskbarPosition {
+        case .bottom:
+            let thickness = min(max(0, taskbarThickness), workArea.height)
+            workArea.origin.y += thickness
+            workArea.size.height -= thickness
+        case .top:
+            workArea.size.height -= min(max(0, taskbarThickness), workArea.height)
+        case .left:
+            let thickness = min(max(0, taskbarThickness), workArea.width)
+            workArea.origin.x += thickness
+            workArea.size.width -= thickness
+        case .right:
+            workArea.size.width -= min(max(0, taskbarThickness), workArea.width)
+        }
+        return workArea
+    }
 }
 
 enum WindowSwitcherSelection {
@@ -439,6 +464,7 @@ final class WindowSwitcherPanelController {
     private let windowsService: WindowsService
     private let activationService: WindowActivationService
     private let activationHistory: WindowActivationHistory
+    private let preferences: PreferencesStore
     private let workspace: NSWorkspace
     private let panel: WindowSwitcherPanel
     private let backdrop = NSView()
@@ -456,11 +482,13 @@ final class WindowSwitcherPanelController {
         windowsService: WindowsService,
         activationService: WindowActivationService,
         activationHistory: WindowActivationHistory,
+        preferences: PreferencesStore,
         workspace: NSWorkspace = .shared
     ) {
         self.windowsService = windowsService
         self.activationService = activationService
         self.activationHistory = activationHistory
+        self.preferences = preferences
         self.workspace = workspace
         panel = WindowSwitcherPanel(
             contentRect: .zero,
@@ -653,15 +681,23 @@ final class WindowSwitcherPanelController {
     }
 
     private func panelFrame(on screen: NSScreen) -> CGRect {
+        let reservesTaskbar = !preferences.autoHideTaskbar
+            && (preferences.displayMode == .all || screen === NSScreen.screens.first)
+        let workArea = WindowSwitcherLayout.workArea(
+            visibleFrame: screen.visibleFrame,
+            taskbarPosition: preferences.position,
+            taskbarThickness: CGFloat(preferences.barHeight),
+            reservesTaskbar: reservesTaskbar
+        )
         let layout = WindowSwitcherLayout.metrics(
             windowFrames: windows.map(\.frame),
-            screenFrame: screen.visibleFrame
+            screenFrame: workArea
         )
         tilePreviewHeight = layout.previewHeight
         let size = layout.panelSize
         return CGRect(
-            x: screen.visibleFrame.midX - size.width / 2,
-            y: screen.visibleFrame.midY - size.height / 2,
+            x: workArea.midX - size.width / 2,
+            y: workArea.midY - size.height / 2,
             width: size.width,
             height: size.height
         )

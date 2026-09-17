@@ -17,7 +17,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var windowSwitcherController = WindowSwitcherPanelController(
         windowsService: windowsService,
         activationService: windowActivator,
-        activationHistory: windowActivationHistory
+        activationHistory: windowActivationHistory,
+        preferences: preferences
     )
     private let recentDocuments = RecentDocumentsService()
     private lazy var dockBadges = DockBadgeService(apps: apps)
@@ -2677,6 +2678,7 @@ func runSelfTest() async -> Int32 {
         windowFrames: Array(repeating: landscapeWindowFrame, count: 80),
         screenFrame: switcherScreenFrame
     )
+    let switcherVisibleFrame = CGRect(x: 100, y: 50, width: 1_200, height: 800)
     guard windowActivationOrder.reconcile(
         availableWindowIDs: [101, 202, 303],
         fallbackWindowIDs: [202, 101, 303]
@@ -2734,6 +2736,36 @@ func runSelfTest() async -> Int32 {
         itemWidths: [277, 208, 320],
         maximumWidth: 500
     ) == [[0, 1], [2]],
+    WindowSwitcherLayout.workArea(
+        visibleFrame: switcherVisibleFrame,
+        taskbarPosition: .bottom,
+        taskbarThickness: 48,
+        reservesTaskbar: true
+    ) == CGRect(x: 100, y: 98, width: 1_200, height: 752),
+    WindowSwitcherLayout.workArea(
+        visibleFrame: switcherVisibleFrame,
+        taskbarPosition: .top,
+        taskbarThickness: 48,
+        reservesTaskbar: true
+    ) == CGRect(x: 100, y: 50, width: 1_200, height: 752),
+    WindowSwitcherLayout.workArea(
+        visibleFrame: switcherVisibleFrame,
+        taskbarPosition: .left,
+        taskbarThickness: 48,
+        reservesTaskbar: true
+    ) == CGRect(x: 148, y: 50, width: 1_152, height: 800),
+    WindowSwitcherLayout.workArea(
+        visibleFrame: switcherVisibleFrame,
+        taskbarPosition: .right,
+        taskbarThickness: 48,
+        reservesTaskbar: true
+    ) == CGRect(x: 100, y: 50, width: 1_152, height: 800),
+    WindowSwitcherLayout.workArea(
+        visibleFrame: switcherVisibleFrame,
+        taskbarPosition: .bottom,
+        taskbarThickness: 48,
+        reservesTaskbar: false
+    ) == switcherVisibleFrame,
     singleRowSwitcherLayout.rows.count == 1,
     singleRowSwitcherLayout.previewHeight > WindowSwitcherLayout.previewHeight,
     crowdedSwitcherLayout.previewHeight < WindowSwitcherLayout.previewHeight,
