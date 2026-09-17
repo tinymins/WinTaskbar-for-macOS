@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import CoreImage
 import SwiftUI
 
 struct WindowSwitcherApplicationPolicy {
@@ -257,6 +258,45 @@ enum WindowSwitcherDismissalPolicy {
     }
 }
 
+enum WindowSwitcherBackdrop {
+    static let blurRadius: CGFloat = 8
+    static let tint = Color(red: 0.52, green: 0.53, blue: 0.54).opacity(0.30)
+    private static let context = CIContext(options: [.cacheIntermediates: false])
+
+    static func captureRect(
+        panelFrame: CGRect,
+        screenFrame: CGRect,
+        displayPixelWidth: CGFloat
+    ) -> CGRect {
+        let scale = displayPixelWidth / screenFrame.width
+        return CGRect(
+            x: (panelFrame.minX - screenFrame.minX) * scale,
+            y: (screenFrame.maxY - panelFrame.maxY) * scale,
+            width: panelFrame.width * scale,
+            height: panelFrame.height * scale
+        ).integral
+    }
+
+    static func image(panelFrame: CGRect, on screen: NSScreen) -> NSImage? {
+        guard let displayID = screen.deviceDescription[
+            NSDeviceDescriptionKey("NSScreenNumber")
+        ] as? CGDirectDisplayID else { return nil }
+        let pixelRect = captureRect(
+            panelFrame: panelFrame,
+            screenFrame: screen.frame,
+            displayPixelWidth: CGFloat(CGDisplayPixelsWide(displayID))
+        )
+        guard let capture = CGDisplayCreateImage(displayID, rect: pixelRect) else { return nil }
+        let input = CIImage(cgImage: capture)
+        guard let filter = CIFilter(name: "CIGaussianBlur") else { return nil }
+        filter.setValue(input.clampedToExtent(), forKey: kCIInputImageKey)
+        filter.setValue(blurRadius, forKey: kCIInputRadiusKey)
+        guard let output = filter.outputImage?.cropped(to: input.extent),
+              let blurred = context.createCGImage(output, from: input.extent) else { return nil }
+        return NSImage(cgImage: blurred, size: panelFrame.size)
+    }
+}
+
 private enum WindowSwitcherWindowAction: CaseIterable {
     case toggleMinimized
     case toggleFullScreen
@@ -312,11 +352,12 @@ final class WindowSwitcherPanelController {
     private let activationHistory: WindowActivationHistory
     private let workspace: NSWorkspace
     private let panel: WindowSwitcherPanel
-    private let backdrop = NSVisualEffectView()
+    private let backdrop = NSView()
     private let hostingView = NSHostingView(rootView: AnyView(EmptyView()))
     private var windows: [WindowInfo] = []
     private var thumbnails: [CGWindowID: NSImage] = [:]
     private var controlCapabilities: [CGWindowID: WindowControlCapabilities] = [:]
+    private var backdropImage: NSImage?
     private var localMouseMonitor: Any?
     private var globalMouseMonitor: Any?
     private var selectedIndex = 0
@@ -344,9 +385,6 @@ final class WindowSwitcherPanelController {
         panel.hasShadow = true
         panel.appearance = NSAppearance(named: .darkAqua)
 
-        backdrop.material = .underWindowBackground
-        backdrop.blendingMode = .behindWindow
-        backdrop.state = .active
         backdrop.wantsLayer = true
         backdrop.layer?.cornerRadius = 8
         backdrop.layer?.masksToBounds = true
@@ -397,11 +435,13 @@ final class WindowSwitcherPanelController {
         controlCapabilities = Dictionary(uniqueKeysWithValues: windows.map { window in
             (window.windowID, activationService.controlCapabilities(for: window))
         })
-        refreshContent()
 
         let screen = screenAtMouseLocation() ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
-        updatePanelFrame(on: screen)
+        let targetFrame = panelFrame(on: screen)
+        backdropImage = WindowSwitcherBackdrop.image(panelFrame: targetFrame, on: screen)
+        panel.setFrame(targetFrame, display: true)
+        refreshContent()
         panel.orderFrontRegardless()
         installMouseMonitors()
     }
@@ -462,6 +502,7 @@ final class WindowSwitcherPanelController {
             windows: windows,
             thumbnails: thumbnails,
             controlCapabilities: controlCapabilities,
+            backdropImage: backdropImage,
             selectedWindowID: windows.indices.contains(selectedIndex) ? windows[selectedIndex].windowID : nil,
             onWindowAction: { [weak self] action, windowID in self?.perform(action, on: windowID) },
             onSelect: { [weak self] windowID in self?.selectAndCommit(windowID: windowID) }
@@ -475,6 +516,7 @@ final class WindowSwitcherPanelController {
         windows = []
         thumbnails = [:]
         controlCapabilities = [:]
+        backdropImage = nil
         selectedIndex = 0
     }
 
@@ -515,16 +557,20 @@ final class WindowSwitcherPanelController {
     }
 
     private func updatePanelFrame(on screen: NSScreen) {
+        panel.setFrame(panelFrame(on: screen), display: true)
+    }
+
+    private func panelFrame(on screen: NSScreen) -> CGRect {
         let size = WindowSwitcherLayout.panelSize(
             windowFrames: windows.map(\.frame),
             screenFrame: screen.visibleFrame
         )
-        panel.setFrame(CGRect(
+        return CGRect(
             x: screen.visibleFrame.midX - size.width / 2,
             y: screen.visibleFrame.midY - size.height / 2,
             width: size.width,
             height: size.height
-        ), display: true)
+        )
     }
 
     private func screenAtMouseLocation() -> NSScreen? {
@@ -537,6 +583,7 @@ private struct WindowSwitcherView: View {
     let windows: [WindowInfo]
     let thumbnails: [CGWindowID: NSImage]
     let controlCapabilities: [CGWindowID: WindowControlCapabilities]
+    let backdropImage: NSImage?
     let selectedWindowID: CGWindowID?
     let onWindowAction: (WindowSwitcherWindowAction, CGWindowID) -> Void
     let onSelect: (CGWindowID) -> Void
@@ -558,7 +605,19 @@ private struct WindowSwitcherView: View {
             .padding(WindowSwitcherLayout.panelPadding)
         }
         .scrollIndicators(.visible)
-        .background(Color.white.opacity(0.06))
+        .background {
+            Group {
+                if let backdropImage {
+                    Image(nsImage: backdropImage)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Color(red: 0.31, green: 0.32, blue: 0.33)
+                }
+            }
+            .overlay(WindowSwitcherBackdrop.tint)
+            .clipped()
+        }
     }
 }
 
