@@ -79,17 +79,8 @@ struct WindowIdentityPolicy {
     }
 }
 
-struct WindowControlCapabilities: OptionSet, Sendable {
-    let rawValue: UInt8
-
-    static let close = WindowControlCapabilities(rawValue: 1 << 0)
-    static let minimize = WindowControlCapabilities(rawValue: 1 << 1)
-    static let fullScreen = WindowControlCapabilities(rawValue: 1 << 2)
-}
-
 @MainActor
 final class WindowActivationService {
-    private static let fullScreenAttribute = "AXFullScreen"
     private let windowsService: WindowsService
 
     init(windowsService: WindowsService) {
@@ -140,41 +131,15 @@ final class WindowActivationService {
         return AXUIElementPerformAction(closeButton, kAXPressAction as CFString) == .success
     }
 
-    func controlCapabilities(for window: WindowInfo) -> WindowControlCapabilities {
-        guard let match = matchingWindow(for: window) else { return [] }
-        var capabilities: WindowControlCapabilities = []
+    func canClose(window: WindowInfo) -> Bool {
+        guard let match = matchingWindow(for: window) else { return false }
         let closeButton: AXUIElement? = attribute(match, kAXCloseButtonAttribute)
-        if closeButton != nil { capabilities.insert(.close) }
-        if isSettable(match, kAXMinimizedAttribute) { capabilities.insert(.minimize) }
-        if isSettable(match, Self.fullScreenAttribute) { capabilities.insert(.fullScreen) }
-        return capabilities
+        return closeButton != nil
     }
 
     func minimize(window: WindowInfo) {
         guard let match = matchingWindow(for: window) else { return }
         AXUIElementSetAttributeValue(match, kAXMinimizedAttribute as CFString, true as CFBoolean)
-    }
-
-    @discardableResult
-    func toggleMinimized(window: WindowInfo) -> Bool {
-        guard let match = matchingWindow(for: window) else { return false }
-        let isMinimized: Bool = attribute(match, kAXMinimizedAttribute) ?? window.isMinimized
-        return AXUIElementSetAttributeValue(
-            match,
-            kAXMinimizedAttribute as CFString,
-            !isMinimized as CFBoolean
-        ) == .success
-    }
-
-    @discardableResult
-    func toggleFullScreen(window: WindowInfo) -> Bool {
-        guard let match = matchingWindow(for: window) else { return false }
-        let isFullScreen: Bool = attribute(match, Self.fullScreenAttribute) ?? false
-        return AXUIElementSetAttributeValue(
-            match,
-            Self.fullScreenAttribute as CFString,
-            !isFullScreen as CFBoolean
-        ) == .success
     }
 
     func openNewWindow(_ item: TaskbarItem) {
@@ -233,12 +198,6 @@ final class WindowActivationService {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
         return value as? T
-    }
-
-    private func isSettable(_ element: AXUIElement, _ name: String) -> Bool {
-        var result = DarwinBoolean(false)
-        guard AXUIElementIsAttributeSettable(element, name as CFString, &result) == .success else { return false }
-        return result.boolValue
     }
 }
 

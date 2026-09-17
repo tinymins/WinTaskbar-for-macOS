@@ -2686,13 +2686,38 @@ func runSelfTest() async -> Int32 {
         selectedIndex: 0,
         remainingCount: 0
     ) == 0,
-    WindowSwitcherLayout.columnCount(windowCount: 20, availableWidth: 1_920 * 0.88) == 5,
-    WindowSwitcherLayout.columnCount(windowCount: 6, availableWidth: 1_920 * 0.88) == 3,
+    WindowSwitcherLayout.tileHeight == 196,
+    WindowSwitcherLayout.tileWidth(
+        for: CGRect(x: 0, y: 0, width: 1_920, height: 1_080)
+    ) == 277,
+    WindowSwitcherLayout.tileWidth(
+        for: CGRect(x: 0, y: 0, width: 1_024, height: 768)
+    ) == 208,
+    WindowSwitcherLayout.tileWidth(
+        for: CGRect(x: 0, y: 0, width: 768, height: 1_024)
+    ) == WindowSwitcherLayout.minimumTileWidth,
+    WindowSwitcherLayout.tileWidth(
+        for: CGRect(x: 0, y: 0, width: 3_440, height: 1_440)
+    ) == WindowSwitcherLayout.maximumTileWidth,
+    WindowSwitcherLayout.rowIndices(
+        itemWidths: [277, 208, 320],
+        maximumWidth: 500
+    ) == [[0, 1], [2]],
     WindowSwitcherLayout.panelSize(
-        windowCount: 20,
+        windowFrames: [
+            CGRect(x: 0, y: 0, width: 1_920, height: 1_080),
+            CGRect(x: 0, y: 0, width: 1_024, height: 768),
+        ],
+        screenFrame: CGRect(x: 0, y: 0, width: 1_920, height: 1_080)
+    ) == CGSize(width: 533, height: 232),
+    WindowSwitcherLayout.panelSize(
+        windowFrames: Array(
+            repeating: CGRect(x: 0, y: 0, width: 1_920, height: 1_080),
+            count: 20
+        ),
         screenFrame: CGRect(x: 0, y: 0, width: 1_920, height: 1_080)
     ).height <= 1_080 * 0.76 else {
-        fputs("SELF-TEST FAILED: Alt+Tab MRU reconciliation or panel geometry mismatch\n", stderr)
+        fputs("SELF-TEST FAILED: Alt+Tab MRU or fixed-height flow geometry mismatch\n", stderr)
         return 1
     }
 
