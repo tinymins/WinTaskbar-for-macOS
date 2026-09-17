@@ -4,7 +4,7 @@
 
 **Windows muscle memory. Native macOS speed.**
 
-A native Windows-style taskbar, Start menu, window previews, and Aero Peek for macOS.
+A native Windows-style taskbar, Start menu, Alt+Tab switcher, window previews, and Aero Peek for macOS.
 
 [![Release](https://img.shields.io/github/v/release/tinymins/WinTaskbar-for-macOS?include_prereleases&style=flat-square)](https://github.com/tinymins/WinTaskbar-for-macOS/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/tinymins/WinTaskbar-for-macOS/release.yml?style=flat-square&label=build)](https://github.com/tinymins/WinTaskbar-for-macOS/actions/workflows/release.yml)
@@ -13,11 +13,11 @@ A native Windows-style taskbar, Start menu, window previews, and Aero Peek for m
 
 [Try the interactive web demo](https://tinymins.github.io/WinTaskbar-for-macOS/) · [Download a release](https://github.com/tinymins/WinTaskbar-for-macOS/releases)
 
-![Interactive Aero Peek experience](docs/screenshots/aero-peek.png)
+![WinTaskbar Alt+Tab switcher running on macOS](docs/screenshots/alt-tab-fullscreen.jpg)
 
 </div>
 
-The website is a realistic, installation-free simulation of the design. Open Start, hover a taskbar app to reveal its window preview, then move into the preview to try Aero Peek. The macOS app itself is built natively with AppKit and SwiftUI.
+The website uses captures from the running app in an installation-free interactive demo. Switch between the native taskbar, Start menu, and full-screen Alt+Tab view. The macOS app itself is built with AppKit and SwiftUI.
 
 ## See it in action
 
@@ -25,11 +25,14 @@ The website is a realistic, installation-free simulation of the design. Open Sta
 |---|---|
 | ![WinTaskbar along the bottom of macOS](docs/screenshots/taskbar.jpg) | ![Translucent WinTaskbar Start menu](docs/screenshots/start-menu.jpg) |
 
+The full-screen Alt+Tab switcher uses live window thumbnails, recent-use ordering, forward and reverse cycling, and activates the selected window when the configured modifier is released.
+
 ## Features
 
 - Borderless multi-display taskbar at the bottom, top, left, or right
 - Pinned and running app merging, drag reorder, overflow, Dock badges, context menus, recent projects, and per-app shortcuts
 - Window enumeration, hover previews, thumbnails, activation, minimization, Show Desktop, and taskbar-aware window fitting
+- Windows-style Alt+Tab switching with live previews, recent-use ordering, and configurable Option, Command, or Control modifier
 - Searchable Start menu with custom folders, category grouping, drag-and-drop shortcuts, and power actions
 - Interactive clock/calendar, battery, volume, Wi-Fi, and input-source tray controls
 - Dock hiding and restoration, launch at login, configurable Windows-style global shortcuts, onboarding, and permission guidance
