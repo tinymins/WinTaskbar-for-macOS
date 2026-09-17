@@ -1398,6 +1398,11 @@ func runSelfTest() async -> Int32 {
         systemFrame: fittingScreen.visibleFrame,
         reservedFrame: reservedWindowFrame
     )
+    let startupReservationState = WindowReservationState(
+        originalFrame: nil,
+        systemFrame: fittingScreen.visibleFrame,
+        reservedFrame: reservedWindowFrame
+    )
     guard WindowReservationPolicy.action(
         current: fittingScreen.visibleFrame,
         previous: originalWindowFrame,
@@ -1406,6 +1411,14 @@ func runSelfTest() async -> Int32 {
         position: .bottom,
         barHeight: 48
     ) == .reserve(reservationState),
+    WindowReservationPolicy.action(
+        current: fittingScreen.visibleFrame,
+        previous: fittingScreen.visibleFrame,
+        managed: nil,
+        screen: fittingScreen,
+        position: .bottom,
+        barHeight: 48
+    ) == .reserve(startupReservationState),
     WindowReservationPolicy.action(
         current: reservedWindowFrame,
         previous: reservedWindowFrame,

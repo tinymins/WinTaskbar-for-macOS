@@ -645,6 +645,7 @@ final class WindowFittingService {
         observedWindow = window
         observedWindowKey = key
         if managedWindows[key] == nil { lastFrames[key] = frame }
+        scheduleReservation()
     }
 
     private func scheduleReservation() {
