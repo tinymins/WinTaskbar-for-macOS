@@ -189,8 +189,7 @@ enum WindowSwitcherLayout {
     static let spacing: CGFloat = 12
     static let panelPadding: CGFloat = 18
     static let captionButtonWidth: CGFloat = 26
-    static let closeCaptionButtonWidth: CGFloat = 32
-    static let compactControlStripWidth = captionButtonWidth * 2 + closeCaptionButtonWidth
+    static let compactControlStripWidth = captionButtonWidth * 3
 
     static func tileWidth(for windowFrame: CGRect) -> CGFloat {
         guard windowFrame.width > 0, windowFrame.height > 0 else { return fallbackTileWidth }
@@ -274,10 +273,7 @@ private enum WindowSwitcherWindowAction: CaseIterable {
     }
 
     var buttonWidth: CGFloat {
-        switch self {
-        case .toggleMinimized, .toggleFullScreen: WindowSwitcherLayout.captionButtonWidth
-        case .close: WindowSwitcherLayout.closeCaptionButtonWidth
-        }
+        WindowSwitcherLayout.captionButtonWidth
     }
 
     var accessibilityLabel: String {
@@ -618,15 +614,6 @@ private struct WindowSwitcherTile: View {
                 )
                 .background(Color(red: 0.08, green: 0.08, blue: 0.085))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(
-                            isSelected
-                                ? Color(red: 0.20, green: 0.70, blue: 1)
-                                : Color.white.opacity(isHovering ? 0.18 : 0),
-                            lineWidth: isSelected ? 3 : 1
-                        )
-                }
                 .contentShape(Rectangle())
             }
             .buttonStyle(WindowSwitcherTileButtonStyle())
@@ -648,6 +635,16 @@ private struct WindowSwitcherTile: View {
             height: WindowSwitcherLayout.tileHeight
         )
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(
+                    isSelected
+                        ? Color(red: 0.20, green: 0.70, blue: 1)
+                        : Color.white.opacity(isHovering ? 0.18 : 0),
+                    lineWidth: isSelected ? 3 : 1
+                )
+                .allowsHitTesting(false)
+        }
         .onHover { isHovering = $0 }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovering)
     }
