@@ -111,6 +111,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .map { builtIn, custom in
                 builtIn + custom.compactMap { $0.registrationConfiguration() }
             }
+        let altTabConfiguration = preferences.$altTabSwitcherEnabled
+            .combineLatest(preferences.$altTabModifier)
         Publishers.CombineLatest(
             Publishers.CombineLatest4(
                 preferences.$globalHotkeysEnabled,
@@ -118,13 +120,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 preferences.$windowsKeyOpensStart,
                 registeredShortcutConfigurations
             ),
-            preferences.$altTabSwitcherEnabled
+            altTabConfiguration
         )
-            .sink { [weak self] values, altTabSwitcherEnabled in
+            .sink { [weak self] values, altTabConfiguration in
                 let (enabled, mapping, opensStart, configurations) = values
+                let (altTabSwitcherEnabled, altTabModifier) = altTabConfiguration
                 self?.globalHotkeysService.setConfiguration(
                     enabled: enabled,
                     altTabSwitcherEnabled: altTabSwitcherEnabled,
+                    altTabModifier: altTabModifier,
                     windowsKeyMapping: mapping,
                     windowsKeyOpensStart: opensStart,
                     configurations: configurations
@@ -744,6 +748,7 @@ func runSelfTest() async -> Int32 {
               for: "Thursday, August 27, 2026\n\nThu 14:35:49 (Local time)"
           ).height > 32,
           preferences.menuButtonPlacement == .standard,
+          preferences.altTabModifier == .option,
           preferences.windowsKeyMapping == .option,
           preferences.windowsKeyOpensStart,
           preferences.globalShortcutConfigurations.count == 43,
@@ -2483,6 +2488,8 @@ func runSelfTest() async -> Int32 {
     var heldWindowsSpaceGesture = WindowsSpaceGestureState()
     var interruptedWindowsSpaceGesture = WindowsSpaceGestureState()
     var forwardAltTabGesture = AltTabGestureState()
+    var controlAltTabGesture = AltTabGestureState(altModifier: .control)
+    var commandAltTabGesture = AltTabGestureState(altModifier: .command)
     var cancelledAltTabGesture = AltTabGestureState()
     var windowActivationOrder = WindowActivationOrder()
     let shortcutDefaults = GlobalShortcutCatalog.defaults(
@@ -2490,11 +2497,18 @@ func runSelfTest() async -> Int32 {
     )
     let optionAltTabConflicts = GlobalHotkeysService.altTabConflicts(
         configurations: shortcutDefaults,
-        mapping: .option
+        mapping: .option,
+        altTabModifier: .option
     )
     let commandAltTabConflicts = GlobalHotkeysService.altTabConflicts(
         configurations: shortcutDefaults,
-        mapping: .command
+        mapping: .command,
+        altTabModifier: .option
+    )
+    let commandModifierAltTabConflicts = GlobalHotkeysService.altTabConflicts(
+        configurations: shortcutDefaults,
+        mapping: .command,
+        altTabModifier: .command
     )
     var customizedTaskView = shortcutDefaults.first {
         $0.id == GlobalShortcutCatalog.taskViewID
@@ -2505,6 +2519,11 @@ func runSelfTest() async -> Int32 {
         keyLabel: "⇥"
     )
     customizedTaskView.usesWindowsKey = false
+    let controlAltTabConflicts = GlobalHotkeysService.altTabConflicts(
+        configurations: [customizedTaskView],
+        mapping: .option,
+        altTabModifier: .control
+    )
     let capturedControlTab = HotkeyShortcut(
         keyCode: 48,
         modifiers: UInt32(controlKey),
@@ -2538,11 +2557,28 @@ func runSelfTest() async -> Int32 {
           forwardAltTabGesture.press(reverse: true) == .retreat,
           forwardAltTabGesture.flagsChanged(to: []) == .commit,
           forwardAltTabGesture.cancel() == nil,
+          controlAltTabGesture.press(reverse: false) == .present(reverse: false),
+          controlAltTabGesture.flagsChanged(to: [.control]) == nil,
+          controlAltTabGesture.press(reverse: false) == .advance,
+          controlAltTabGesture.flagsChanged(to: []) == .commit,
+          commandAltTabGesture.press(reverse: false) == .present(reverse: false),
+          commandAltTabGesture.flagsChanged(to: [.command]) == nil,
+          commandAltTabGesture.flagsChanged(to: []) == .commit,
           cancelledAltTabGesture.press(reverse: true) == .present(reverse: true),
           cancelledAltTabGesture.cancel() == .cancel,
           optionAltTabConflicts[GlobalShortcutCatalog.taskViewID]
             == "Conflicts with Alt+Tab Window Switcher",
           commandAltTabConflicts[GlobalShortcutCatalog.taskViewID] == nil,
+          commandModifierAltTabConflicts[GlobalShortcutCatalog.taskViewID]
+            == "Conflicts with Alt+Tab Window Switcher",
+          controlAltTabConflicts[GlobalShortcutCatalog.taskViewID]
+            == "Conflicts with Alt+Tab Window Switcher",
+          AltTabModifier.control.carbonModifier == UInt32(controlKey),
+          AltTabModifier.control.eventModifier == .control,
+          AltTabModifier.option.shortcutLabel == "Option (Alt)+Tab",
+          AltTabModifier.command.carbonModifier == UInt32(cmdKey),
+          AltTabModifier.command.eventModifier == .command,
+          AltTabModifier.command.shortcutLabel == "Command+Tab",
           GlobalShortcutCatalog.usesDefaultTrigger(
             shortcutDefaults.first { $0.id == GlobalShortcutCatalog.taskViewID }!
           ),
@@ -2831,6 +2867,7 @@ func runSelfTest() async -> Int32 {
         modifiers: UInt32(cmdKey),
         keyLabel: "A"
     )
+    preferences.altTabModifier = .control
     customShortcut.action = .showDesktop
     preferences.customShortcutConfigurations = [customShortcut]
     guard defaults.string(forKey: "wintaskbar.position") == "Left",
@@ -2852,6 +2889,7 @@ func runSelfTest() async -> Int32 {
           PreferencesStore(defaults: defaults).appFolders.first?.bundleIDs == ["one"],
           PreferencesStore(defaults: defaults).globalShortcutConfigurations.first?.shortcut.keyLabel == "A",
           PreferencesStore(defaults: defaults).customShortcutConfigurations.first?.action == .showDesktop,
+          PreferencesStore(defaults: defaults).altTabModifier == .control,
           DockBadgeService.parseStatusLabel("124 notifications") == "124",
           DockBadgeService.parseLSAppInfoOutput("\"StatusLabel\"={ \"label\"=\"124 notifications\" }") == "124",
           DockBadgeService.parseLSAppInfoOutput("\"StatusLabel\"=[ NULL ]") == nil else {

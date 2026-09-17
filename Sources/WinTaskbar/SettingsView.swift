@@ -528,37 +528,60 @@ struct SettingsView: View {
     }
 
     private var hotkeySettings: some View {
-        SettingsSection("Windows Global Shortcuts") {
-            Toggle("Enable global shortcuts", isOn: $preferences.globalHotkeysEnabled)
-            Toggle("Enable Alt+Tab window switcher", isOn: $preferences.altTabSwitcherEnabled)
-                .disabled(!preferences.globalHotkeysEnabled)
-            if let issue = globalHotkeys.altTabIssue,
-               preferences.globalHotkeysEnabled,
-               preferences.altTabSwitcherEnabled {
-                Text(issue)
+        VStack(alignment: .leading, spacing: 22) {
+            SettingsSection("Global shortcuts") {
+                Toggle("Enable global shortcuts", isOn: $preferences.globalHotkeysEnabled)
+                Text("Enabled mappings override matching macOS and application shortcuts.")
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(.secondary)
             }
-            Picker("Windows key", selection: $preferences.windowsKeyMapping) {
-                ForEach(WindowsKeyMapping.allCases) { mapping in
-                    Text(mapping.rawValue).tag(mapping)
+
+            SettingsSection("Alt+Tab window switcher") {
+                Toggle("Enable Alt+Tab window switcher", isOn: $preferences.altTabSwitcherEnabled)
+                    .disabled(!preferences.globalHotkeysEnabled)
+                Picker("Alt+Tab modifier", selection: $preferences.altTabModifier) {
+                    ForEach(AltTabModifier.allCases) { modifier in
+                        Text(modifier.title).tag(modifier)
+                    }
+                }
+                .disabled(!preferences.globalHotkeysEnabled || !preferences.altTabSwitcherEnabled)
+                if let issue = globalHotkeys.altTabIssue,
+                   preferences.globalHotkeysEnabled,
+                   preferences.altTabSwitcherEnabled {
+                    Text(issue)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                Text("\(preferences.altTabModifier.shortcutLabel) cycles through open windows. Add Shift to move backward, then release the modifier to activate the selected window.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if preferences.altTabModifier == .command {
+                    Text("Command+Tab is normally reserved by macOS. WinTaskbar will report a conflict here if the system does not release it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
-            Toggle("Press Windows key alone to open Start", isOn: $preferences.windowsKeyOpensStart)
+
+            SettingsSection("Windows key") {
+                Toggle("Press Windows key alone to open Start", isOn: $preferences.windowsKeyOpensStart)
+                    .disabled(!preferences.globalHotkeysEnabled)
+                Picker("Windows key", selection: $preferences.windowsKeyMapping) {
+                    ForEach(WindowsKeyMapping.allCases) { mapping in
+                        Text(mapping.rawValue).tag(mapping)
+                    }
+                }
                 .disabled(!preferences.globalHotkeysEnabled)
-            if let issue = globalHotkeys.windowsKeyIssue,
-               preferences.globalHotkeysEnabled,
-               preferences.windowsKeyOpensStart {
-                Text(issue)
+                if let issue = globalHotkeys.windowsKeyIssue,
+                   preferences.globalHotkeysEnabled,
+                   preferences.windowsKeyOpensStart {
+                    Text(issue)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                Text("Choose which macOS modifier represents the Windows key for Start and built-in Windows shortcuts. Command matches the Windows-logo key on most PC keyboards connected to a Mac.")
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(.secondary)
             }
-            Text("Alt+Tab uses the Mac Option key. Option preserves the existing WinTaskbar Windows-key mapping; Command matches the Windows-logo key on most PC keyboards connected to a Mac.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text("Enabled mappings override matching macOS and application shortcuts.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 

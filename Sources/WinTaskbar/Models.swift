@@ -163,6 +163,40 @@ enum WindowsKeyMapping: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum AltTabModifier: String, Codable, CaseIterable, Identifiable {
+    case control = "Control"
+    case option = "Option"
+    case command = "Command"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .control: "Control"
+        case .option: "Option (Alt)"
+        case .command: "Command"
+        }
+    }
+
+    var carbonModifier: UInt32 {
+        switch self {
+        case .control: UInt32(controlKey)
+        case .option: UInt32(optionKey)
+        case .command: UInt32(cmdKey)
+        }
+    }
+
+    var eventModifier: NSEvent.ModifierFlags {
+        switch self {
+        case .control: .control
+        case .option: .option
+        case .command: .command
+        }
+    }
+
+    var shortcutLabel: String { "\(title)+Tab" }
+}
+
 struct ShortcutApplicationTarget: Codable, Hashable {
     var name: String
     var bundleIdentifier: String?

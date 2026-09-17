@@ -241,6 +241,7 @@ final class GlobalHotkeysService: ObservableObject {
     private var altTabTrackingEnabled = false
     private var altTabModifierPollingTask: Task<Void, Never>?
     private var altTabSwitcherEnabled = false
+    private var altTabModifier: AltTabModifier = .option
     private var shortcutCaptureEventTap: CFMachPort?
     private var shortcutCaptureEventTapSource: CFRunLoopSource?
     private var shortcutCaptureLocalMonitor: Any?
@@ -274,6 +275,7 @@ final class GlobalHotkeysService: ObservableObject {
     func setConfiguration(
         enabled: Bool,
         altTabSwitcherEnabled: Bool,
+        altTabModifier: AltTabModifier,
         windowsKeyMapping: WindowsKeyMapping,
         windowsKeyOpensStart: Bool,
         configurations: [GlobalShortcutConfiguration]
@@ -283,6 +285,7 @@ final class GlobalHotkeysService: ObservableObject {
         self.windowsKeyMapping = windowsKeyMapping
         self.windowsKeyOpensStart = windowsKeyOpensStart
         self.altTabSwitcherEnabled = altTabSwitcherEnabled
+        self.altTabModifier = altTabModifier
         applyConfiguration()
     }
 
@@ -314,10 +317,14 @@ final class GlobalHotkeysService: ObservableObject {
         unregisterAll()
         windowsKeyGesture = WindowsKeyGestureState(windowsModifier: windowsKeyMapping.eventModifier)
         windowsSpaceGesture = WindowsSpaceGestureState(windowsModifier: windowsKeyMapping.eventModifier)
-        altTabGesture = AltTabGestureState()
+        altTabGesture = AltTabGestureState(altModifier: altTabModifier.eventModifier)
         var issues = Self.duplicateIssues(configurations: configurations, mapping: windowsKeyMapping)
         if self.altTabSwitcherEnabled {
-            issues.merge(Self.altTabConflicts(configurations: configurations, mapping: windowsKeyMapping)) {
+            issues.merge(Self.altTabConflicts(
+                configurations: configurations,
+                mapping: windowsKeyMapping,
+                altTabModifier: altTabModifier
+            )) {
                 current, _ in current
             }
         }
@@ -403,13 +410,14 @@ final class GlobalHotkeysService: ObservableObject {
 
     static func altTabConflicts(
         configurations: [GlobalShortcutConfiguration],
-        mapping: WindowsKeyMapping
+        mapping: WindowsKeyMapping,
+        altTabModifier: AltTabModifier
     ) -> [String: String] {
         Dictionary(uniqueKeysWithValues: configurations.compactMap { configuration in
             guard configuration.isEnabled else { return nil }
             let shortcut = configuration.resolvedShortcut(mapping: mapping)
             let modifiers = shortcut.modifiers & ~UInt32(shiftKey)
-            guard shortcut.keyCode == 48, modifiers == UInt32(optionKey) else { return nil }
+            guard shortcut.keyCode == 48, modifiers == altTabModifier.carbonModifier else { return nil }
             return (configuration.id, "Conflicts with Alt+Tab Window Switcher")
         })
     }
@@ -514,11 +522,11 @@ final class GlobalHotkeysService: ObservableObject {
                 try? await Task.sleep(for: .milliseconds(16))
                 guard let self, self.altTabGesture.isActive else { break }
                 let flags = CGEventSource.flagsState(.combinedSessionState)
-                guard !flags.contains(.maskAlternate) else { continue }
-                if let action = self.altTabGesture.flagsChanged(to: []) {
+                let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(flags.rawValue))
+                if let action = self.altTabGesture.flagsChanged(to: modifierFlags) {
                     self.onAltTabGesture?(action)
+                    break
                 }
-                break
             }
             self?.altTabModifierPollingTask = nil
         }
@@ -532,10 +540,12 @@ final class GlobalHotkeysService: ObservableObject {
     private func registerAltTabHotKeys() -> String? {
         let shortcuts = [
             (Self.altTabForwardHotKeyID, HotkeyShortcut(
-                keyCode: 48, modifiers: UInt32(optionKey), keyLabel: "Tab"
+                keyCode: 48, modifiers: altTabModifier.carbonModifier, keyLabel: "Tab"
             )),
             (Self.altTabReverseHotKeyID, HotkeyShortcut(
-                keyCode: 48, modifiers: UInt32(optionKey | shiftKey), keyLabel: "Tab"
+                keyCode: 48,
+                modifiers: altTabModifier.carbonModifier | UInt32(shiftKey),
+                keyLabel: "Tab"
             )),
         ]
         var registered: [EventHotKeyRef] = []
@@ -552,7 +562,7 @@ final class GlobalHotkeysService: ObservableObject {
             )
             guard status == noErr, let reference else {
                 registered.forEach { _ = UnregisterEventHotKey($0) }
-                return "Option+Tab is already in use by another application"
+                return "\(altTabModifier.shortcutLabel) is already in use by another application"
             }
             registered.append(reference)
         }
