@@ -2550,6 +2550,25 @@ func runSelfTest() async -> Int32 {
         modifiers: UInt32(controlKey),
         keyLabel: "⇥"
     )
+    guard WindowSwitcherApplicationPolicy.shouldInclude(
+        activationPolicy: .regular,
+        isTerminated: false
+    ),
+          WindowSwitcherApplicationPolicy.shouldInclude(
+              activationPolicy: .accessory,
+              isTerminated: false
+          ),
+          !WindowSwitcherApplicationPolicy.shouldInclude(
+              activationPolicy: .prohibited,
+              isTerminated: false
+          ),
+          !WindowSwitcherApplicationPolicy.shouldInclude(
+              activationPolicy: .regular,
+              isTerminated: true
+          ) else {
+        fputs("SELF-TEST FAILED: Alt+Tab application inclusion policy mismatch\n", stderr)
+        return 1
+    }
     guard let reverseWindowsSpaceShortcut,
           reverseWindowsSpaceShortcut.keyCode == forwardWindowsSpaceShortcut.keyCode,
           reverseWindowsSpaceShortcut.modifiers == UInt32(optionKey | shiftKey),

@@ -2,6 +2,15 @@ import AppKit
 import ApplicationServices
 import SwiftUI
 
+struct WindowSwitcherApplicationPolicy {
+    static func shouldInclude(
+        activationPolicy: NSApplication.ActivationPolicy,
+        isTerminated: Bool
+    ) -> Bool {
+        !isTerminated && activationPolicy != .prohibited
+    }
+}
+
 struct WindowActivationOrder {
     private(set) var windowIDs: [CGWindowID] = []
 
@@ -133,14 +142,19 @@ final class WindowActivationHistory {
 
     private func eligibleApplications() -> [NSRunningApplication] {
         workspace.runningApplications.filter {
-            $0.activationPolicy == .regular && !$0.isTerminated
+            WindowSwitcherApplicationPolicy.shouldInclude(
+                activationPolicy: $0.activationPolicy,
+                isTerminated: $0.isTerminated
+            )
         }
     }
 
     private func attach(to application: NSRunningApplication) {
         let pid = application.processIdentifier
-        guard application.activationPolicy == .regular,
-              !application.isTerminated,
+        guard WindowSwitcherApplicationPolicy.shouldInclude(
+                  activationPolicy: application.activationPolicy,
+                  isTerminated: application.isTerminated
+              ),
               observations[pid] == nil else { return }
         var observer: AXObserver?
         guard AXObserverCreate(pid, focusedWindowChangedCallback, &observer) == .success,
@@ -265,7 +279,10 @@ final class WindowSwitcherPanelController {
 
     private func present(reverse: Bool) {
         let applications = workspace.runningApplications.filter {
-            $0.activationPolicy == .regular && !$0.isTerminated
+            WindowSwitcherApplicationPolicy.shouldInclude(
+                activationPolicy: $0.activationPolicy,
+                isTerminated: $0.isTerminated
+            )
         }
         let frontToBackWindows = windowsService.windowsInFrontToBackOrder(
             forPIDs: applications.map(\.processIdentifier)
