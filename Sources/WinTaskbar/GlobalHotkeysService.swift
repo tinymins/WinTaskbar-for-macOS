@@ -243,6 +243,7 @@ final class GlobalHotkeysService: ObservableObject {
     private var altTabSwitcherEnabled = false
     private var shortcutCaptureEventTap: CFMachPort?
     private var shortcutCaptureEventTapSource: CFRunLoopSource?
+    private var shortcutCaptureLocalMonitor: Any?
     private var shortcutCaptureOwner: UUID?
     private var shortcutCaptureCompletion: ((HotkeyShortcut?) -> Void)?
     private var workspaceTerminationObserver: NSObjectProtocol?
@@ -285,11 +286,10 @@ final class GlobalHotkeysService: ObservableObject {
         applyConfiguration()
     }
 
-    @discardableResult
     func beginShortcutCapture(
         owner: UUID,
         completion: @escaping (HotkeyShortcut?) -> Void
-    ) -> Bool {
+    ) {
         if isCapturingShortcut {
             completeShortcutCapture(with: nil)
         }
@@ -297,7 +297,8 @@ final class GlobalHotkeysService: ObservableObject {
         shortcutCaptureCompletion = completion
         isCapturingShortcut = true
         applyConfiguration()
-        return installShortcutCaptureEventTap()
+        installShortcutCaptureLocalMonitor()
+        _ = installShortcutCaptureEventTap()
     }
 
     func finishShortcutCapture(owner: UUID, with shortcut: HotkeyShortcut?) {
@@ -665,9 +666,46 @@ final class GlobalHotkeysService: ObservableObject {
         shortcutCaptureEventTap = nil
     }
 
+    private func installShortcutCaptureLocalMonitor() {
+        guard shortcutCaptureLocalMonitor == nil else { return }
+        shortcutCaptureLocalMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.keyDown, .keyUp, .flagsChanged]
+        ) { [weak self] event in
+            let eventType: CGEventType
+            switch event.type {
+            case .keyDown: eventType = .keyDown
+            case .keyUp: eventType = .keyUp
+            case .flagsChanged: eventType = .flagsChanged
+            default: return event
+            }
+            let rawFlags = event.modifierFlags.rawValue
+            let keyCode = UInt32(event.keyCode)
+            let keyLabel = event.charactersIgnoringModifiers?.uppercased()
+            let shouldSuppress = MainActor.assumeIsolated {
+                self?.handleShortcutCaptureEvent(
+                    eventType,
+                    modifiers: Self.carbonModifiers(
+                        NSEvent.ModifierFlags(rawValue: rawFlags)
+                    ),
+                    keyCode: keyCode,
+                    keyLabel: keyLabel
+                ) ?? false
+            }
+            return shouldSuppress ? nil : event
+        }
+    }
+
+    private func removeShortcutCaptureLocalMonitor() {
+        if let shortcutCaptureLocalMonitor {
+            NSEvent.removeMonitor(shortcutCaptureLocalMonitor)
+        }
+        shortcutCaptureLocalMonitor = nil
+    }
+
     private func completeShortcutCapture(with shortcut: HotkeyShortcut?) {
         guard isCapturingShortcut else { return }
         removeShortcutCaptureEventTap()
+        removeShortcutCaptureLocalMonitor()
         let completion = shortcutCaptureCompletion
         shortcutCaptureCompletion = nil
         shortcutCaptureOwner = nil
@@ -682,6 +720,20 @@ final class GlobalHotkeysService: ObservableObject {
         keyCode: UInt32,
         keyLabel: String?
     ) -> Bool {
+        handleShortcutCaptureEvent(
+            eventType,
+            modifiers: Self.carbonModifiers(CGEventFlags(rawValue: rawFlags)),
+            keyCode: keyCode,
+            keyLabel: keyLabel
+        )
+    }
+
+    private func handleShortcutCaptureEvent(
+        _ eventType: CGEventType,
+        modifiers: UInt32,
+        keyCode: UInt32,
+        keyLabel: String?
+    ) -> Bool {
         guard isCapturingShortcut else { return false }
         if eventType == .tapDisabledByTimeout || eventType == .tapDisabledByUserInput {
             if let eventTap = shortcutCaptureEventTap {
@@ -692,7 +744,7 @@ final class GlobalHotkeysService: ObservableObject {
         let action = Self.shortcutCaptureAction(
             eventType: eventType,
             keyCode: keyCode,
-            modifiers: Self.carbonModifiers(CGEventFlags(rawValue: rawFlags)),
+            modifiers: modifiers,
             keyLabel: keyLabel
         )
         switch action {
@@ -716,6 +768,15 @@ final class GlobalHotkeysService: ObservableObject {
         if flags.contains(.maskAlternate) { result |= UInt32(optionKey) }
         if flags.contains(.maskShift) { result |= UInt32(shiftKey) }
         if flags.contains(.maskCommand) { result |= UInt32(cmdKey) }
+        return result
+    }
+
+    private static func carbonModifiers(_ flags: NSEvent.ModifierFlags) -> UInt32 {
+        var result: UInt32 = 0
+        if flags.contains(.control) { result |= UInt32(controlKey) }
+        if flags.contains(.option) { result |= UInt32(optionKey) }
+        if flags.contains(.shift) { result |= UInt32(shiftKey) }
+        if flags.contains(.command) { result |= UInt32(cmdKey) }
         return result
     }
 

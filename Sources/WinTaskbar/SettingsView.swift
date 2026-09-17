@@ -1016,7 +1016,6 @@ private struct GlobalHotkeyRecorder: View {
     @ObservedObject private var globalHotkeys = GlobalHotkeysService.shared
     @State private var captureOwner = UUID()
     @State private var isRecording = false
-    @State private var usesGlobalCapture = false
 
     var body: some View {
         HStack(spacing: 5) {
@@ -1033,9 +1032,6 @@ private struct GlobalHotkeyRecorder: View {
             .disabled(!canReset || isRecording)
             .help(resetTitle)
         }
-        .background(ShortcutCaptureView(isRecording: isRecording && !usesGlobalCapture) { captured in
-            globalHotkeys.finishShortcutCapture(owner: captureOwner, with: captured)
-        })
         .onDisappear {
             if isRecording {
                 globalHotkeys.cancelShortcutCapture(owner: captureOwner)
@@ -1045,67 +1041,9 @@ private struct GlobalHotkeyRecorder: View {
 
     private func beginRecording() {
         isRecording = true
-        usesGlobalCapture = globalHotkeys.beginShortcutCapture(owner: captureOwner) { captured in
+        globalHotkeys.beginShortcutCapture(owner: captureOwner) { captured in
             if let captured { onCapture(captured) }
             isRecording = false
-            usesGlobalCapture = false
-        }
-    }
-}
-
-private struct ShortcutCaptureView: NSViewRepresentable {
-    let isRecording: Bool
-    let onCapture: (HotkeyShortcut?) -> Void
-
-    func makeNSView(context: Context) -> ShortcutCaptureNSView {
-        let view = ShortcutCaptureNSView()
-        view.onCapture = onCapture
-        return view
-    }
-
-    func updateNSView(_ nsView: ShortcutCaptureNSView, context: Context) {
-        nsView.onCapture = onCapture
-        guard isRecording else { return }
-        DispatchQueue.main.async { nsView.window?.makeFirstResponder(nsView) }
-    }
-}
-
-private final class ShortcutCaptureNSView: NSView {
-    var onCapture: ((HotkeyShortcut?) -> Void)?
-
-    override var acceptsFirstResponder: Bool { true }
-
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 {
-            onCapture?(nil)
-            return
-        }
-        let modifiers = Self.carbonModifiers(event.modifierFlags)
-        guard modifiers != 0 else { NSSound.beep(); return }
-        let label = Self.keyLabel(for: event)
-        onCapture?(HotkeyShortcut(keyCode: UInt32(event.keyCode), modifiers: modifiers, keyLabel: label))
-    }
-
-    private static func carbonModifiers(_ flags: NSEvent.ModifierFlags) -> UInt32 {
-        var result: UInt32 = 0
-        if flags.contains(.control) { result |= UInt32(controlKey) }
-        if flags.contains(.option) { result |= UInt32(optionKey) }
-        if flags.contains(.shift) { result |= UInt32(shiftKey) }
-        if flags.contains(.command) { result |= UInt32(cmdKey) }
-        return result
-    }
-
-    private static func keyLabel(for event: NSEvent) -> String {
-        switch event.keyCode {
-        case 36: return "↩"
-        case 48: return "⇥"
-        case 49: return "Space"
-        case 51: return "⌫"
-        case 123: return "←"
-        case 124: return "→"
-        case 125: return "↓"
-        case 126: return "↑"
-        default: return event.charactersIgnoringModifiers?.uppercased() ?? "?"
         }
     }
 }
