@@ -2699,6 +2699,9 @@ func runSelfTest() async -> Int32 {
     WindowSwitcherLayout.tileWidth(
         for: CGRect(x: 0, y: 0, width: 3_440, height: 1_440)
     ) == WindowSwitcherLayout.maximumTileWidth,
+    WindowSwitcherLayout.compactControlStripWidth == 84,
+    WindowSwitcherLayout.compactControlStripWidth
+        <= WindowSwitcherLayout.minimumTileWidth * 0.525,
     WindowSwitcherLayout.rowIndices(
         itemWidths: [277, 208, 320],
         maximumWidth: 500
