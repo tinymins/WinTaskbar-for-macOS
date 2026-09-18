@@ -2,6 +2,12 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.26] - 2026-09-18
+
+### Fixed
+
+- Distinguish missing Location permission from a disconnected Wi-Fi interface: show an unknown-status question mark and an explicit location-access prompt instead of reporting the network as available.
+
 ## [0.0.25] - 2026-09-17
 
 ### Added
