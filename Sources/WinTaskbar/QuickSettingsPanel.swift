@@ -274,8 +274,8 @@ private struct QuickSettingsPanelView: View {
         VStack(spacing: 25) {
             HStack(spacing: 12) {
                 QuickSettingTile(
-                    label: service.wifiPoweredOn ? (service.wifiSSID ?? "Available") : "Wi-Fi off",
-                    symbol: service.wifiPoweredOn ? "wifi" : "wifi.slash",
+                    label: service.wifiConnectionPresentation.title,
+                    symbol: service.wifiConnectionPresentation.symbol,
                     isActive: service.wifiPoweredOn,
                     primaryAction: { service.setWiFiPower(!service.wifiPoweredOn) },
                     detailAction: showWiFiPage,
@@ -521,7 +521,7 @@ private struct QuickSettingsPanelView: View {
         detailPage(title: "Wi-Fi", trailing: AnyView(wifiHeaderControls)) {
             Group {
                 if service.wifiPoweredOn {
-                    if let issue = service.wifiScanIssue {
+                    if let issue = service.wifiAuthorizationIssue ?? service.wifiScanIssue {
                         wifiScanIssueView(issue)
                     } else {
                         wifiNetworkList

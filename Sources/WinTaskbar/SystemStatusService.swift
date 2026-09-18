@@ -19,6 +19,37 @@ enum WiFiScanIssue: Equatable {
     case scanFailed
 }
 
+enum WiFiConnectionPresentation: Equatable {
+    case off
+    case locationAccessRequired
+    case notConnected
+    case connected(String)
+
+    static func resolve(poweredOn: Bool, ssid: String?, hasLocationAccess: Bool) -> Self {
+        guard poweredOn else { return .off }
+        if let ssid, !ssid.isEmpty { return .connected(ssid) }
+        return hasLocationAccess ? .notConnected : .locationAccessRequired
+    }
+
+    var title: String {
+        switch self {
+        case .off: "Wi-Fi off"
+        case .locationAccessRequired: "Location access required"
+        case .notConnected: "Not connected"
+        case let .connected(ssid): ssid
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .off: "wifi.slash"
+        case .locationAccessRequired: "questionmark.circle"
+        case .notConnected: "wifi.exclamationmark"
+        case .connected: "wifi"
+        }
+    }
+}
+
 enum VolumeAdjustmentPolicy {
     static func shouldUnmute(targetVolume: Float) -> Bool {
         targetVolume > 0
@@ -115,6 +146,27 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
     @Published private(set) var isScanningWiFi = false
     @Published private(set) var wifiScanIssue: WiFiScanIssue?
     @Published private(set) var inputSources: [InputSourceOption] = []
+
+    var wifiConnectionPresentation: WiFiConnectionPresentation {
+        WiFiConnectionPresentation.resolve(
+            poweredOn: wifiPoweredOn,
+            ssid: wifiSSID,
+            hasLocationAccess: wifiAuthorizationIssue == nil
+        )
+    }
+
+    var wifiAuthorizationIssue: WiFiScanIssue? {
+        switch locationManager.authorizationStatus {
+        case .notDetermined:
+            .locationAuthorizationRequired
+        case .restricted, .denied:
+            .locationPermissionDenied
+        case .authorizedAlways:
+            nil
+        @unknown default:
+            .locationPermissionDenied
+        }
+    }
 
     private var statusTimer: Timer?
     private var powerSourceObserver: CFRunLoopSource?

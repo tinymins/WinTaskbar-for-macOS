@@ -99,7 +99,7 @@ struct WiFiTrayView: View {
 
     var body: some View {
         WindowsTrayIconButton(
-            title: service.wifiSSID ?? (service.wifiPoweredOn ? "Not connected" : "Wi-Fi off"),
+            title: service.wifiConnectionPresentation.title,
             taskbarPosition: position,
             preservesTransientPanelOnMouseDown: true,
             primaryAction: presentPanelIfNeeded,
@@ -108,7 +108,7 @@ struct WiFiTrayView: View {
             dropHoverAction: dragConfiguration.onDrop,
             dropAction: dragConfiguration.onDrop
         ) {
-            Image(systemName: service.wifiPoweredOn ? (service.wifiSSID == nil ? "wifi.exclamationmark" : "wifi") : "wifi.slash")
+            Image(systemName: service.wifiConnectionPresentation.symbol)
                 .font(.system(size: 15, weight: .regular))
                 .frame(width: WindowsTrayIconMetrics.iconSize, height: WindowsTrayIconMetrics.iconSize)
         }

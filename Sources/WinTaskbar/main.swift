@@ -1097,6 +1097,10 @@ func runSelfTest() async -> Int32 {
           QuickSettingsPageNavigation.targetPage(currentPage: 0, deltaY: 1, pageCount: 2) == 0,
           WiFiScanIssue.locationAuthorizationRequired != .locationPermissionDenied,
           WiFiScanIssue.locationPermissionDenied != .scanFailed,
+          WiFiConnectionPresentation.resolve(poweredOn: false, ssid: nil, hasLocationAccess: false) == .off,
+          WiFiConnectionPresentation.resolve(poweredOn: true, ssid: nil, hasLocationAccess: false) == .locationAccessRequired,
+          WiFiConnectionPresentation.resolve(poweredOn: true, ssid: nil, hasLocationAccess: true) == .notConnected,
+          WiFiConnectionPresentation.resolve(poweredOn: true, ssid: "Office", hasLocationAccess: false) == .connected("Office"),
           QuickSettingsPanelGeometry.frame(
               screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 800),
               visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 775),
