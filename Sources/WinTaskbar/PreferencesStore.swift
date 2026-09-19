@@ -56,6 +56,14 @@ final class PreferencesStore: ObservableObject {
     }
     @Published var launchAtLogin: Bool { didSet { defaults.set(launchAtLogin, forKey: "wintaskbar.launchAtLogin") } }
     @Published var windowPreviewsEnabled: Bool { didSet { defaults.set(windowPreviewsEnabled, forKey: "wintaskbar.feature.windowPreviews") } }
+    @Published var disableMinimizeAnimationDuringRemoteSession: Bool {
+        didSet {
+            defaults.set(
+                disableMinimizeAnimationDuringRemoteSession,
+                forKey: "wintaskbar.disableMinimizeAnimationDuringRemoteSession"
+            )
+        }
+    }
     @Published var showDesktopEnabled: Bool { didSet { defaults.set(showDesktopEnabled, forKey: "wintaskbar.feature.showDesktop") } }
     @Published var globalHotkeysEnabled: Bool { didSet { defaults.set(globalHotkeysEnabled, forKey: "wintaskbar.feature.globalHotkeys") } }
     @Published var altTabSwitcherEnabled: Bool { didSet { defaults.set(altTabSwitcherEnabled, forKey: "wintaskbar.feature.altTabSwitcher") } }
@@ -164,6 +172,9 @@ final class PreferencesStore: ObservableObject {
         } ?? AdditionalClockConfiguration.defaults
         launchAtLogin = defaults.object(forKey: "wintaskbar.launchAtLogin") as? Bool ?? false
         windowPreviewsEnabled = defaults.object(forKey: "wintaskbar.feature.windowPreviews") as? Bool ?? true
+        disableMinimizeAnimationDuringRemoteSession = defaults.object(
+            forKey: "wintaskbar.disableMinimizeAnimationDuringRemoteSession"
+        ) as? Bool ?? true
         showDesktopEnabled = defaults.object(forKey: "wintaskbar.feature.showDesktop") as? Bool ?? true
         globalHotkeysEnabled = defaults.object(forKey: "wintaskbar.feature.globalHotkeys") as? Bool ?? true
         altTabSwitcherEnabled = defaults.object(forKey: "wintaskbar.feature.altTabSwitcher") as? Bool ?? true

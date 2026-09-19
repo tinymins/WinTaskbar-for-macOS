@@ -44,6 +44,10 @@
 	<string>Clock</string>
 	<key>Date &amp; time</key>
 	<string>Date &amp; time</string>
+	<key>Detects active macOS Screen Sharing and Remote Management connections.</key>
+	<string>Detects active macOS Screen Sharing and Remote Management connections.</string>
+	<key>Disable minimize animation during remote sessions</key>
+	<string>Disable minimize animation during remote sessions</string>
 	<key>System tray clock</key>
 	<string>System tray clock</string>
 	<key>Region</key>

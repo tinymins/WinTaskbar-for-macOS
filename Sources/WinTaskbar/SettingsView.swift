@@ -261,6 +261,13 @@ struct SettingsView: View {
                     ForEach(DisplayMode.allCases) { Text($0.rawValue).tag($0) }
                 }
                 Toggle("Window Previews", isOn: $preferences.windowPreviewsEnabled)
+                Toggle(
+                    "Disable minimize animation during remote sessions",
+                    isOn: $preferences.disableMinimizeAnimationDuringRemoteSession
+                )
+                Text("Detects active macOS Screen Sharing and Remote Management connections.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("Show Desktop", isOn: $preferences.showDesktopEnabled)
                 Toggle("Show app labels under icons", isOn: $preferences.showAppLabels)
                 Toggle("Show Finder in running apps", isOn: $preferences.showFinder)

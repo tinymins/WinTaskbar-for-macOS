@@ -1998,6 +1998,23 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    guard preferences.disableMinimizeAnimationDuringRemoteSession,
+          RemoteSessionDetector.isActive(
+              isOnConsole: false,
+              runningBundleIdentifiers: []
+          ),
+          RemoteSessionDetector.isActive(
+              isOnConsole: true,
+              runningBundleIdentifiers: [RemoteSessionDetector.screenSharingAgentBundleIdentifier]
+          ),
+          !RemoteSessionDetector.isActive(
+              isOnConsole: true,
+              runningBundleIdentifiers: ["com.apple.RemoteDesktopAgent"]
+          ) else {
+        fputs("SELF-TEST FAILED: remote session detection mismatch\n", stderr)
+        return 1
+    }
+
     var calendar = Calendar(identifier: .gregorian)
     calendar.locale = Locale(identifier: "en_US")
     calendar.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -3051,6 +3068,7 @@ func runSelfTest() async -> Int32 {
     preferences.showFlashingOnTaskbarApps = false
     preferences.barHeight = 64
     preferences.trayWifiEnabled = false
+    preferences.disableMinimizeAnimationDuringRemoteSession = false
     preferences.externalStatusItemsEnabled = true
     preferences.trayClockShowsSeconds = false
     preferences.dateTimeFirstDayOfWeek = .monday
@@ -3083,6 +3101,7 @@ func runSelfTest() async -> Int32 {
           defaults.bool(forKey: "wintaskbar.showFlashingOnTaskbarApps") == false,
           defaults.double(forKey: "wintaskbar.barHeight") == 64,
           defaults.bool(forKey: "wintaskbar.feature.trayWifi") == false,
+          defaults.bool(forKey: "wintaskbar.disableMinimizeAnimationDuringRemoteSession") == false,
           PreferencesStore(defaults: defaults).externalStatusItemsEnabled,
           !PreferencesStore(defaults: defaults).trayClockShowsSeconds,
           PreferencesStore(defaults: defaults).dateTimeFirstDayOfWeek == .monday,

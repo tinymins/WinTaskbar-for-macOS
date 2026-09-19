@@ -40,6 +40,10 @@
 	<string>时钟</string>
 	<key>Date &amp; time</key>
 	<string>日期和时间</string>
+	<key>Detects active macOS Screen Sharing and Remote Management connections.</key>
+	<string>检测正在进行的 macOS 屏幕共享和远程管理连接。</string>
+	<key>Disable minimize animation during remote sessions</key>
+	<string>远程会话期间禁用最小化动画</string>
 	<key>System tray clock</key>
 	<string>系统托盘时钟</string>
 	<key>Region</key>

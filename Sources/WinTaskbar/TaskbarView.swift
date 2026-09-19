@@ -845,7 +845,8 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
                 windowActivator.activateOrMinimize(
                     item,
                     targetFrame: transitionAnchor?.screenFrame,
-                    reduceMotion: reduceMotion
+                    reduceMotion: reduceMotion,
+                    disableAnimationWhenRemote: preferences.disableMinimizeAnimationDuringRemoteSession
                 )
             }
         } label: {

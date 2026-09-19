@@ -35,6 +35,10 @@ private final class WindowMinimizeTransitionPanel: NSPanel {
 final class WindowMinimizeTransitionAnimator {
     private struct PendingRestore {
         let ownerPID: pid_t
+        let animation: RestoreAnimation?
+    }
+
+    private struct RestoreAnimation {
         let snapshot: WindowLiveSnapshot
         let sourceFrame: CGRect
         let targetFrame: CGRect
@@ -48,9 +52,19 @@ final class WindowMinimizeTransitionAnimator {
         window: WindowInfo,
         targetFrame: CGRect?,
         reduceMotion: Bool,
+        suppressAnimation: Bool,
         hide: @escaping @MainActor () -> Void,
         fallback: @escaping @MainActor () -> Void
     ) {
+        if suppressAnimation {
+            pendingRestores[window.ownerPID] = PendingRestore(
+                ownerPID: window.ownerPID,
+                animation: nil
+            )
+            hide()
+            return
+        }
+
         guard !reduceMotion,
               activePanels[window.ownerPID] == nil,
               let targetFrame,
@@ -63,9 +77,11 @@ final class WindowMinimizeTransitionAnimator {
         let destinationFrame = WindowMinimizeTransitionMotion.destinationFrame(for: targetFrame)
         pendingRestores[window.ownerPID] = PendingRestore(
             ownerPID: window.ownerPID,
-            snapshot: snapshot,
-            sourceFrame: panel.frame,
-            targetFrame: destinationFrame
+            animation: RestoreAnimation(
+                snapshot: snapshot,
+                sourceFrame: panel.frame,
+                targetFrame: destinationFrame
+            )
         )
         let generation = begin(ownerPID: window.ownerPID, panel: panel)
         panel.orderFrontRegardless()
@@ -92,7 +108,12 @@ final class WindowMinimizeTransitionAnimator {
         guard let pending = pendingRestores[ownerPID] else {
             return false
         }
-        guard let panel = makePanel(snapshot: pending.snapshot, frame: pending.targetFrame) else {
+        guard let animation = pending.animation else {
+            pendingRestores.removeValue(forKey: ownerPID)
+            reveal()
+            return true
+        }
+        guard let panel = makePanel(snapshot: animation.snapshot, frame: animation.targetFrame) else {
             pendingRestores.removeValue(forKey: ownerPID)
             reveal()
             return true
@@ -106,7 +127,7 @@ final class WindowMinimizeTransitionAnimator {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = WindowMinimizeTransitionMotion.duration
             context.timingFunction = CAMediaTimingFunction(controlPoints: 0, 0, 0, 1)
-            panel.animator().setFrame(pending.sourceFrame, display: true)
+            panel.animator().setFrame(animation.sourceFrame, display: true)
             panel.animator().alphaValue = 1
         } completionHandler: { [weak self] in
             MainActor.assumeIsolated {

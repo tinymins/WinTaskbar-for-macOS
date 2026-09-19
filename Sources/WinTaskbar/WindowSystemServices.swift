@@ -92,15 +92,21 @@ final class WindowActivationService {
     nonisolated private static let fullScreenAttribute = "AXFullScreen"
     private let windowsService: WindowsService
     private let minimizeTransitionAnimator = WindowMinimizeTransitionAnimator()
+    private let isRemoteSessionActive: @MainActor () -> Bool
 
-    init(windowsService: WindowsService) {
+    init(
+        windowsService: WindowsService,
+        isRemoteSessionActive: @escaping @MainActor () -> Bool = { RemoteSessionDetector.isActive }
+    ) {
         self.windowsService = windowsService
+        self.isRemoteSessionActive = isRemoteSessionActive
     }
 
     func activateOrMinimize(
         _ item: TaskbarItem,
         targetFrame: CGRect? = nil,
-        reduceMotion: Bool = false
+        reduceMotion: Bool = false,
+        disableAnimationWhenRemote: Bool = false
     ) {
         guard let pid = item.processIdentifier,
               let application = NSRunningApplication(processIdentifier: pid) else {
@@ -138,7 +144,8 @@ final class WindowActivationService {
                 window: windows[0],
                 application: application,
                 targetFrame: targetFrame,
-                reduceMotion: reduceMotion
+                reduceMotion: reduceMotion,
+                suppressAnimation: disableAnimationWhenRemote && isRemoteSessionActive()
             )
         }
     }
@@ -191,13 +198,15 @@ final class WindowActivationService {
         window: WindowInfo,
         application: NSRunningApplication,
         targetFrame: CGRect?,
-        reduceMotion: Bool
+        reduceMotion: Bool,
+        suppressAnimation: Bool
     ) {
         guard let match = matchingWindow(for: window) else { return }
         minimizeTransitionAnimator.minimize(
             window: window,
             targetFrame: targetFrame,
             reduceMotion: reduceMotion,
+            suppressAnimation: suppressAnimation,
             hide: { _ = application.hide() },
             fallback: {
                 _ = AXUIElementSetAttributeValue(
