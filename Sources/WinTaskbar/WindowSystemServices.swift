@@ -91,15 +91,27 @@ struct WindowControlCapabilities: OptionSet, Sendable {
 final class WindowActivationService {
     nonisolated private static let fullScreenAttribute = "AXFullScreen"
     private let windowsService: WindowsService
+    private let minimizeTransitionAnimator = WindowMinimizeTransitionAnimator()
 
     init(windowsService: WindowsService) {
         self.windowsService = windowsService
     }
 
-    func activateOrMinimize(_ item: TaskbarItem) {
+    func activateOrMinimize(
+        _ item: TaskbarItem,
+        targetFrame: CGRect? = nil,
+        reduceMotion: Bool = false
+    ) {
         guard let pid = item.processIdentifier,
               let application = NSRunningApplication(processIdentifier: pid) else {
             NSWorkspace.shared.open(item.url)
+            return
+        }
+
+        if minimizeTransitionAnimator.restore(ownerPID: pid, reveal: {
+            application.unhide()
+            application.activate(options: [.activateIgnoringOtherApps])
+        }) {
             return
         }
 
@@ -122,11 +134,23 @@ final class WindowActivationService {
             raise(window: windows[0])
         case .minimizeWindow:
             windowsService.cacheThumbnails(forPID: pid)
-            minimize(window: windows[0])
+            minimize(
+                window: windows[0],
+                application: application,
+                targetFrame: targetFrame,
+                reduceMotion: reduceMotion
+            )
         }
     }
 
     func raise(window: WindowInfo) {
+        if minimizeTransitionAnimator.restore(ownerPID: window.ownerPID, reveal: {
+            let application = NSRunningApplication(processIdentifier: window.ownerPID)
+            application?.unhide()
+            application?.activate(options: [.activateIgnoringOtherApps])
+        }) {
+            return
+        }
         raiseAccessibilityWindow(window)
         activateApplication(for: window)
     }
@@ -161,6 +185,28 @@ final class WindowActivationService {
     func minimize(window: WindowInfo) {
         guard let match = matchingWindow(for: window) else { return }
         AXUIElementSetAttributeValue(match, kAXMinimizedAttribute as CFString, true as CFBoolean)
+    }
+
+    private func minimize(
+        window: WindowInfo,
+        application: NSRunningApplication,
+        targetFrame: CGRect?,
+        reduceMotion: Bool
+    ) {
+        guard let match = matchingWindow(for: window) else { return }
+        minimizeTransitionAnimator.minimize(
+            window: window,
+            targetFrame: targetFrame,
+            reduceMotion: reduceMotion,
+            hide: { _ = application.hide() },
+            fallback: {
+                _ = AXUIElementSetAttributeValue(
+                    match,
+                    kAXMinimizedAttribute as CFString,
+                    true as CFBoolean
+                )
+            }
+        )
     }
 
     @discardableResult

@@ -1983,6 +1983,21 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    let minimizeTarget = CGRect(x: 100, y: 20, width: 40, height: 40)
+    let minimizeDestination = WindowMinimizeTransitionMotion.destinationFrame(for: minimizeTarget)
+    guard WindowMinimizeTransitionMotion.duration == 0.167,
+          abs(minimizeDestination.minX - 105.6) < 0.001,
+          abs(minimizeDestination.minY - 25.6) < 0.001,
+          abs(minimizeDestination.width - 28.8) < 0.001,
+          abs(minimizeDestination.height - 28.8) < 0.001,
+          WindowMinimizeTransitionMotion.appKitFrame(
+              fromQuartzFrame: CGRect(x: 80, y: 100, width: 900, height: 600),
+              primaryScreenTop: 1080
+          ) == CGRect(x: 80, y: 380, width: 900, height: 600) else {
+        fputs("SELF-TEST FAILED: window minimize transition geometry mismatch\n", stderr)
+        return 1
+    }
+
     var calendar = Calendar(identifier: .gregorian)
     calendar.locale = Locale(identifier: "en_US")
     calendar.timeZone = TimeZone(secondsFromGMT: 0)!

@@ -807,6 +807,7 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
     @State private var previewWindows: [WindowInfo] = []
     @State private var attentionPulse = false
     @State private var attentionTask: Task<Void, Never>?
+    @State private var transitionAnchor: TaskbarTransitionAnchorView?
 
     static func == (lhs: TaskbarAppButton, rhs: TaskbarAppButton) -> Bool {
         lhs.item == rhs.item
@@ -841,7 +842,11 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
                 }
             }
             DispatchQueue.main.async {
-                windowActivator.activateOrMinimize(item)
+                windowActivator.activateOrMinimize(
+                    item,
+                    targetFrame: transitionAnchor?.screenFrame,
+                    reduceMotion: reduceMotion
+                )
             }
         } label: {
             appIconCell
@@ -897,36 +902,41 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
             previewWindows = windowsService.windows(forPID: pid)
         }
         .background {
-            if item.processIdentifier != nil {
-                WindowPreviewPanelPresenter(
-                    isPresented: windowPreviewPanelController.activeOwnerID == previewOwnerID,
-                    ownerID: previewOwnerID,
-                    position: preferences.position,
-                    contentSize: WindowPreviewContentGeometry.contentSize(
-                        windows: previewWindows,
-                        position: preferences.position
-                    ),
-                    animatesTransition: !reduceMotion,
-                    controller: windowPreviewPanelController
-                ) {
-                    WindowPreviewPopover(
-                        windows: previewWindows,
+            ZStack {
+                TaskbarTransitionAnchor { anchor in
+                    if transitionAnchor !== anchor { transitionAnchor = anchor }
+                }
+                if item.processIdentifier != nil {
+                    WindowPreviewPanelPresenter(
+                        isPresented: windowPreviewPanelController.activeOwnerID == previewOwnerID,
+                        ownerID: previewOwnerID,
                         position: preferences.position,
-                        service: windowsService,
-                        windowPeekController: windowPeekController,
-                        onRefresh: { windows in
-                            if previewWindows != windows { previewWindows = windows }
-                        },
-                        onSelect: {
-                            windowActivator.raise(window: $0)
-                            windowPreviewPanelController.dismiss(ownerID: previewOwnerID)
-                        },
-                        onClose: {
-                            windowPeekController.hideImmediately()
-                            closePreviewWindow($0)
-                        }
-                    )
-                    .onHover(perform: handlePreviewPopoverHover)
+                        contentSize: WindowPreviewContentGeometry.contentSize(
+                            windows: previewWindows,
+                            position: preferences.position
+                        ),
+                        animatesTransition: !reduceMotion,
+                        controller: windowPreviewPanelController
+                    ) {
+                        WindowPreviewPopover(
+                            windows: previewWindows,
+                            position: preferences.position,
+                            service: windowsService,
+                            windowPeekController: windowPeekController,
+                            onRefresh: { windows in
+                                if previewWindows != windows { previewWindows = windows }
+                            },
+                            onSelect: {
+                                windowActivator.raise(window: $0)
+                                windowPreviewPanelController.dismiss(ownerID: previewOwnerID)
+                            },
+                            onClose: {
+                                windowPeekController.hideImmediately()
+                                closePreviewWindow($0)
+                            }
+                        )
+                        .onHover(perform: handlePreviewPopoverHover)
+                    }
                 }
             }
         }
