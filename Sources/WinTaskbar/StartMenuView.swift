@@ -22,6 +22,7 @@ struct StartMenuView: View {
     @ObservedObject var actions: AppActions
     @ObservedObject var preferences: PreferencesStore
     @State private var query = ""
+    @State private var selectedSearchResultIndex = 0
     @State private var shortcutIsDropTarget = false
 
     private var filteredApps: [DiscoveredApp] {
@@ -31,6 +32,11 @@ struct StartMenuView: View {
 
     private var groupedBundleIDs: Set<String> {
         Set(preferences.appFolders.flatMap(\.bundleIDs))
+    }
+
+    private var selectedSearchResultID: String? {
+        guard !query.isEmpty, filteredApps.indices.contains(selectedSearchResultIndex) else { return nil }
+        return filteredApps[selectedSearchResultIndex].id
     }
 
     var body: some View {
@@ -48,29 +54,37 @@ struct StartMenuView: View {
         VStack(alignment: .leading, spacing: 2) {
             if preferences.searchFieldPosition == .top { searchField }
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2) {
-                    if query.isEmpty {
-                        ForEach(preferences.appFolders) { folder in
-                            folderSection(folder)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        if query.isEmpty {
+                            ForEach(preferences.appFolders) { folder in
+                                folderSection(folder)
+                            }
+                        }
+
+                        appsHeader
+
+                        if preferences.groupStartMenuByCategory && query.isEmpty {
+                            ForEach(categoryGroups, id: \.0) { category, categoryApps in
+                                DisclosureGroup(category) {
+                                    ForEach(categoryApps) { appRow($0, currentFolderID: nil) }
+                                }.padding(.vertical, 3)
+                            }
+                        } else {
+                            ForEach(ungroupedApps) { appRow($0, currentFolderID: nil) }
                         }
                     }
-
-                    appsHeader
-
-                    if preferences.groupStartMenuByCategory && query.isEmpty {
-                        ForEach(categoryGroups, id: \.0) { category, categoryApps in
-                            DisclosureGroup(category) {
-                                ForEach(categoryApps) { appRow($0, currentFolderID: nil) }
-                            }.padding(.vertical, 3)
-                        }
-                    } else {
-                        ForEach(ungroupedApps) { appRow($0, currentFolderID: nil) }
+                    .padding(.horizontal, 6)
+                }
+                .padding(.horizontal, -12)
+                .onChange(of: selectedSearchResultID) { selectedID in
+                    guard let selectedID else { return }
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        proxy.scrollTo(selectedID, anchor: .center)
                     }
                 }
-                .padding(.horizontal, 6)
             }
-            .padding(.horizontal, -12)
 
             if filteredApps.isEmpty {
                 Text("No apps found").foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -96,8 +110,12 @@ struct StartMenuView: View {
     }
 
     private var searchField: some View {
-        MenuSearchField(text: $query, placeholder: "Search apps") {
-            if let first = filteredApps.first { open(first) }
+        MenuSearchField(
+            text: $query,
+            placeholder: "Search apps",
+            onMoveSelection: moveSearchSelection
+        ) {
+            openSelectedSearchResult()
         }
             .frame(height: 22)
             .padding(.horizontal, 8)
@@ -107,6 +125,7 @@ struct StartMenuView: View {
                     .fill(Color.primary.opacity(0.08))
             }
             .padding(.horizontal, -4)
+            .onChange(of: query) { _ in selectedSearchResultIndex = 0 }
     }
 
     private var ungroupedApps: [DiscoveredApp] {
@@ -158,7 +177,8 @@ struct StartMenuView: View {
     }
 
     private func appRow(_ app: DiscoveredApp, currentFolderID: String?) -> some View {
-        StartMenuAppRow(app: app) { open(app) }
+        StartMenuAppRow(app: app, isSelected: app.id == selectedSearchResultID) { open(app) }
+        .id(app.id)
         .onDrag { NSItemProvider(contentsOf: app.url) ?? NSItemProvider() }
         .contextMenu {
             if let bundleID = app.bundleIdentifier {
@@ -245,6 +265,21 @@ struct StartMenuView: View {
     private func open(_ app: DiscoveredApp) {
         apps.open(app)
         actions.closeStartMenu()
+    }
+
+    private func moveSearchSelection(by offset: Int) -> Bool {
+        guard !query.isEmpty, !filteredApps.isEmpty else { return false }
+        selectedSearchResultIndex = min(
+            max(selectedSearchResultIndex + offset, filteredApps.startIndex),
+            filteredApps.index(before: filteredApps.endIndex)
+        )
+        return true
+    }
+
+    private func openSelectedSearchResult() {
+        guard !query.isEmpty,
+              filteredApps.indices.contains(selectedSearchResultIndex) else { return }
+        open(filteredApps[selectedSearchResultIndex])
     }
 
     private func addFolder() {
@@ -361,6 +396,7 @@ private struct StartMenuFolderHeader: View {
 
 private struct StartMenuAppRow: View {
     let app: DiscoveredApp
+    let isSelected: Bool
     let action: () -> Void
     @State private var isHovering = false
 
@@ -380,7 +416,7 @@ private struct StartMenuAppRow: View {
             .frame(maxWidth: .infinity)
             .background {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isHovering ? Color.primary.opacity(0.08) : .clear)
+                    .fill(isSelected ? Color.accentColor.opacity(0.18) : Color.primary.opacity(isHovering ? 0.08 : 0))
             }
             .contentShape(Rectangle())
         }
@@ -392,10 +428,11 @@ private struct StartMenuAppRow: View {
 private struct MenuSearchField: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String
+    let onMoveSelection: (Int) -> Bool
     let onSubmit: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, onSubmit: onSubmit)
+        Coordinator(text: $text, onMoveSelection: onMoveSelection, onSubmit: onSubmit)
     }
 
     func makeNSView(context: Context) -> NSTextField {
@@ -419,21 +456,42 @@ private struct MenuSearchField: NSViewRepresentable {
         }
         field.placeholderString = placeholder
         context.coordinator.text = $text
+        context.coordinator.onMoveSelection = onMoveSelection
         context.coordinator.onSubmit = onSubmit
     }
 
     final class Coordinator: NSObject, NSSearchFieldDelegate {
         var text: Binding<String>
+        var onMoveSelection: (Int) -> Bool
         var onSubmit: () -> Void
 
-        init(text: Binding<String>, onSubmit: @escaping () -> Void = {}) {
+        init(
+            text: Binding<String>,
+            onMoveSelection: @escaping (Int) -> Bool,
+            onSubmit: @escaping () -> Void = {}
+        ) {
             self.text = text
+            self.onMoveSelection = onMoveSelection
             self.onSubmit = onSubmit
         }
 
         func controlTextDidChange(_ notification: Notification) {
             guard let field = notification.object as? NSTextField else { return }
             text.wrappedValue = field.stringValue
+        }
+
+        func control(
+            _ control: NSControl,
+            textView: NSTextView,
+            doCommandBy commandSelector: Selector
+        ) -> Bool {
+            if commandSelector == #selector(NSResponder.moveUp(_:)) {
+                return onMoveSelection(-1)
+            }
+            if commandSelector == #selector(NSResponder.moveDown(_:)) {
+                return onMoveSelection(1)
+            }
+            return false
         }
 
         @objc func submit() {
