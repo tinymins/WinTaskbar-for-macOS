@@ -277,6 +277,28 @@ enum WindowSwitcherLayout {
             }
         }
         if !currentRow.isEmpty { rows.append(currentRow) }
+
+        func width(of row: [Int]) -> CGFloat {
+            row.reduce(CGFloat.zero) { $0 + itemWidths[$1] }
+                + CGFloat(max(0, row.count - 1)) * spacing
+        }
+
+        var movedItem = true
+        while movedItem {
+            movedItem = false
+            for rowIndex in stride(from: rows.count - 1, through: 1, by: -1) {
+                let previousIndex = rowIndex - 1
+                guard rows[previousIndex].count > rows[rowIndex].count + 1,
+                      let candidate = rows[previousIndex].last else { continue }
+                let proposedWidth = width(of: rows[rowIndex])
+                    + spacing
+                    + itemWidths[candidate]
+                guard proposedWidth <= maximumWidth else { continue }
+                rows[previousIndex].removeLast()
+                rows[rowIndex].insert(candidate, at: 0)
+                movedItem = true
+            }
+        }
         return rows
     }
 
