@@ -2,6 +2,17 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.27] - 2026-09-20
+
+### Added
+
+- Add a fast Windows 11-style minimize and restore transition when clicking a focused single-window app on the taskbar.
+- Add a setting that automatically disables the custom minimize transition during active macOS Screen Sharing or Remote Management sessions.
+
+### Performance
+
+- Skip snapshot capture and transition rendering while remotely connected, hiding and restoring the app immediately to keep remote interaction responsive.
+
 ## [0.0.26] - 2026-09-18
 
 ### Fixed
