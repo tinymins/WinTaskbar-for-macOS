@@ -231,6 +231,7 @@ enum WindowSwitcherLayout {
     static let maximumFullyVisibleRows = 5
     static let captionButtonWidth: CGFloat = 26
     static let compactControlStripWidth = captionButtonWidth * 3
+    static let scrollbarWidth: CGFloat = 7
     static let scrollIndicatorWidth: CGFloat = 3
 
     struct Metrics {
@@ -281,7 +282,9 @@ enum WindowSwitcherLayout {
     static func metrics(windowFrames: [CGRect], screenFrame: CGRect) -> Metrics {
         let maximumContentWidth = max(
             minimumTileWidth,
-            screenFrame.width * maximumPanelWidthRatio - panelPadding * 2
+            screenFrame.width * maximumPanelWidthRatio
+                - panelPadding * 2
+                - scrollbarWidth
         )
         let maximumPanelHeight = screenFrame.height * maximumPanelHeightRatio
         let screenLimitedMaximumPreviewHeight = max(
@@ -352,7 +355,7 @@ enum WindowSwitcherLayout {
             itemWidths: itemWidths,
             rows: rows,
             panelSize: CGSize(
-                width: contentWidth + panelPadding * 2,
+                width: contentWidth + panelPadding * 2 + scrollbarWidth,
                 height: min(visibleContentHeight + panelPadding * 2, maximumPanelHeight)
             )
         )
@@ -1149,17 +1152,15 @@ private final class WindowSwitcherScrollViewProbe: NSView {
             await Task.yield()
             guard let scrollView = self?.enclosingScrollView else { return }
             scrollView.scrollerStyle = .legacy
-            scrollView.autohidesScrollers = false
+            scrollView.autohidesScrollers = true
             scrollView.hasHorizontalScroller = false
-            let contentHeight = scrollView.documentView?.frame.height ?? 0
-            let needsScroller = contentHeight > scrollView.contentView.bounds.height + 1
-            if needsScroller, !(scrollView.verticalScroller is WindowSwitcherThinScroller) {
+            if !(scrollView.verticalScroller is WindowSwitcherThinScroller) {
                 let scroller = WindowSwitcherThinScroller()
                 scroller.scrollerStyle = .legacy
                 scroller.controlSize = .mini
                 scrollView.verticalScroller = scroller
             }
-            scrollView.hasVerticalScroller = needsScroller
+            scrollView.hasVerticalScroller = true
             scrollView.tile()
         }
     }
@@ -1170,7 +1171,7 @@ private final class WindowSwitcherThinScroller: NSScroller {
         for controlSize: NSControl.ControlSize,
         scrollerStyle: NSScroller.Style
     ) -> CGFloat {
-        7
+        WindowSwitcherLayout.scrollbarWidth
     }
 
     override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
