@@ -556,6 +556,8 @@ private final class WindowSwitcherSelectionModel: ObservableObject {
 
 @MainActor
 final class WindowSwitcherPanelController {
+    private static let presentationDelayMilliseconds = 100
+
     private let windowsService: WindowsService
     private let activationService: WindowActivationService
     private let activationHistory: WindowActivationHistory
@@ -576,6 +578,8 @@ final class WindowSwitcherPanelController {
     private var presentationID: UInt = 0
     private var activationGeneration: UInt = 0
     private var activationTask: Task<Void, Never>?
+    private var presentationWorkItem: DispatchWorkItem?
+    private var backdropTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
     private var windowCacheTask: Task<Void, Never>?
     private var detailedWindowsCache: [WindowInfo] = []
@@ -653,9 +657,13 @@ final class WindowSwitcherPanelController {
     }
 
     private func present(reverse: Bool) {
+        let startedAt = AltTabDiagnostics.timestamp()
         activationGeneration &+= 1
         activationTask?.cancel()
         activationTask = nil
+        presentationWorkItem?.cancel()
+        presentationWorkItem = nil
+        backdropTask?.cancel()
         refreshTask?.cancel()
         presentationID &+= 1
         let currentPresentationID = presentationID
@@ -691,39 +699,68 @@ final class WindowSwitcherPanelController {
             controlCapabilitiesCache[window.windowID].map { (window.windowID, $0) }
         })
 
+        AltTabDiagnostics.logger.notice(
+            "presentation=\(currentPresentationID, privacy: .public) prepared windows=\(self.windows.count, privacy: .public) durationMs=\(AltTabDiagnostics.milliseconds(since: startedAt), privacy: .public)"
+        )
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self,
+                  self.presentationID == currentPresentationID,
+                  !self.windows.isEmpty else { return }
+            self.presentationWorkItem = nil
+            self.showPresentation(
+                applicationPIDs: applicationPIDs,
+                presentationID: currentPresentationID
+            )
+        }
+        presentationWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + .milliseconds(Self.presentationDelayMilliseconds),
+            execute: workItem
+        )
+    }
+
+    private func showPresentation(applicationPIDs: [pid_t], presentationID: UInt) {
+        let startedAt = AltTabDiagnostics.timestamp()
         let screen = screenAtMouseLocation() ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
         let targetFrame = panelFrame(on: screen)
         let backdropRequest = WindowSwitcherBackdrop.request(panelFrame: targetFrame, on: screen)
-        backdropImage = backdropRequest
-            .flatMap { WindowSwitcherBackdrop.capture($0) }
-            .map { WindowSwitcherBackdrop.image(from: $0) }
+        backdropImage = nil
         panel.setFrame(targetFrame, display: false)
         refreshContent(disablesAnimations: true)
         backdrop.layoutSubtreeIfNeeded()
         panel.orderFrontRegardless()
         installMouseMonitors()
+        AltTabDiagnostics.logger.notice(
+            "presentation=\(presentationID, privacy: .public) panel-shown durationMs=\(AltTabDiagnostics.milliseconds(since: startedAt), privacy: .public)"
+        )
         refreshWindowCache(forPIDs: applicationPIDs)
+        refreshBackdrop(backdropRequest, presentationID: presentationID)
         refreshPresentation(
             windows: windows,
-            presentationID: currentPresentationID
+            presentationID: presentationID
         )
     }
 
     private func moveSelection(by step: Int) {
-        guard panel.isVisible, !windows.isEmpty else { return }
+        guard !windows.isEmpty else { return }
         selectedIndex = (selectedIndex + step + windows.count) % windows.count
         updateSelection(disablesAnimations: true)
     }
 
     private func commitSelection() {
-        guard panel.isVisible, windows.indices.contains(selectedIndex) else {
+        let startedAt = AltTabDiagnostics.timestamp()
+        guard windows.indices.contains(selectedIndex) else {
             dismiss()
             return
         }
         let selectedWindow = windows[selectedIndex]
         activationHistory.record(selectedWindow.windowID)
         dismiss()
+        AltTabDiagnostics.logger.notice(
+            "commit window=\(selectedWindow.windowID, privacy: .public) dismissMs=\(AltTabDiagnostics.milliseconds(since: startedAt), privacy: .public)"
+        )
         activationGeneration &+= 1
         let currentActivationGeneration = activationGeneration
         let activationService = activationService
@@ -843,6 +880,7 @@ final class WindowSwitcherPanelController {
         let activationService = activationService
         refreshTask = Task { @MainActor [weak self] in
             let worker = Task.detached(priority: .userInitiated) {
+                let startedAt = AltTabDiagnostics.timestamp()
                 var capturedThumbnails: [WindowSwitcherCapturedThumbnail] = []
                 var capabilities: [CGWindowID: WindowControlCapabilities] = [:]
                 for window in presentedWindows {
@@ -856,6 +894,9 @@ final class WindowSwitcherPanelController {
                     guard !Task.isCancelled else { break }
                     capabilities[window.windowID] = activationService.controlCapabilities(for: window)
                 }
+                AltTabDiagnostics.logger.notice(
+                    "presentation=\(presentationID, privacy: .public) refresh-worker-finished thumbnails=\(capturedThumbnails.count, privacy: .public) durationMs=\(AltTabDiagnostics.milliseconds(since: startedAt), privacy: .public)"
+                )
                 return WindowSwitcherRefreshResult(
                     thumbnails: capturedThumbnails,
                     controlCapabilities: capabilities
@@ -871,6 +912,7 @@ final class WindowSwitcherPanelController {
                   self.panel.isVisible,
                   self.presentationID == presentationID else { return }
 
+            let applyStartedAt = AltTabDiagnostics.timestamp()
             let currentWindowIDs = Set(self.windows.map(\.windowID))
             for capture in result.thumbnails where currentWindowIDs.contains(capture.windowID) {
                 let image = NSImage(
@@ -885,11 +927,49 @@ final class WindowSwitcherPanelController {
                 currentWindowIDs.contains($0.key)
             }
             self.refreshContent()
+            AltTabDiagnostics.logger.notice(
+                "presentation=\(presentationID, privacy: .public) refresh-applied durationMs=\(AltTabDiagnostics.milliseconds(since: applyStartedAt), privacy: .public)"
+            )
             self.refreshTask = nil
         }
     }
 
+    private func refreshBackdrop(
+        _ request: WindowSwitcherBackdrop.Request?,
+        presentationID: UInt
+    ) {
+        guard let request else { return }
+        backdropTask?.cancel()
+        backdropTask = Task { @MainActor [weak self] in
+            let startedAt = AltTabDiagnostics.timestamp()
+            let worker = Task.detached(priority: .userInitiated) {
+                WindowSwitcherBackdrop.capture(request)
+            }
+            let capture = await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
+            guard let self,
+                  let capture,
+                  !Task.isCancelled,
+                  self.panel.isVisible,
+                  self.presentationID == presentationID else { return }
+            self.backdropImage = WindowSwitcherBackdrop.image(from: capture)
+            self.refreshContent()
+            self.backdropTask = nil
+            AltTabDiagnostics.logger.notice(
+                "presentation=\(presentationID, privacy: .public) backdrop-applied durationMs=\(AltTabDiagnostics.milliseconds(since: startedAt), privacy: .public)"
+            )
+        }
+    }
+
     private func dismiss() {
+        let startedAt = AltTabDiagnostics.timestamp()
+        presentationWorkItem?.cancel()
+        presentationWorkItem = nil
+        backdropTask?.cancel()
+        backdropTask = nil
         refreshTask?.cancel()
         refreshTask = nil
         presentationID &+= 1
@@ -901,6 +981,9 @@ final class WindowSwitcherPanelController {
         backdropImage = nil
         selectedIndex = 0
         tilePreviewHeight = WindowSwitcherLayout.previewHeight
+        AltTabDiagnostics.logger.notice(
+            "presentation-dismissed orderOutMs=\(AltTabDiagnostics.milliseconds(since: startedAt), privacy: .public)"
+        )
     }
 
     private func installMouseMonitors() {

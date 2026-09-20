@@ -241,6 +241,8 @@ final class GlobalHotkeysService: ObservableObject {
     private var altTabTrackingEnabled = false
     private var altTabModifierPollingTask: Task<Void, Never>?
     private var altTabModifierPollingGeneration: UInt = 0
+    private var altTabSessionID: UInt = 0
+    private var altTabSessionStartedAt: UInt64 = 0
     private var altTabSwitcherEnabled = false
     private var altTabModifier: AltTabModifier = .option
     private var shortcutCaptureEventTap: CFMachPort?
@@ -459,8 +461,19 @@ final class GlobalHotkeysService: ObservableObject {
     fileprivate func handle(id: Int) {
         if altTabTrackingEnabled, altTabHotKeyIDs.contains(id) {
             let action = altTabGesture.press(reverse: id == Self.altTabReverseHotKeyID)
+            if case .present = action {
+                altTabSessionID &+= 1
+                altTabSessionStartedAt = AltTabDiagnostics.timestamp()
+                AltTabDiagnostics.logger.notice(
+                    "session=\(self.altTabSessionID, privacy: .public) hotkey-pressed"
+                )
+            }
             startAltTabModifierPolling()
+            let presentationStartedAt = AltTabDiagnostics.timestamp()
             onAltTabGesture?(action)
+            AltTabDiagnostics.logger.notice(
+                "session=\(self.altTabSessionID, privacy: .public) gesture-dispatched action=\(String(describing: action), privacy: .public) durationMs=\(AltTabDiagnostics.milliseconds(since: presentationStartedAt), privacy: .public)"
+            )
             commitAltTabIfModifierWasReleased()
             return
         }
@@ -536,6 +549,9 @@ final class GlobalHotkeysService: ObservableObject {
                 let flags = CGEventSource.flagsState(.combinedSessionState)
                 let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(flags.rawValue))
                 if let action = self.altTabGesture.flagsChanged(to: modifierFlags) {
+                    AltTabDiagnostics.logger.notice(
+                        "session=\(self.altTabSessionID, privacy: .public) modifier-release-detected source=poll elapsedMs=\(AltTabDiagnostics.milliseconds(since: self.altTabSessionStartedAt), privacy: .public)"
+                    )
                     self.onAltTabGesture?(action)
                     break
                 }
@@ -549,6 +565,9 @@ final class GlobalHotkeysService: ObservableObject {
         let flags = CGEventSource.flagsState(.combinedSessionState)
         let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(flags.rawValue))
         guard let action = altTabGesture.flagsChanged(to: modifierFlags) else { return }
+        AltTabDiagnostics.logger.notice(
+            "session=\(self.altTabSessionID, privacy: .public) modifier-release-detected source=post-present elapsedMs=\(AltTabDiagnostics.milliseconds(since: self.altTabSessionStartedAt), privacy: .public)"
+        )
         stopAltTabModifierPolling()
         onAltTabGesture?(action)
     }
@@ -854,6 +873,9 @@ final class GlobalHotkeysService: ObservableObject {
         }
         if eventType == .flagsChanged,
            let action = altTabGesture.flagsChanged(to: modifierFlags) {
+            AltTabDiagnostics.logger.notice(
+                "session=\(self.altTabSessionID, privacy: .public) modifier-release-detected source=event-tap elapsedMs=\(AltTabDiagnostics.milliseconds(since: self.altTabSessionStartedAt), privacy: .public)"
+            )
             stopAltTabModifierPolling()
             onAltTabGesture?(action)
         }
