@@ -22,13 +22,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Validate stable release notes
-        if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+      - name: Validate release notes
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: |
           notes_path=".github/release-notes/$GITHUB_REF_NAME.md"
           test -s "$notes_path" || {
-            echo "Stable release notes are required at $notes_path" >&2
+            echo "Release notes are required at $notes_path" >&2
             exit 1
           }
           awk '
@@ -39,7 +39,7 @@ jobs:
             section == "en" && /^- / { en = 1 }
             END { exit !(zh && en) }
           ' "$notes_path" || {
-            echo "Stable release notes must contain non-empty ## 简体中文 and ## English sections" >&2
+            echo "Release notes must contain non-empty ## 简体中文 and ## English sections" >&2
             exit 1
           }
 
@@ -221,10 +221,9 @@ jobs:
         run: |
           release_flags=()
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then
-            release_flags+=(--prerelease --generate-notes)
-          else
-            release_flags+=(--notes-file ".github/release-notes/$GITHUB_REF_NAME.md")
+            release_flags+=(--prerelease)
           fi
+          release_flags+=(--notes-file ".github/release-notes/$GITHUB_REF_NAME.md")
           gh release create "$GITHUB_REF_NAME" release-assets/* \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
