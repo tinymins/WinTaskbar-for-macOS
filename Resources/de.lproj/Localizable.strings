@@ -194,6 +194,10 @@
 	<string>Schreibtisch anzeigen</string>
 	<key>Show Finder in running apps</key>
 	<string>Finder unter laufenden Apps anzeigen</string>
+	<key>Show apps with no open windows</key>
+	<string>Apps ohne geöffnete Fenster anzeigen</string>
+	<key>Pinned apps are always shown.</key>
+	<string>Angeheftete Apps werden immer angezeigt.</string>
 	<key>Show app labels under icons</key>
 	<string>App-Namen unter Symbolen anzeigen</string>
 	<key>Show in Finder</key>

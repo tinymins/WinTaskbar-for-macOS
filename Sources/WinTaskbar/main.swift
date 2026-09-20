@@ -7,11 +7,11 @@ import Foundation
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let preferences = PreferencesStore.shared
-    private let apps = AppDiscoveryService()
+    private let windowsService = WindowsService()
+    private lazy var apps = AppDiscoveryService(windowsService: windowsService)
     private let status = SystemStatusService()
     private let externalStatusItems = ExternalStatusItemService()
     private let actions = AppActions()
-    private let windowsService = WindowsService()
     private lazy var windowActivator = WindowActivationService(windowsService: windowsService)
     private let windowActivationHistory = WindowActivationHistory()
     private lazy var windowSwitcherController = WindowSwitcherPanelController(
@@ -150,6 +150,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .removeDuplicates()
             .sink { [weak self] enabled in
                 self?.externalStatusItems.setEnabled(enabled)
+            }
+            .store(in: &cancellables)
+        preferences.$showWindowlessApps
+            .map(!)
+            .removeDuplicates()
+            .sink { [weak self] enabled in
+                self?.apps.setTracksWindowPresence(enabled)
             }
             .store(in: &cancellables)
         preferences.$position

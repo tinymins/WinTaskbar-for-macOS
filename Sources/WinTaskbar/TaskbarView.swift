@@ -121,7 +121,8 @@ struct TaskbarView: View {
             let items = apps.taskbarItems(
                 pinnedBundleIDs: preferences.pinnedBundleIDs,
                 badges: preferences.showBadgesOnTaskbarApps ? dockBadges.badges : [:],
-                showFinder: preferences.showFinder
+                showFinder: preferences.showFinder,
+                showWindowlessApps: preferences.showWindowlessApps
             )
             let capacity = visibleCapacity(length: horizontal ? geometry.size.width : geometry.size.height)
             let visible = Array(items.prefix(capacity))

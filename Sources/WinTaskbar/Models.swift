@@ -699,6 +699,7 @@ struct DiscoveredApp: Identifiable, Hashable {
     var isRunning: Bool
     var isActive: Bool
     var processIdentifier: pid_t?
+    var hasWindows: Bool
 
     init(
         name: String,
@@ -707,7 +708,8 @@ struct DiscoveredApp: Identifiable, Hashable {
         category: String? = nil,
         isRunning: Bool,
         isActive: Bool = false,
-        processIdentifier: pid_t? = nil
+        processIdentifier: pid_t? = nil,
+        hasWindows: Bool = false
     ) {
         self.name = name
         self.bundleIdentifier = bundleIdentifier
@@ -716,6 +718,7 @@ struct DiscoveredApp: Identifiable, Hashable {
         self.isRunning = isRunning
         self.isActive = isActive
         self.processIdentifier = processIdentifier
+        self.hasWindows = hasWindows
     }
 
     var id: String { bundleIdentifier ?? url.path }

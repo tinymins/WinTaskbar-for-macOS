@@ -194,6 +194,10 @@
 	<string>Afficher le bureau</string>
 	<key>Show Finder in running apps</key>
 	<string>Afficher le Finder dans les apps actives</string>
+	<key>Show apps with no open windows</key>
+	<string>Afficher les apps sans fenêtre ouverte</string>
+	<key>Pinned apps are always shown.</key>
+	<string>Les apps épinglées sont toujours affichées.</string>
 	<key>Show app labels under icons</key>
 	<string>Afficher les noms sous les icônes</string>
 	<key>Show in Finder</key>

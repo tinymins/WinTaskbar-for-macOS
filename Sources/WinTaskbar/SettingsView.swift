@@ -310,6 +310,10 @@ struct SettingsView: View {
                 Toggle("Show Desktop", isOn: $preferences.showDesktopEnabled)
                 Toggle("Show app labels under icons", isOn: $preferences.showAppLabels)
                 Toggle("Show Finder in running apps", isOn: $preferences.showFinder)
+                Toggle("Show apps with no open windows", isOn: $preferences.showWindowlessApps)
+                Text("Pinned apps are always shown.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             SettingsSection("Taskbar layout") {
                 Slider(

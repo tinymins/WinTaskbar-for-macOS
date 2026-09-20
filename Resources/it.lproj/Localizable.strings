@@ -194,6 +194,10 @@
 	<string>Mostra scrivania</string>
 	<key>Show Finder in running apps</key>
 	<string>Mostra il Finder tra le app attive</string>
+	<key>Show apps with no open windows</key>
+	<string>Mostra le app senza finestre aperte</string>
+	<key>Pinned apps are always shown.</key>
+	<string>Le app fissate sono sempre visibili.</string>
 	<key>Show app labels under icons</key>
 	<string>Mostra le etichette sotto le icone</string>
 	<key>Show in Finder</key>

@@ -194,6 +194,10 @@
 	<string>Mostrar área de trabalho</string>
 	<key>Show Finder in running apps</key>
 	<string>Mostrar o Finder nos apps em execução</string>
+	<key>Show apps with no open windows</key>
+	<string>Mostrar apps sem janelas abertas</string>
+	<key>Pinned apps are always shown.</key>
+	<string>Apps fixados são sempre exibidos.</string>
 	<key>Show app labels under icons</key>
 	<string>Mostrar rótulos sob os ícones</string>
 	<key>Show in Finder</key>

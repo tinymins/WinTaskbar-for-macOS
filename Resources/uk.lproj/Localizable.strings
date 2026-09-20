@@ -202,6 +202,10 @@
 	<string>Показати робочий стіл</string>
 	<key>Show Finder in running apps</key>
 	<string>Показувати Finder серед запущених</string>
+	<key>Show apps with no open windows</key>
+	<string>Показувати програми без відкритих вікон</string>
+	<key>Pinned apps are always shown.</key>
+	<string>Закріплені програми відображаються завжди.</string>
 	<key>Show app labels under icons</key>
 	<string>Показувати підписи під іконками</string>
 	<key>Show in Finder</key>

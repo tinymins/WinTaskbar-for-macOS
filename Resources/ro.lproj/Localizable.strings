@@ -194,6 +194,10 @@
 	<string>Arată biroul</string>
 	<key>Show Finder in running apps</key>
 	<string>Arată Finder în aplicațiile pornite</string>
+	<key>Show apps with no open windows</key>
+	<string>Afișează aplicațiile fără ferestre deschise</string>
+	<key>Pinned apps are always shown.</key>
+	<string>Aplicațiile fixate sunt afișate întotdeauna.</string>
 	<key>Show app labels under icons</key>
 	<string>Arată numele sub pictograme</string>
 	<key>Show in Finder</key>

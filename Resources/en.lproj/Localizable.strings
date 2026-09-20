@@ -252,6 +252,10 @@
 	<string>Show Desktop</string>
 	<key>Show Finder in running apps</key>
 	<string>Show Finder in running apps</string>
+	<key>Show apps with no open windows</key>
+	<string>Show apps with no open windows</string>
+	<key>Pinned apps are always shown.</key>
+	<string>Pinned apps are always shown.</string>
 	<key>Show third-party tray icons</key>
 	<string>Show third-party tray icons</string>
 	<key>Show app labels under icons</key>

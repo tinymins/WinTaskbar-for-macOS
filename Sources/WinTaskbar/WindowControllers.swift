@@ -964,7 +964,8 @@ final class TaskbarWindowController {
         let items = apps.taskbarItems(
             pinnedBundleIDs: preferences.pinnedBundleIDs,
             badges: dockBadges.badges,
-            showFinder: preferences.showFinder
+            showFinder: preferences.showFinder,
+            showWindowlessApps: preferences.showWindowlessApps
         )
         guard !items.isEmpty else { return }
         let nextIndex = ((taskbarCycleIndex ?? -1) + 1) % items.count

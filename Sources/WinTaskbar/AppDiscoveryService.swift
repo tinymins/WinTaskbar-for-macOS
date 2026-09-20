@@ -34,12 +34,16 @@ final class AppDiscoveryService: ObservableObject {
     @Published private(set) var installedApps: [DiscoveredApp] = []
 
     private let workspace: NSWorkspace
+    private let windowsService: WindowsService
     private var observers: [NSObjectProtocol] = []
     private var knownAppsByID: [String: DiscoveredApp] = [:]
     private var taskbarItemOrder = TaskbarItemOrder()
+    private var tracksWindowPresence = false
+    private var windowRefreshTimer: AnyCancellable?
 
-    init(workspace: NSWorkspace = .shared) {
+    init(workspace: NSWorkspace = .shared, windowsService: WindowsService = WindowsService()) {
         self.workspace = workspace
+        self.windowsService = windowsService
         reloadRunningApps()
         reloadInstalledApps()
 
@@ -61,8 +65,12 @@ final class AppDiscoveryService: ObservableObject {
     }
 
     func reloadRunningApps() {
-        let discovered = workspace.runningApplications
+        let runningApplications = workspace.runningApplications
             .filter { $0.activationPolicy == .regular && !$0.isTerminated }
+        let windowsByPID = tracksWindowPresence
+            ? windowsService.windows(forPIDs: runningApplications.map(\.processIdentifier))
+            : [:]
+        let discovered = runningApplications
             .compactMap { app -> DiscoveredApp? in
                 guard let url = app.bundleURL, let name = app.localizedName else { return nil }
                 return DiscoveredApp(
@@ -71,12 +79,29 @@ final class AppDiscoveryService: ObservableObject {
                     url: url,
                     isRunning: true,
                     isActive: app.isActive,
-                    processIdentifier: app.processIdentifier
+                    processIdentifier: app.processIdentifier,
+                    hasWindows: !tracksWindowPresence || windowsByPID[app.processIdentifier] != nil
                 )
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         remember(discovered)
-        runningApps = discovered
+        if runningApps != discovered { runningApps = discovered }
+    }
+
+    func setTracksWindowPresence(_ enabled: Bool) {
+        guard tracksWindowPresence != enabled else { return }
+        tracksWindowPresence = enabled
+        windowRefreshTimer = nil
+        if enabled {
+            windowRefreshTimer = Timer.publish(every: 1, on: .main, in: .common)
+                .autoconnect()
+                .sink { [weak self] _ in
+                    MainActor.assumeIsolated {
+                        self?.reloadRunningApps()
+                    }
+                }
+        }
+        reloadRunningApps()
     }
 
     func reloadInstalledApps() {
@@ -142,7 +167,12 @@ final class AppDiscoveryService: ObservableObject {
             ?? knownApp(bundleIdentifier: bundleIdentifier)
     }
 
-    func taskbarItems(pinnedBundleIDs: [String], badges: [String: String], showFinder: Bool) -> [TaskbarItem] {
+    func taskbarItems(
+        pinnedBundleIDs: [String],
+        badges: [String: String],
+        showFinder: Bool,
+        showWindowlessApps: Bool
+    ) -> [TaskbarItem] {
         var installedByID: [String: DiscoveredApp] = [:]
         for app in installedApps {
             if let bundleID = app.bundleIdentifier, installedByID[bundleID] == nil { installedByID[bundleID] = app }
@@ -160,6 +190,7 @@ final class AppDiscoveryService: ObservableObject {
             guard let bundleID = app.bundleIdentifier,
                   includedRunning.insert(bundleID).inserted else { continue }
             if !showFinder && bundleID == "com.apple.finder" && !pinnedSet.contains(bundleID) { continue }
+            if !showWindowlessApps && !app.hasWindows && !pinnedSet.contains(bundleID) { continue }
             visibleRunningBundleIDs.append(bundleID)
         }
 

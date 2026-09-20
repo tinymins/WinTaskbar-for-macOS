@@ -262,6 +262,10 @@
 	<string>显示桌面</string>
 	<key>Show Finder in running apps</key>
 	<string>在运行的应用中显示访达</string>
+	<key>Show apps with no open windows</key>
+	<string>显示没有打开窗口的应用</string>
+	<key>Pinned apps are always shown.</key>
+	<string>已固定的应用始终显示。</string>
 	<key>Show third-party tray icons</key>
 	<string>显示第三方托盘图标</string>
 	<key>Show app labels under icons</key>

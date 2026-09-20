@@ -21,6 +21,7 @@ final class PreferencesStore: ObservableObject {
     @Published var showRunningIndicators: Bool { didSet { defaults.set(showRunningIndicators, forKey: "wintaskbar.showRunningIndicators") } }
     @Published var showAppLabels: Bool { didSet { defaults.set(showAppLabels, forKey: "wintaskbar.showAppLabels") } }
     @Published var showFinder: Bool { didSet { defaults.set(showFinder, forKey: "wintaskbar.showFinderInRunningApps") } }
+    @Published var showWindowlessApps: Bool { didSet { defaults.set(showWindowlessApps, forKey: "wintaskbar.showWindowlessApps") } }
     @Published var transparencyEnabled: Bool { didSet { defaults.set(transparencyEnabled, forKey: "wintaskbar.transparencyEnabled") } }
     @Published var panelOpacity: Double { didSet { defaults.set(panelOpacity, forKey: "wintaskbar.panelOpacity") } }
     @Published var panelBlurRadius: Double { didSet { defaults.set(panelBlurRadius, forKey: "wintaskbar.panelBlurRadius") } }
@@ -112,6 +113,7 @@ final class PreferencesStore: ObservableObject {
         showRunningIndicators = defaults.object(forKey: "wintaskbar.showRunningIndicators") as? Bool ?? true
         showAppLabels = defaults.object(forKey: "wintaskbar.showAppLabels") as? Bool ?? false
         showFinder = defaults.object(forKey: "wintaskbar.showFinderInRunningApps") as? Bool ?? true
+        showWindowlessApps = defaults.object(forKey: "wintaskbar.showWindowlessApps") as? Bool ?? true
         transparencyEnabled = defaults.object(forKey: "wintaskbar.transparencyEnabled") as? Bool ?? true
         panelOpacity = defaults.object(forKey: "wintaskbar.panelOpacity") as? Double ?? 1
         panelBlurRadius = defaults.object(forKey: "wintaskbar.panelBlurRadius") as? Double ?? 20
@@ -270,6 +272,7 @@ final class PreferencesStore: ObservableObject {
         showRunningIndicators = true
         showAppLabels = false
         showFinder = true
+        showWindowlessApps = true
         transparencyEnabled = true
         panelOpacity = 1
         panelBlurRadius = 20

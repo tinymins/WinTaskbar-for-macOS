@@ -194,6 +194,10 @@
 	<string>Показать рабочий стол</string>
 	<key>Show Finder in running apps</key>
 	<string>Показывать Finder среди запущенных</string>
+	<key>Show apps with no open windows</key>
+	<string>Показывать приложения без открытых окон</string>
+	<key>Pinned apps are always shown.</key>
+	<string>Закреплённые приложения отображаются всегда.</string>
 	<key>Show app labels under icons</key>
 	<string>Показывать названия под значками</string>
 	<key>Show in Finder</key>

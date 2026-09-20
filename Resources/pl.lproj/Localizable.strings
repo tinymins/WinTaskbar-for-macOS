@@ -194,6 +194,10 @@
 	<string>Pokaż pulpit</string>
 	<key>Show Finder in running apps</key>
 	<string>Pokaż Finder wśród uruchomionych</string>
+	<key>Show apps with no open windows</key>
+	<string>Pokazuj aplikacje bez otwartych okien</string>
+	<key>Pinned apps are always shown.</key>
+	<string>Przypięte aplikacje są zawsze wyświetlane.</string>
 	<key>Show app labels under icons</key>
 	<string>Pokaż nazwy pod ikonami</string>
 	<key>Show in Finder</key>

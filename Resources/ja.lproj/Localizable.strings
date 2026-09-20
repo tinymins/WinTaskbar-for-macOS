@@ -194,6 +194,10 @@
 	<string>デスクトップを表示</string>
 	<key>Show Finder in running apps</key>
 	<string>起動中のアプリに Finder を表示</string>
+	<key>Show apps with no open windows</key>
+	<string>開いているウインドウがないアプリを表示</string>
+	<key>Pinned apps are always shown.</key>
+	<string>ピン留めしたアプリは常に表示されます。</string>
 	<key>Show app labels under icons</key>
 	<string>アイコンの下にアプリ名を表示</string>
 	<key>Show in Finder</key>

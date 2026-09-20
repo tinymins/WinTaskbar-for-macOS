@@ -194,6 +194,10 @@
 	<string>Mostrar escritorio</string>
 	<key>Show Finder in running apps</key>
 	<string>Mostrar Finder en apps en ejecución</string>
+	<key>Show apps with no open windows</key>
+	<string>Mostrar apps sin ventanas abiertas</string>
+	<key>Pinned apps are always shown.</key>
+	<string>Las apps ancladas siempre se muestran.</string>
 	<key>Show app labels under icons</key>
 	<string>Mostrar nombres bajo los iconos</string>
 	<key>Show in Finder</key>
