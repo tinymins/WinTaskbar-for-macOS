@@ -2,6 +2,26 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.28] - 2026-09-20
+
+### Added
+
+- Add first-run onboarding with independent Taskbar and AllTab choices, leaving both features disabled until selected.
+- Add a taskbar setting that hides running applications without open windows.
+- Add keyboard selection and confirmation while searching the Start menu.
+
+### Performance
+
+- Commit quick Alt-Tab switches before presenting the overlay, while keeping longer switch sessions responsive with cached thumbnails and background refreshes.
+- Use the system compositor's live material for the Alt-Tab backdrop instead of capturing and blurring screen snapshots.
+
+### Fixed
+
+- Prevent repeated Alt-Tab presentations from progressively blurring their own backdrop, and adapt the live material, window cards, titles, controls, borders, and placeholders to Light and Dark appearances.
+- Balance Alt-Tab rows by visual width, fit smaller window sets to their content, and keep dense layouts within the available taskbar work area.
+- Track physical modifier release reliably and activate WinTaskbar-owned windows on the main thread.
+- Ignore stale Dock work-area state when reserving taskbar space.
+
 ## [0.0.27] - 2026-09-20
 
 ### Added
