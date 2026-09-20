@@ -2858,11 +2858,6 @@ func runSelfTest() async -> Int32 {
     WindowSwitcherLayout.compactControlStripWidth
         <= WindowSwitcherLayout.minimumTileWidth * 0.49,
     WindowSwitcherLayout.scrollIndicatorWidth == 3,
-    WindowSwitcherBackdrop.captureRect(
-        panelFrame: CGRect(x: -1_300, y: 100, width: 600, height: 400),
-        screenFrame: CGRect(x: -1_440, y: 0, width: 1_440, height: 900),
-        displayPixelWidth: 2_880
-    ) == CGRect(x: 280, y: 800, width: 1_200, height: 800),
     WindowSwitcherLayout.rowIndices(
         itemWidths: [277, 208, 320],
         maximumWidth: 500

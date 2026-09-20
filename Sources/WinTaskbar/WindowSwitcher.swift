@@ -1,6 +1,5 @@
 import AppKit
 import ApplicationServices
-import CoreImage
 import SwiftUI
 
 struct WindowSwitcherApplicationPolicy {
@@ -479,78 +478,8 @@ enum WindowSwitcherDismissalPolicy {
 }
 
 enum WindowSwitcherBackdrop {
-    static let blurRadius: CGFloat = 8
-    static let tint = Color(red: 0.52, green: 0.53, blue: 0.54).opacity(0.30)
-    private static let context = CIContext(options: [.cacheIntermediates: false])
-
-    struct Request: Sendable {
-        let displayID: CGDirectDisplayID
-        let pixelRect: CGRect
-        let imageSize: CGSize
-    }
-
-    struct Capture: @unchecked Sendable {
-        let image: CGImage
-        let size: CGSize
-    }
-
-    struct Source: @unchecked Sendable {
-        let image: CGImage
-        let size: CGSize
-    }
-
-    static func captureRect(
-        panelFrame: CGRect,
-        screenFrame: CGRect,
-        displayPixelWidth: CGFloat
-    ) -> CGRect {
-        let scale = displayPixelWidth / screenFrame.width
-        return CGRect(
-            x: (panelFrame.minX - screenFrame.minX) * scale,
-            y: (screenFrame.maxY - panelFrame.maxY) * scale,
-            width: panelFrame.width * scale,
-            height: panelFrame.height * scale
-        ).integral
-    }
-
-    static func request(panelFrame: CGRect, on screen: NSScreen) -> Request? {
-        guard let displayID = screen.deviceDescription[
-            NSDeviceDescriptionKey("NSScreenNumber")
-        ] as? CGDirectDisplayID else { return nil }
-        return Request(
-            displayID: displayID,
-            pixelRect: captureRect(
-                panelFrame: panelFrame,
-                screenFrame: screen.frame,
-                displayPixelWidth: CGFloat(CGDisplayPixelsWide(displayID))
-            ),
-            imageSize: panelFrame.size
-        )
-    }
-
-    nonisolated static func captureSource(_ request: Request) -> Source? {
-        let source = CGDisplayCreateImage(request.displayID, rect: request.pixelRect)
-        guard let source else { return nil }
-        return Source(image: source, size: request.imageSize)
-    }
-
-    nonisolated static func blur(_ source: Source) -> Capture? {
-        let input = CIImage(cgImage: source.image)
-        guard let filter = CIFilter(name: "CIGaussianBlur") else { return nil }
-        filter.setValue(input.clampedToExtent(), forKey: kCIInputImageKey)
-        filter.setValue(blurRadius, forKey: kCIInputRadiusKey)
-        guard let output = filter.outputImage?.cropped(to: input.extent),
-              let blurred = context.createCGImage(output, from: input.extent) else { return nil }
-        return Capture(image: blurred, size: source.size)
-    }
-
-    nonisolated static func capture(_ request: Request) -> Capture? {
-        guard let source = captureSource(request) else { return nil }
-        return blur(source)
-    }
-
-    static func image(from capture: Capture) -> NSImage {
-        NSImage(cgImage: capture.image, size: capture.size)
+    static func tint(for colorScheme: ColorScheme) -> Color {
+        Color.white.opacity(colorScheme == .dark ? 0.20 : 0.08)
     }
 }
 
@@ -592,7 +521,7 @@ private enum WindowSwitcherWindowAction: CaseIterable {
         case .close:
             isHovering ? Color(red: 0.82, green: 0.04, blue: 0.10) : .clear
         case .toggleMinimized, .toggleFullScreen:
-            isHovering ? Color.white.opacity(0.11) : .clear
+            isHovering ? Color.primary.opacity(0.11) : .clear
         }
     }
 }
@@ -627,13 +556,12 @@ final class WindowSwitcherPanelController {
     private let preferences: PreferencesStore
     private let workspace: NSWorkspace
     private let panel: WindowSwitcherPanel
-    private let backdrop = NSView()
+    private let backdrop = NSVisualEffectView()
     private let hostingView = NSHostingView(rootView: AnyView(EmptyView()))
     private let selection = WindowSwitcherSelectionModel()
     private var windows: [WindowInfo] = []
     private var thumbnails: [CGWindowID: NSImage] = [:]
     private var controlCapabilities: [CGWindowID: WindowControlCapabilities] = [:]
-    private var backdropImage: NSImage?
     private var localMouseMonitor: Any?
     private var globalMouseMonitor: Any?
     private var selectedIndex = 0
@@ -643,7 +571,6 @@ final class WindowSwitcherPanelController {
     private var activationGeneration: UInt = 0
     private var activationTask: Task<Void, Never>?
     private var presentationWorkItem: DispatchWorkItem?
-    private var backdropTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
     private var windowCacheTask: Task<Void, Never>?
     private var detailedWindowsCache: [WindowInfo] = []
@@ -673,20 +600,14 @@ final class WindowSwitcherPanelController {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
-        panel.appearance = NSAppearance(named: .darkAqua)
         panel.animationBehavior = .none
 
+        backdrop.material = .underWindowBackground
+        backdrop.blendingMode = .behindWindow
+        backdrop.state = .active
         backdrop.wantsLayer = true
         backdrop.layer?.cornerRadius = 8
         backdrop.layer?.masksToBounds = true
-        backdrop.layer?.borderWidth = 1
-        backdrop.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
-        backdrop.layer?.backgroundColor = NSColor(
-            calibratedRed: 0.31,
-            green: 0.32,
-            blue: 0.33,
-            alpha: 1
-        ).cgColor
 
         hostingView.sizingOptions = []
         hostingView.translatesAutoresizingMaskIntoConstraints = false
@@ -738,7 +659,6 @@ final class WindowSwitcherPanelController {
         activationTask = nil
         presentationWorkItem?.cancel()
         presentationWorkItem = nil
-        backdropTask?.cancel()
         refreshTask?.cancel()
         presentationID &+= 1
         let currentPresentationID = presentationID
@@ -800,8 +720,6 @@ final class WindowSwitcherPanelController {
         let screen = screenAtMouseLocation() ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
         let targetFrame = panelFrame(on: screen)
-        let backdropRequest = WindowSwitcherBackdrop.request(panelFrame: targetFrame, on: screen)
-        backdropImage = nil
         panel.setFrame(targetFrame, display: false)
         refreshContent(disablesAnimations: true)
         backdrop.layoutSubtreeIfNeeded()
@@ -811,7 +729,6 @@ final class WindowSwitcherPanelController {
             "presentation=\(presentationID, privacy: .public) panel-shown durationMs=\(AltTabDiagnostics.milliseconds(since: startedAt), privacy: .public)"
         )
         refreshWindowCache(forPIDs: applicationPIDs)
-        refreshBackdrop(backdropRequest, presentationID: presentationID)
         refreshPresentation(
             windows: windows,
             presentationID: presentationID
@@ -917,7 +834,6 @@ final class WindowSwitcherPanelController {
             windows: windows,
             thumbnails: thumbnails,
             controlCapabilities: controlCapabilities,
-            backdropImage: backdropImage,
             selection: selection,
             previewHeight: tilePreviewHeight,
             showsVerticalScroller: showsVerticalScroller,
@@ -1014,42 +930,10 @@ final class WindowSwitcherPanelController {
         }
     }
 
-    private func refreshBackdrop(
-        _ request: WindowSwitcherBackdrop.Request?,
-        presentationID: UInt
-    ) {
-        guard let request else { return }
-        backdropTask?.cancel()
-        backdropTask = Task { @MainActor [weak self] in
-            let startedAt = AltTabDiagnostics.timestamp()
-            let worker = Task.detached(priority: .userInitiated) {
-                WindowSwitcherBackdrop.capture(request)
-            }
-            let capture = await withTaskCancellationHandler {
-                await worker.value
-            } onCancel: {
-                worker.cancel()
-            }
-            guard let self,
-                  let capture,
-                  !Task.isCancelled,
-                  self.panel.isVisible,
-                  self.presentationID == presentationID else { return }
-            self.backdropImage = WindowSwitcherBackdrop.image(from: capture)
-            self.refreshContent()
-            self.backdropTask = nil
-            AltTabDiagnostics.logger.notice(
-                "presentation=\(presentationID, privacy: .public) backdrop-applied durationMs=\(AltTabDiagnostics.milliseconds(since: startedAt), privacy: .public)"
-            )
-        }
-    }
-
     private func dismiss() {
         let startedAt = AltTabDiagnostics.timestamp()
         presentationWorkItem?.cancel()
         presentationWorkItem = nil
-        backdropTask?.cancel()
-        backdropTask = nil
         refreshTask?.cancel()
         refreshTask = nil
         presentationID &+= 1
@@ -1058,7 +942,6 @@ final class WindowSwitcherPanelController {
         windows = []
         thumbnails = [:]
         controlCapabilities = [:]
-        backdropImage = nil
         selectedIndex = 0
         tilePreviewHeight = WindowSwitcherLayout.previewHeight
         AltTabDiagnostics.logger.notice(
@@ -1140,12 +1023,12 @@ private struct WindowSwitcherView: View {
     let windows: [WindowInfo]
     let thumbnails: [CGWindowID: NSImage]
     let controlCapabilities: [CGWindowID: WindowControlCapabilities]
-    let backdropImage: NSImage?
     @ObservedObject var selection: WindowSwitcherSelectionModel
     let previewHeight: CGFloat
     let showsVerticalScroller: Bool
     let onWindowAction: (WindowSwitcherWindowAction, CGWindowID) -> Void
     let onSelect: (CGWindowID) -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ScrollView(.vertical) {
@@ -1169,18 +1052,11 @@ private struct WindowSwitcherView: View {
         }
         .scrollDisabled(!showsVerticalScroller)
         .scrollIndicators(.visible)
-        .background {
-            Group {
-                if let backdropImage {
-                    Image(nsImage: backdropImage)
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    Color(red: 0.31, green: 0.32, blue: 0.33)
-                }
-            }
-            .overlay(WindowSwitcherBackdrop.tint)
-            .clipped()
+        .background(WindowSwitcherBackdrop.tint(for: colorScheme))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.primary.opacity(0.14), lineWidth: 1)
+                .allowsHitTesting(false)
         }
     }
 }
@@ -1324,6 +1200,7 @@ private struct WindowSwitcherTile: View {
     let previewHeight: CGFloat
     let onWindowAction: (WindowSwitcherWindowAction) -> Void
     let action: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
 
@@ -1343,7 +1220,7 @@ private struct WindowSwitcherTile: View {
                         appIcon
                         Text(window.title)
                             .font(.system(size: 12, weight: .regular))
-                            .foregroundStyle(Color.white.opacity(isHovering ? 1 : 0.88))
+                            .foregroundStyle(Color.primary.opacity(isHovering ? 1 : 0.88))
                             .lineLimit(1)
                         Spacer(minLength: 0)
                         if isHovering, !availableActions.isEmpty {
@@ -1352,7 +1229,7 @@ private struct WindowSwitcherTile: View {
                     }
                     .padding(.leading, 10)
                     .frame(height: WindowSwitcherLayout.titleBarHeight)
-                    .background(Color.white.opacity(isHovering ? 0.085 : 0.045))
+                    .background(Color.primary.opacity(isHovering ? 0.085 : 0.045))
                     preview
                 }
                 .frame(
@@ -1362,7 +1239,7 @@ private struct WindowSwitcherTile: View {
                     ),
                     height: WindowSwitcherLayout.tileHeight(for: previewHeight)
                 )
-                .background(Color(red: 0.08, green: 0.08, blue: 0.085))
+                .background(tileBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .contentShape(Rectangle())
             }
@@ -1393,7 +1270,7 @@ private struct WindowSwitcherTile: View {
                 .stroke(
                     isSelected
                         ? Color(red: 0.20, green: 0.70, blue: 1)
-                        : Color.white.opacity(isHovering ? 0.18 : 0),
+                        : Color.primary.opacity(isHovering ? 0.18 : 0),
                     lineWidth: isSelected ? 3 : 1
                 )
                 .allowsHitTesting(false)
@@ -1406,7 +1283,7 @@ private struct WindowSwitcherTile: View {
     private var preview: some View {
         if let thumbnail {
             ZStack {
-                Color(red: 0.055, green: 0.055, blue: 0.06)
+                previewBackground
                 Image(nsImage: thumbnail)
                     .resizable()
                     .interpolation(.high)
@@ -1422,7 +1299,7 @@ private struct WindowSwitcherTile: View {
             .clipped()
         } else {
             ZStack {
-                Color(red: 0.055, green: 0.055, blue: 0.06)
+                previewBackground
                 appIcon.frame(width: 48, height: 48)
             }
             .frame(
@@ -1433,6 +1310,18 @@ private struct WindowSwitcherTile: View {
                 height: previewHeight
             )
         }
+    }
+
+    private var tileBackground: Color {
+        colorScheme == .dark
+            ? Color(red: 0.08, green: 0.08, blue: 0.085)
+            : Color.white.opacity(0.72)
+    }
+
+    private var previewBackground: Color {
+        colorScheme == .dark
+            ? Color(red: 0.055, green: 0.055, blue: 0.06)
+            : Color(white: 0.92)
     }
 
     private var appIcon: some View {
@@ -1465,11 +1354,17 @@ private struct WindowSwitcherControlButton: View {
     let perform: () -> Void
     @State private var isHovering = false
 
+    private var foregroundColor: Color {
+        action == .close && isHovering
+            ? .white
+            : Color.primary.opacity(0.92)
+    }
+
     var body: some View {
         Button(action: perform) {
             Image(systemName: action.systemImage)
                 .font(.system(size: 10, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.92))
+                .foregroundStyle(foregroundColor)
                 .frame(width: action.buttonWidth, height: WindowSwitcherLayout.titleBarHeight)
                 .background(action.backgroundColor(isHovering: isHovering))
                 .contentShape(Rectangle())
