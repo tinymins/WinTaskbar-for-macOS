@@ -346,15 +346,16 @@ enum WindowSwitcherLayout {
         }.max() ?? minimumTileWidth
         let needsScrolling = rows.count > maximumFullyVisibleRows
             || selected.contentHeight > maximumContentHeight
+        let usesMaximumPanelSize = rows.count > 1
         return Metrics(
             previewHeight: selectedPreviewHeight,
             itemWidths: itemWidths,
             rows: rows,
             panelSize: CGSize(
-                width: needsScrolling
+                width: usesMaximumPanelSize
                     ? screenFrame.width * maximumPanelWidthRatio
                     : contentWidth + panelPadding * 2 + scrollbarWidth,
-                height: needsScrolling
+                height: usesMaximumPanelSize
                     ? maximumPanelHeight
                     : selected.contentHeight + panelPadding * 2
             ),
@@ -1119,6 +1120,7 @@ private struct WindowSwitcherView: View {
                 showsVerticalScroller: showsVerticalScroller
             ))
         }
+        .scrollDisabled(!showsVerticalScroller)
         .scrollIndicators(.visible)
         .background {
             Group {
@@ -1168,6 +1170,9 @@ private final class WindowSwitcherScrollViewProbe: NSView {
             scrollView.scrollerStyle = .legacy
             scrollView.autohidesScrollers = false
             scrollView.hasHorizontalScroller = false
+            scrollView.verticalScrollElasticity = self?.showsVerticalScroller == true
+                ? .automatic
+                : .none
             if self?.showsVerticalScroller == true,
                !(scrollView.verticalScroller is WindowSwitcherThinScroller) {
                 let scroller = WindowSwitcherThinScroller()
