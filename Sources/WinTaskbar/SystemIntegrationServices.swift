@@ -129,7 +129,8 @@ final class DockToggleService: ObservableObject {
     }
 
     func applyConfiguredStateOnLaunch() {
-        guard isDockHidden else { return }
+        guard isDockHidden,
+              !DockExitPolicy.shouldRestoreDock(configuration: Self.currentDockConfiguration()) else { return }
         applyHiddenDockConfiguration()
     }
 
@@ -226,6 +227,30 @@ struct DockExitPolicy {
     }
 }
 
+enum TaskbarScreenGeometry {
+    static func effectiveVisibleFrame(
+        screenFrame: CGRect,
+        systemVisibleFrame: CGRect,
+        position: TaskbarPosition,
+        ignoresSystemDock: Bool
+    ) -> CGRect {
+        guard ignoresSystemDock else { return systemVisibleFrame }
+
+        var frame = systemVisibleFrame
+        switch position {
+        case .bottom, .top:
+            frame.origin.y = screenFrame.minY
+            frame.size.height = max(0, systemVisibleFrame.maxY - screenFrame.minY)
+        case .left:
+            frame.size.width = max(0, screenFrame.maxX - systemVisibleFrame.minX)
+        case .right:
+            frame.origin.x = screenFrame.minX
+            frame.size.width = max(0, systemVisibleFrame.maxX - screenFrame.minX)
+        }
+        return frame
+    }
+}
+
 @MainActor
 final class LoginItemService: ObservableObject {
     static let shared = LoginItemService()
@@ -277,6 +302,13 @@ final class PermissionsService: ObservableObject {
 struct WindowFittingScreenBox: Equatable, Sendable {
     let frame: CGRect
     let visibleFrame: CGRect
+    let systemVisibleFrame: CGRect
+
+    init(frame: CGRect, visibleFrame: CGRect, systemVisibleFrame: CGRect? = nil) {
+        self.frame = frame
+        self.visibleFrame = visibleFrame
+        self.systemVisibleFrame = systemVisibleFrame ?? visibleFrame
+    }
 }
 
 enum WindowFittingGeometry {
@@ -369,15 +401,39 @@ enum WindowFittingGeometry {
         barHeight: CGFloat
     ) -> CGRect? {
         guard barHeight > 0,
-              !approximatelyEqual(rect, screen.frame, tolerance: 2),
-              isStandardManagedFrame(rect, in: screen.visibleFrame),
-              touchesReservedEdge(rect, of: screen.visibleFrame, position: position) else { return nil }
-        let target = rect.intersection(freeRect(on: screen, position: position, barHeight: barHeight))
+              !approximatelyEqual(rect, screen.frame, tolerance: 2) else { return nil }
+        let sourceVisibleFrame: CGRect
+        if isStandardManagedFrame(rect, in: screen.systemVisibleFrame),
+           touchesReservedEdge(rect, of: screen.systemVisibleFrame, position: position) {
+            sourceVisibleFrame = screen.systemVisibleFrame
+        } else if isStandardManagedFrame(rect, in: screen.visibleFrame),
+                  touchesReservedEdge(rect, of: screen.visibleFrame, position: position) {
+            sourceVisibleFrame = screen.visibleFrame
+        } else {
+            return nil
+        }
+        let standardFrame = remappedRect(
+            rect,
+            from: sourceVisibleFrame,
+            to: screen.visibleFrame
+        )
+        let target = standardFrame.intersection(
+            freeRect(on: screen, position: position, barHeight: barHeight)
+        )
         guard !target.isNull,
               target.width > minimumWindowSize.width,
               target.height > minimumWindowSize.height,
               !approximatelyEqual(target, rect) else { return nil }
         return target
+    }
+
+    private static func remappedRect(_ rect: CGRect, from source: CGRect, to target: CGRect) -> CGRect {
+        guard source.width > 0, source.height > 0 else { return rect }
+        let minX = target.minX + (rect.minX - source.minX) / source.width * target.width
+        let maxX = target.minX + (rect.maxX - source.minX) / source.width * target.width
+        let minY = target.minY + (rect.minY - source.minY) / source.height * target.height
+        let maxY = target.minY + (rect.maxY - source.minY) / source.height * target.height
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
 
     static func approximatelyEqual(_ lhs: CGRect, _ rhs: CGRect, tolerance: CGFloat = 3) -> Bool {
@@ -703,7 +759,16 @@ final class WindowFittingService {
 
     private func context() -> WindowFittingContext? {
         let screens = NSScreen.screens.map {
-            WindowFittingScreenBox(frame: $0.frame, visibleFrame: $0.visibleFrame)
+            WindowFittingScreenBox(
+                frame: $0.frame,
+                visibleFrame: TaskbarScreenGeometry.effectiveVisibleFrame(
+                    screenFrame: $0.frame,
+                    systemVisibleFrame: $0.visibleFrame,
+                    position: preferences.position,
+                    ignoresSystemDock: DockToggleService.shared.isDockHidden
+                ),
+                systemVisibleFrame: $0.visibleFrame
+            )
         }
         guard !screens.isEmpty else { return nil }
         let primaryHeight = screens.first(where: { $0.frame.origin == .zero })?.frame.height

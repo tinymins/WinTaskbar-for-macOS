@@ -428,7 +428,14 @@ final class WindowPreviewPanelController: ObservableObject {
 
         let windowRect = anchorView.convert(anchorView.bounds, to: nil)
         let anchorFrame = anchorWindow.convertToScreen(windowRect)
-        let screenFrame = anchorWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? anchorFrame
+        let screenFrame = anchorWindow.screen.map {
+            TaskbarScreenGeometry.effectiveVisibleFrame(
+                screenFrame: $0.frame,
+                systemVisibleFrame: $0.visibleFrame,
+                position: position,
+                ignoresSystemDock: DockToggleService.shared.isDockHidden
+            )
+        } ?? NSScreen.main?.visibleFrame ?? anchorFrame
         let targetFrame = WindowPreviewPanelGeometry.frame(
             anchorFrame: anchorFrame,
             contentSize: contentSize,
