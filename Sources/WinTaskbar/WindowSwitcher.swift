@@ -285,7 +285,6 @@ enum WindowSwitcherLayout {
             minimumTileWidth,
             screenFrame.width * maximumPanelWidthRatio
                 - panelPadding * 2
-                - scrollbarWidth
         )
         let maximumPanelHeight = screenFrame.height * maximumPanelHeightRatio
         let screenLimitedMaximumPreviewHeight = max(
@@ -346,16 +345,15 @@ enum WindowSwitcherLayout {
         }.max() ?? minimumTileWidth
         let needsScrolling = rows.count > maximumFullyVisibleRows
             || selected.contentHeight > maximumContentHeight
-        let usesMaximumPanelSize = rows.count > 1
         return Metrics(
             previewHeight: selectedPreviewHeight,
             itemWidths: itemWidths,
             rows: rows,
             panelSize: CGSize(
-                width: usesMaximumPanelSize
+                width: needsScrolling
                     ? screenFrame.width * maximumPanelWidthRatio
-                    : contentWidth + panelPadding * 2 + scrollbarWidth,
-                height: usesMaximumPanelSize
+                    : contentWidth + panelPadding * 2,
+                height: needsScrolling
                     ? maximumPanelHeight
                     : selected.contentHeight + panelPadding * 2
             ),
