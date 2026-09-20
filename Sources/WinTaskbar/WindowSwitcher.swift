@@ -788,13 +788,17 @@ final class WindowSwitcherPanelController {
         let activationService = activationService
         activationTask?.cancel()
         activationTask = Task { @MainActor [weak self] in
-            let worker = Task.detached(priority: .userInitiated) {
+            if selectedWindow.ownerPID == ProcessInfo.processInfo.processIdentifier {
                 activationService.raiseAccessibilityWindow(selectedWindow)
-            }
-            await withTaskCancellationHandler {
-                await worker.value
-            } onCancel: {
-                worker.cancel()
+            } else {
+                let worker = Task.detached(priority: .userInitiated) {
+                    activationService.raiseAccessibilityWindow(selectedWindow)
+                }
+                await withTaskCancellationHandler {
+                    await worker.value
+                } onCancel: {
+                    worker.cancel()
+                }
             }
             guard let self,
                   !Task.isCancelled,
