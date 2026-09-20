@@ -262,42 +262,69 @@ enum WindowSwitcherLayout {
 
     static func rowIndices(itemWidths: [CGFloat], maximumWidth: CGFloat) -> [[Int]] {
         guard !itemWidths.isEmpty else { return [] }
-        var rows: [[Int]] = []
-        var currentRow: [Int] = []
+        var minimumRowCount = 1
         var currentWidth: CGFloat = 0
-        for (index, width) in itemWidths.enumerated() {
-            let proposedWidth = currentRow.isEmpty ? width : currentWidth + spacing + width
-            if !currentRow.isEmpty, proposedWidth > maximumWidth {
-                rows.append(currentRow)
-                currentRow = [index]
+        for width in itemWidths {
+            let proposedWidth = currentWidth == 0 ? width : currentWidth + spacing + width
+            if currentWidth > 0, proposedWidth > maximumWidth {
+                minimumRowCount += 1
                 currentWidth = width
             } else {
-                currentRow.append(index)
                 currentWidth = proposedWidth
             }
         }
-        if !currentRow.isEmpty { rows.append(currentRow) }
-
-        func width(of row: [Int]) -> CGFloat {
-            row.reduce(CGFloat.zero) { $0 + itemWidths[$1] }
-                + CGFloat(max(0, row.count - 1)) * spacing
+        guard minimumRowCount > 1 else {
+            return [Array(itemWidths.indices)]
         }
 
-        var movedItem = true
-        while movedItem {
-            movedItem = false
-            for rowIndex in stride(from: rows.count - 1, through: 1, by: -1) {
-                let previousIndex = rowIndex - 1
-                guard rows[previousIndex].count > rows[rowIndex].count + 1,
-                      let candidate = rows[previousIndex].last else { continue }
-                let proposedWidth = width(of: rows[rowIndex])
-                    + spacing
-                    + itemWidths[candidate]
-                guard proposedWidth <= maximumWidth else { continue }
-                rows[previousIndex].removeLast()
-                rows[rowIndex].insert(candidate, at: 0)
-                movedItem = true
+        let itemCount = itemWidths.count
+        var prefixWidths = Array(repeating: CGFloat.zero, count: itemCount + 1)
+        for index in itemWidths.indices {
+            prefixWidths[index + 1] = prefixWidths[index] + itemWidths[index]
+        }
+
+        func rowWidth(from start: Int, to end: Int) -> CGFloat {
+            prefixWidths[end] - prefixWidths[start]
+                + CGFloat(max(0, end - start - 1)) * spacing
+        }
+
+        let targetWidth = (
+            prefixWidths[itemCount]
+                + CGFloat(itemCount - minimumRowCount) * spacing
+        ) / CGFloat(minimumRowCount)
+        var costs = Array(
+            repeating: Array(repeating: CGFloat.infinity, count: itemCount + 1),
+            count: minimumRowCount + 1
+        )
+        var splitIndices = Array(
+            repeating: Array(repeating: -1, count: itemCount + 1),
+            count: minimumRowCount + 1
+        )
+        costs[0][0] = 0
+
+        for rowCount in 1...minimumRowCount {
+            let lastEnd = itemCount - (minimumRowCount - rowCount)
+            for end in rowCount...lastEnd {
+                for start in (rowCount - 1)..<end where costs[rowCount - 1][start].isFinite {
+                    let width = rowWidth(from: start, to: end)
+                    guard width <= maximumWidth || end - start == 1 else { continue }
+                    let deviation = width - targetWidth
+                    let cost = costs[rowCount - 1][start] + deviation * deviation
+                    if cost < costs[rowCount][end] {
+                        costs[rowCount][end] = cost
+                        splitIndices[rowCount][end] = start
+                    }
+                }
             }
+        }
+
+        guard costs[minimumRowCount][itemCount].isFinite else { return [] }
+        var rows: [[Int]] = []
+        var end = itemCount
+        for rowCount in stride(from: minimumRowCount, through: 1, by: -1) {
+            let start = splitIndices[rowCount][end]
+            rows.insert(Array(start..<end), at: 0)
+            end = start
         }
         return rows
     }
