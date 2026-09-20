@@ -45,11 +45,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         buildApplicationMenu()
-        dockToggleService.applyConfiguredStateOnLaunch()
-        recentDocuments.start()
-        clipboardHistoryService.start()
-        windowActivationHistory.start()
-        windowFittingService.start()
 
         let taskbar = TaskbarWindowController(
             preferences: preferences,
@@ -90,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings.show(page: page)
         }
         actions.fitWindowsHandler = { [weak self] in
+            guard self?.preferences.taskbarEnabled == true else { return }
             self?.windowFittingService.fitAllWindowsToFreeSpace()
         }
         globalHotkeysService.onWindowsSpaceGesture = { [weak taskbar] action in
@@ -123,9 +119,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         let altTabConfiguration = preferences.$altTabSwitcherEnabled
             .combineLatest(preferences.$altTabModifier)
+        let taskbarShortcutsEnabled = preferences.$taskbarEnabled
+            .combineLatest(preferences.$globalHotkeysEnabled)
+            .map { $0 && $1 }
         Publishers.CombineLatest(
             Publishers.CombineLatest4(
-                preferences.$globalHotkeysEnabled,
+                taskbarShortcutsEnabled,
                 preferences.$windowsKeyMapping,
                 preferences.$windowsKeyOpensStart,
                 registeredShortcutConfigurations
@@ -145,11 +144,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
             .store(in: &cancellables)
-        Task { @MainActor [weak self] in
-            await Task.yield()
-            self?.windowSwitcherController.prewarm()
-        }
         preferences.$externalStatusItemsEnabled
+            .combineLatest(preferences.$taskbarEnabled)
+            .map { $0 && $1 }
             .removeDuplicates()
             .sink { [weak self] enabled in
                 self?.externalStatusItems.setEnabled(enabled)
@@ -159,7 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .removeDuplicates()
             .dropFirst()
             .sink { [weak self] position in
-                guard let self else { return }
+                guard let self, self.preferences.taskbarEnabled else { return }
                 if self.dockToggleService.isDockHidden {
                     let orientation = position == .left ? "right" : position == .right ? "left" : "bottom"
                     self.dockToggleService.syncDock(orientation: orientation)
@@ -171,7 +168,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         taskbarController = taskbar
         startMenuController = startMenu
         settingsController = settings
-        taskbar.show()
+        preferences.$taskbarEnabled
+            .removeDuplicates()
+            .sink { [weak self] enabled in self?.setTaskbarEnabled(enabled) }
+            .store(in: &cancellables)
+        preferences.$altTabSwitcherEnabled
+            .removeDuplicates()
+            .sink { [weak self] enabled in self?.setAllTabEnabled(enabled) }
+            .store(in: &cancellables)
 #if DEBUG
         if CommandLine.arguments.contains("--attention-demo") {
             Task { @MainActor [weak self] in
@@ -210,7 +214,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.taskbarController?.rebuildPanels() }
+            MainActor.assumeIsolated {
+                guard self?.preferences.taskbarEnabled == true else { return }
+                self?.taskbarController?.rebuildPanels()
+            }
+        }
+    }
+
+    private func setTaskbarEnabled(_ enabled: Bool) {
+        if enabled {
+            recentDocuments.start()
+            clipboardHistoryService.start()
+            dockBadges.start()
+            windowFittingService.start()
+            dockToggleService.applyConfiguredStateOnLaunch()
+            taskbarController?.show()
+            return
+        }
+
+        startMenuController?.hide()
+        taskbarController?.hide()
+        externalStatusItems.setEnabled(false)
+        dockBadges.stop()
+        recentDocuments.stop()
+        clipboardHistoryService.stop()
+        windowFittingService.stop()
+        dockToggleService.restoreDockOnExit()
+    }
+
+    private func setAllTabEnabled(_ enabled: Bool) {
+        if enabled {
+            windowActivationHistory.start()
+            Task { @MainActor [weak self] in
+                await Task.yield()
+                guard self?.preferences.altTabSwitcherEnabled == true else { return }
+                self?.windowSwitcherController.prewarm()
+            }
+        } else {
+            windowActivationHistory.stop()
+            windowSwitcherController.deactivate()
         }
     }
 
@@ -330,6 +372,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         dockToggleService.restoreDockOnExit()
+    }
+
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication,
+        hasVisibleWindows flag: Bool
+    ) -> Bool {
+        if preferences.hasCompletedOnboarding {
+            settingsController?.show()
+        } else {
+            onboardingController?.present()
+        }
+        return true
     }
 
     @objc private func showSettings(_ sender: Any?) { settingsController?.show() }

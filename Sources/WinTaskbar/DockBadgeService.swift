@@ -138,6 +138,7 @@ final class DockBadgeService: ObservableObject {
     private var refreshTask: Task<Void, Never>?
     private var eventRefreshTask: Task<Void, Never>?
     private var refreshPending = false
+    private var isRunning = false
     private let axMonitor = DockBadgeAXMonitor()
 #if DEBUG
     private var demoTask: Task<Void, Never>?
@@ -155,7 +156,6 @@ final class DockBadgeService: ObservableObject {
                 self?.runningTargets = targets
                 self?.scheduleEventRefresh()
             }
-        start()
     }
 
     isolated deinit {
@@ -181,6 +181,7 @@ final class DockBadgeService: ObservableObject {
 #if DEBUG
         guard !isDemoRunning else { return }
 #endif
+        guard isRunning else { return }
         guard refreshTask == nil else {
             refreshPending = true
             return
@@ -311,7 +312,9 @@ final class DockBadgeService: ObservableObject {
         return receivedStatus ? result : nil
     }
 
-    private func start() {
+    func start() {
+        guard !isRunning else { return }
+        isRunning = true
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
@@ -352,7 +355,33 @@ final class DockBadgeService: ObservableObject {
         axMonitor.start()
     }
 
+    func stop() {
+        guard isRunning else { return }
+        isRunning = false
+        timer?.invalidate()
+        timer = nil
+        refreshTask?.cancel()
+        refreshTask = nil
+        eventRefreshTask?.cancel()
+        eventRefreshTask = nil
+        refreshPending = false
+#if DEBUG
+        demoTask?.cancel()
+        demoTask = nil
+        isDemoRunning = false
+#endif
+        axMonitor.stop()
+        for observer in observers {
+            NotificationCenter.default.removeObserver(observer)
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        }
+        observers.removeAll()
+        tracker = TaskbarAttentionTracker()
+        publishState()
+    }
+
     private func scheduleEventRefresh() {
+        guard isRunning else { return }
         eventRefreshTask?.cancel()
         eventRefreshTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(150))

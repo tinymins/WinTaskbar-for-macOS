@@ -731,7 +731,18 @@ final class TaskbarWindowController {
     }
 
     func show() {
+        guard preferences.taskbarEnabled else { return }
         rebuildPanels()
+    }
+
+    func hide() {
+        dismissTransientSurfaces()
+        panels.forEach {
+            $0.autoHideTask?.cancel()
+            $0.orderOut(nil)
+        }
+        panels.removeAll()
+        updatePointerMonitors()
     }
 
     func dismissTransientSurfaces() {
@@ -959,6 +970,10 @@ final class TaskbarWindowController {
     }
 
     func rebuildPanels() {
+        guard preferences.taskbarEnabled else {
+            hide()
+            return
+        }
         dismissTransientSurfaces()
         panels.forEach {
             $0.autoHideTask?.cancel()
@@ -976,6 +991,10 @@ final class TaskbarWindowController {
     }
 
     func applyLayout() {
+        guard preferences.taskbarEnabled else {
+            hide()
+            return
+        }
         updatePointerMonitors()
         if !keepsTransientSurfacesVisibleForSettings {
             taskbarJumpListController.dismiss()
@@ -1068,7 +1087,8 @@ final class TaskbarWindowController {
     }
 
     private func updatePointerMonitors() {
-        let needsMonitoring = preferences.autoHideTaskbar || taskbarContextScreen != nil
+        let needsMonitoring = preferences.taskbarEnabled
+            && (preferences.autoHideTaskbar || taskbarContextScreen != nil)
         guard needsMonitoring != (localPointerMonitor != nil) else { return }
         if !needsMonitoring {
             if let localPointerMonitor { NSEvent.removeMonitor(localPointerMonitor) }

@@ -321,8 +321,10 @@ final class GlobalHotkeysService: ObservableObject {
         windowsKeyGesture = WindowsKeyGestureState(windowsModifier: windowsKeyMapping.eventModifier)
         windowsSpaceGesture = WindowsSpaceGestureState(windowsModifier: windowsKeyMapping.eventModifier)
         altTabGesture = AltTabGestureState(altModifier: altTabModifier.eventModifier)
-        var issues = Self.duplicateIssues(configurations: configurations, mapping: windowsKeyMapping)
-        if self.altTabSwitcherEnabled {
+        var issues = requestedEnabled
+            ? Self.duplicateIssues(configurations: configurations, mapping: windowsKeyMapping)
+            : [:]
+        if requestedEnabled, self.altTabSwitcherEnabled {
             issues.merge(Self.altTabConflicts(
                 configurations: configurations,
                 mapping: windowsKeyMapping,
@@ -331,12 +333,15 @@ final class GlobalHotkeysService: ObservableObject {
                 current, _ in current
             }
         }
-        for configuration in configurations where configuration.isEnabled && issues[configuration.id] == nil {
+        for configuration in configurations
+        where requestedEnabled && configuration.isEnabled && issues[configuration.id] == nil {
             issues[configuration.id] = configuration.validationIssue
         }
         windowsKeyIssue = nil
         altTabIssue = nil
-        if requestedEnabled && !isCapturingShortcut {
+        let taskbarShortcutsActive = requestedEnabled && !isCapturingShortcut
+        let allTabActive = altTabSwitcherEnabled && !isCapturingShortcut
+        if taskbarShortcutsActive {
             for (index, configuration) in configurations.enumerated() where configuration.isEnabled {
                 guard issues[configuration.id] == nil else { continue }
                 let shortcut = configuration.resolvedShortcut(mapping: windowsKeyMapping)
@@ -370,15 +375,13 @@ final class GlobalHotkeysService: ObservableObject {
                 windowsKeyIssue = "Event monitoring unavailable"
             }
             windowsSpaceTrackingEnabled = tracksWindowsSpace && windowsKeyEventTap != nil
-            if self.altTabSwitcherEnabled {
-                altTabIssue = registerAltTabHotKeys()
-                altTabTrackingEnabled = altTabIssue == nil
-            }
-        } else if !isCapturingShortcut {
-            removeWindowsKeyEventTap()
+        }
+        if allTabActive {
+            altTabIssue = registerAltTabHotKeys()
+            altTabTrackingEnabled = altTabIssue == nil
         }
         registrationIssues = issues
-        isEnabled = requestedEnabled && !isCapturingShortcut
+        isEnabled = (requestedEnabled || altTabSwitcherEnabled) && !isCapturingShortcut
     }
 
     static func duplicateIssues(

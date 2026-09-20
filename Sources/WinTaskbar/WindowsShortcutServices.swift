@@ -527,12 +527,18 @@ final class ClipboardHistoryService: ObservableObject {
     }
 
     func start() {
+        guard timer == nil else { return }
         if let currentText = pasteboard.string(forType: .string) {
             record(currentText)
         }
         timer = Timer.publish(every: 0.6, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in self?.captureCurrentItem() }
+    }
+
+    func stop() {
+        timer?.cancel()
+        timer = nil
     }
 
     func copy(_ entry: ClipboardHistoryEntry) {

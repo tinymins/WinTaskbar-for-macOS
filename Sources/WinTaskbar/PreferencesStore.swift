@@ -54,6 +54,7 @@ final class PreferencesStore: ObservableObject {
     @Published var additionalClocks: [AdditionalClockConfiguration] {
         didSet { Self.store(additionalClocks, key: "wintaskbar.dateTime.additionalClocks", defaults: defaults) }
     }
+    @Published var taskbarEnabled: Bool { didSet { defaults.set(taskbarEnabled, forKey: "wintaskbar.feature.taskbar") } }
     @Published var launchAtLogin: Bool { didSet { defaults.set(launchAtLogin, forKey: "wintaskbar.launchAtLogin") } }
     @Published var windowPreviewsEnabled: Bool { didSet { defaults.set(windowPreviewsEnabled, forKey: "wintaskbar.feature.windowPreviews") } }
     @Published var disableMinimizeAnimationDuringRemoteSession: Bool {
@@ -83,10 +84,13 @@ final class PreferencesStore: ObservableObject {
     @Published var menuShortcutPaths: [String] { didSet { defaults.set(menuShortcutPaths, forKey: "wintaskbar.menuShortcutPaths") } }
     @Published var appFolders: [AppFolder] { didSet { Self.store(appFolders, key: "wintaskbar.appFolders", defaults: defaults) } }
     @Published var pinnedShortcuts: [String: [PinnedShortcut]] { didSet { Self.store(pinnedShortcuts, key: "wintaskbar.pinnedShortcuts", defaults: defaults) } }
-    @Published var hasCompletedOnboarding: Bool { didSet { defaults.set(hasCompletedOnboarding, forKey: "wintaskbar.hasCompletedOnboarding") } }
+    @Published var hasCompletedOnboarding: Bool {
+        didSet { defaults.set(hasCompletedOnboarding, forKey: "wintaskbar.hasCompletedFeatureOnboarding") }
+    }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        let hasCompletedCurrentOnboarding = defaults.bool(forKey: "wintaskbar.hasCompletedFeatureOnboarding")
         position = TaskbarPosition(rawValue: defaults.string(forKey: "wintaskbar.position") ?? "") ?? .bottom
         displayMode = DisplayMode(rawValue: defaults.string(forKey: "wintaskbar.displayMode") ?? "") ?? .all
         autoHideTaskbar = defaults.object(forKey: "wintaskbar.autoHideTaskbar") as? Bool ?? false
@@ -170,6 +174,9 @@ final class PreferencesStore: ObservableObject {
         additionalClocks = storedAdditionalClocks.flatMap { clocks in
             clocks.count == 2 ? clocks : nil
         } ?? AdditionalClockConfiguration.defaults
+        taskbarEnabled = hasCompletedCurrentOnboarding
+            ? defaults.object(forKey: "wintaskbar.feature.taskbar") as? Bool ?? false
+            : false
         launchAtLogin = defaults.object(forKey: "wintaskbar.launchAtLogin") as? Bool ?? false
         windowPreviewsEnabled = defaults.object(forKey: "wintaskbar.feature.windowPreviews") as? Bool ?? true
         disableMinimizeAnimationDuringRemoteSession = defaults.object(
@@ -177,7 +184,9 @@ final class PreferencesStore: ObservableObject {
         ) as? Bool ?? true
         showDesktopEnabled = defaults.object(forKey: "wintaskbar.feature.showDesktop") as? Bool ?? true
         globalHotkeysEnabled = defaults.object(forKey: "wintaskbar.feature.globalHotkeys") as? Bool ?? true
-        altTabSwitcherEnabled = defaults.object(forKey: "wintaskbar.feature.altTabSwitcher") as? Bool ?? true
+        altTabSwitcherEnabled = hasCompletedCurrentOnboarding
+            ? defaults.object(forKey: "wintaskbar.feature.altTabSwitcher") as? Bool ?? false
+            : false
         altTabModifier = AltTabModifier(
             rawValue: defaults.string(forKey: "wintaskbar.altTabModifier") ?? ""
         ) ?? .option
@@ -210,7 +219,7 @@ final class PreferencesStore: ObservableObject {
         menuShortcutPaths = defaults.stringArray(forKey: "wintaskbar.menuShortcutPaths") ?? []
         appFolders = Self.load([AppFolder].self, key: "wintaskbar.appFolders", defaults: defaults) ?? []
         pinnedShortcuts = Self.load([String: [PinnedShortcut]].self, key: "wintaskbar.pinnedShortcuts", defaults: defaults) ?? [:]
-        hasCompletedOnboarding = defaults.bool(forKey: "wintaskbar.hasCompletedOnboarding")
+        hasCompletedOnboarding = hasCompletedCurrentOnboarding
 
         if usesPointBasedRecoveryGeometry {
             defaults.set(barHeight, forKey: "wintaskbar.barHeight")
@@ -292,11 +301,12 @@ final class PreferencesStore: ObservableObject {
         dateTimeAMSymbol = "AM"
         dateTimePMSymbol = "PM"
         additionalClocks = AdditionalClockConfiguration.defaults
+        taskbarEnabled = false
         launchAtLogin = false
         windowPreviewsEnabled = true
         showDesktopEnabled = true
         globalHotkeysEnabled = true
-        altTabSwitcherEnabled = true
+        altTabSwitcherEnabled = false
         altTabModifier = .option
         windowsKeyMapping = .option
         windowsKeyOpensStart = true

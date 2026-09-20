@@ -111,6 +111,17 @@ final class WindowActivationHistory {
         }
     }
 
+    func stop() {
+        guard isStarted else { return }
+        isStarted = false
+        focusedWindowCaptureTask?.cancel()
+        focusedWindowCaptureTask = nil
+        focusedWindowCaptureGeneration &+= 1
+        for pid in Array(observations.keys) { detach(fromPID: pid) }
+        for observer in workspaceObservers { workspace.notificationCenter.removeObserver(observer) }
+        workspaceObservers.removeAll()
+    }
+
     func orderedWindows(from frontToBackWindows: [WindowInfo]) -> [WindowInfo] {
         if let frontmostPID = workspace.frontmostApplication?.processIdentifier,
            let frontmostWindow = frontToBackWindows.first(where: { $0.ownerPID == frontmostPID }) {
@@ -654,6 +665,17 @@ final class WindowSwitcherPanelController {
             )
         }
         refreshWindowCache(forPIDs: applications.map(\.processIdentifier))
+    }
+
+    func deactivate() {
+        activationTask?.cancel()
+        activationTask = nil
+        windowCacheTask?.cancel()
+        windowCacheTask = nil
+        detailedWindowsCache = []
+        detailedWindowsCacheDate = .distantPast
+        controlCapabilitiesCache = [:]
+        dismiss()
     }
 
     private func present(reverse: Bool) {

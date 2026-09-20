@@ -112,12 +112,17 @@ struct SettingsView: View {
     private var selectedPageContent: some View {
         switch navigation.selectedPage {
         case .general: settingsPage(general)
-        case .appearance: settingsPage(appearance)
-        case .startMenu: settingsPage(startMenu)
-        case .taskbar: settingsPage(features)
-        case .dateTime: dateTimePages
+        case .appearance: settingsPage(taskbarFeatureContent(appearance))
+        case .startMenu: settingsPage(taskbarFeatureContent(startMenu))
+        case .taskbar: settingsPage(taskbarFeatureContent(features))
+        case .dateTime:
+            if preferences.taskbarEnabled {
+                dateTimePages
+            } else {
+                settingsPage(taskbarFeatureContent(dateTime))
+            }
         case .hotkeys: settingsPage(hotkeySettings)
-        case .shortcutMappings: settingsPage(shortcutMappings)
+        case .shortcutMappings: settingsPage(taskbarFeatureContent(shortcutMappings))
         case .about: settingsPage(about)
         }
     }
@@ -148,15 +153,49 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private func taskbarFeatureContent<Content: View>(_ content: Content) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if !preferences.taskbarEnabled {
+                featureDisabledNotice("Turn on Taskbar in General to change these settings.")
+            }
+            content
+                .disabled(!preferences.taskbarEnabled)
+                .opacity(preferences.taskbarEnabled ? 1 : 0.5)
+        }
+    }
+
+    private func featureDisabledNotice(_ message: LocalizedStringKey) -> some View {
+        Label(message, systemImage: "lock.fill")
+            .font(.callout.weight(.medium))
+            .foregroundStyle(.secondary)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.primary.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
     private var general: some View {
-        SettingsSection("Startup") {
-            Toggle("Launch at login", isOn: Binding(
-                get: { loginItem.isEnabled },
-                set: { enabled in
-                    loginItem.setEnabled(enabled)
-                    preferences.launchAtLogin = enabled
-                }
-            ))
+        VStack(alignment: .leading, spacing: 22) {
+            SettingsSection("Features") {
+                Toggle("AllTab", isOn: $preferences.altTabSwitcherEnabled)
+                Text("Windows-style window switching. Its modifier can be configured in Hotkeys.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Divider()
+                Toggle("Taskbar", isOn: $preferences.taskbarEnabled)
+                Text("Windows-style taskbar, Start menu, system tray, and taskbar shortcuts.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            SettingsSection("Startup") {
+                Toggle("Launch at login", isOn: Binding(
+                    get: { loginItem.isEnabled },
+                    set: { enabled in
+                        loginItem.setEnabled(enabled)
+                        preferences.launchAtLogin = enabled
+                    }
+                ))
+            }
         }
     }
 
@@ -536,24 +575,28 @@ struct SettingsView: View {
 
     private var hotkeySettings: some View {
         VStack(alignment: .leading, spacing: 22) {
+            if !preferences.taskbarEnabled {
+                featureDisabledNotice("Turn on Taskbar in General to configure Taskbar shortcuts.")
+            }
             SettingsSection("Global shortcuts") {
                 Toggle("Enable global shortcuts", isOn: $preferences.globalHotkeysEnabled)
                 Text("Enabled mappings override matching macOS and application shortcuts.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            .disabled(!preferences.taskbarEnabled)
+            .opacity(preferences.taskbarEnabled ? 1 : 0.5)
 
-            SettingsSection("Alt+Tab window switcher") {
-                Toggle("Enable Alt+Tab window switcher", isOn: $preferences.altTabSwitcherEnabled)
-                    .disabled(!preferences.globalHotkeysEnabled)
-                Picker("Alt+Tab modifier", selection: $preferences.altTabModifier) {
+            if !preferences.altTabSwitcherEnabled {
+                featureDisabledNotice("Turn on AllTab in General to configure window switching.")
+            }
+            SettingsSection("AllTab window switcher") {
+                Picker("AllTab modifier", selection: $preferences.altTabModifier) {
                     ForEach(AltTabModifier.allCases) { modifier in
                         Text(modifier.title).tag(modifier)
                     }
                 }
-                .disabled(!preferences.globalHotkeysEnabled || !preferences.altTabSwitcherEnabled)
                 if let issue = globalHotkeys.altTabIssue,
-                   preferences.globalHotkeysEnabled,
                    preferences.altTabSwitcherEnabled {
                     Text(issue)
                         .font(.caption)
@@ -568,6 +611,8 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .disabled(!preferences.altTabSwitcherEnabled)
+            .opacity(preferences.altTabSwitcherEnabled ? 1 : 0.5)
 
             SettingsSection("Windows key") {
                 Toggle("Press Windows key alone to open Start", isOn: $preferences.windowsKeyOpensStart)
@@ -589,6 +634,8 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            .disabled(!preferences.taskbarEnabled)
+            .opacity(preferences.taskbarEnabled ? 1 : 0.5)
         }
     }
 
@@ -652,9 +699,15 @@ struct SettingsView: View {
                 Button(dockToggle.isDockHidden ? "Restore system Dock" : "Hide system Dock") {
                     dockToggle.isDockHidden ? dockToggle.restoreDock() : dockToggle.hideDock()
                 }
+                .disabled(!preferences.taskbarEnabled)
                 Button("Exit", role: .destructive) {
                     confirmExit()
                 }
+            }
+            if !preferences.taskbarEnabled {
+                Text("Turn on Taskbar in General to change the system Dock.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }

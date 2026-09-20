@@ -531,6 +531,18 @@ final class WindowFittingService {
         if let app = NSWorkspace.shared.frontmostApplication { attach(to: app) }
     }
 
+    func stop() {
+        pendingAttachment?.cancel()
+        pendingAttachment = nil
+        restoreManagedWindows()
+        detach()
+        if let workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver)
+            self.workspaceObserver = nil
+        }
+        lastFrames.removeAll()
+    }
+
     func fitAllWindowsToFreeSpace() {
         guard ensureAccessibility(), let context = context() else { return }
         let ownPID = ProcessInfo.processInfo.processIdentifier
@@ -700,9 +712,33 @@ final class WindowFittingService {
         return WindowFittingContext(
             primaryHeight: primaryHeight,
             position: preferences.position,
-            barHeight: preferences.autoHideTaskbar ? 0 : CGFloat(preferences.barHeight),
+            barHeight: preferences.taskbarEnabled && !preferences.autoHideTaskbar
+                ? CGFloat(preferences.barHeight)
+                : 0,
             screens: screens
         )
+    }
+
+    private func restoreManagedWindows() {
+        guard !managedWindows.isEmpty else { return }
+        let primaryHeight = primaryHeight()
+        for application in NSWorkspace.shared.runningApplications where !application.isTerminated {
+            let pid = application.processIdentifier
+            let element = AXUIElementCreateApplication(pid)
+            for window in Self.windows(of: element) {
+                let key = WindowKey(pid: pid, elementHash: CFHash(window))
+                guard let state = managedWindows[key],
+                      let current = Self.cocoaFrame(of: window, primaryHeight: primaryHeight),
+                      WindowFittingGeometry.approximatelyEqual(current, state.reservedFrame) else { continue }
+                Self.setFrame(
+                    window,
+                    from: current,
+                    to: state.systemFrame,
+                    primaryHeight: primaryHeight
+                )
+            }
+        }
+        managedWindows.removeAll()
     }
 
     private func primaryHeight() -> CGFloat {

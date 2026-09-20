@@ -708,6 +708,16 @@ final class RecentDocumentsService: ObservableObject {
         }
     }
 
+    func stop() {
+        captureTask?.cancel()
+        captureTask = nil
+        captureGeneration &+= 1
+        if let observer {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            self.observer = nil
+        }
+    }
+
     private func captureFocusedDocument(pid: pid_t, bundleID: String) {
         captureGeneration &+= 1
         let generation = captureGeneration
