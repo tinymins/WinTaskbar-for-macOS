@@ -546,11 +546,18 @@ final class GlobalHotkeysService: ObservableObject {
                       let self,
                       self.altTabModifierPollingGeneration == generation,
                       self.altTabGesture.isActive else { break }
-                let flags = CGEventSource.flagsState(.combinedSessionState)
+                let flags = CGEventSource.flagsState(.hidSystemState)
                 let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(flags.rawValue))
                 if let action = self.altTabGesture.flagsChanged(to: modifierFlags) {
+                    let combinedFlags = CGEventSource.flagsState(.combinedSessionState)
+                    let combinedModifierFlags = NSEvent.ModifierFlags(
+                        rawValue: UInt(combinedFlags.rawValue)
+                    )
+                    let combinedModifierDown = combinedModifierFlags
+                        .intersection(.deviceIndependentFlagsMask)
+                        .contains(self.altTabModifier.eventModifier)
                     AltTabDiagnostics.logger.notice(
-                        "session=\(self.altTabSessionID, privacy: .public) modifier-release-detected source=poll elapsedMs=\(AltTabDiagnostics.milliseconds(since: self.altTabSessionStartedAt), privacy: .public)"
+                        "session=\(self.altTabSessionID, privacy: .public) modifier-release-detected source=poll-hid combinedModifierDown=\(combinedModifierDown, privacy: .public) elapsedMs=\(AltTabDiagnostics.milliseconds(since: self.altTabSessionStartedAt), privacy: .public)"
                     )
                     self.onAltTabGesture?(action)
                     break
@@ -562,11 +569,16 @@ final class GlobalHotkeysService: ObservableObject {
     }
 
     private func commitAltTabIfModifierWasReleased() {
-        let flags = CGEventSource.flagsState(.combinedSessionState)
+        let flags = CGEventSource.flagsState(.hidSystemState)
         let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(flags.rawValue))
         guard let action = altTabGesture.flagsChanged(to: modifierFlags) else { return }
+        let combinedFlags = CGEventSource.flagsState(.combinedSessionState)
+        let combinedModifierFlags = NSEvent.ModifierFlags(rawValue: UInt(combinedFlags.rawValue))
+        let combinedModifierDown = combinedModifierFlags
+            .intersection(.deviceIndependentFlagsMask)
+            .contains(altTabModifier.eventModifier)
         AltTabDiagnostics.logger.notice(
-            "session=\(self.altTabSessionID, privacy: .public) modifier-release-detected source=post-present elapsedMs=\(AltTabDiagnostics.milliseconds(since: self.altTabSessionStartedAt), privacy: .public)"
+            "session=\(self.altTabSessionID, privacy: .public) modifier-release-detected source=post-present-hid combinedModifierDown=\(combinedModifierDown, privacy: .public) elapsedMs=\(AltTabDiagnostics.milliseconds(since: self.altTabSessionStartedAt), privacy: .public)"
         )
         stopAltTabModifierPolling()
         onAltTabGesture?(action)
