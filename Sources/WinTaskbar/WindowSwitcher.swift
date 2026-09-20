@@ -239,6 +239,7 @@ enum WindowSwitcherLayout {
         let itemWidths: [CGFloat]
         let rows: [[Int]]
         let panelSize: CGSize
+        let needsScrolling: Bool
     }
 
     static func tileHeight(for previewHeight: CGFloat) -> CGFloat {
@@ -343,21 +344,21 @@ enum WindowSwitcherLayout {
             row.reduce(CGFloat.zero) { $0 + itemWidths[$1] }
                 + CGFloat(max(0, row.count - 1)) * spacing
         }.max() ?? minimumTileWidth
-        let tileHeight = Self.tileHeight(for: selectedPreviewHeight)
-        let overflowPeekHeight = CGFloat(maximumFullyVisibleRows) * tileHeight
-            + CGFloat(maximumFullyVisibleRows) * spacing
-            + titleBarHeight
-        let visibleContentHeight = rows.count > maximumFullyVisibleRows
-            ? min(selected.contentHeight, overflowPeekHeight)
-            : selected.contentHeight
+        let needsScrolling = rows.count > maximumFullyVisibleRows
+            || selected.contentHeight > maximumContentHeight
         return Metrics(
             previewHeight: selectedPreviewHeight,
             itemWidths: itemWidths,
             rows: rows,
             panelSize: CGSize(
-                width: contentWidth + panelPadding * 2 + scrollbarWidth,
-                height: min(visibleContentHeight + panelPadding * 2, maximumPanelHeight)
-            )
+                width: needsScrolling
+                    ? screenFrame.width * maximumPanelWidthRatio
+                    : contentWidth + panelPadding * 2 + scrollbarWidth,
+                height: needsScrolling
+                    ? maximumPanelHeight
+                    : selected.contentHeight + panelPadding * 2
+            ),
+            needsScrolling: needsScrolling
         )
     }
 
@@ -589,6 +590,7 @@ final class WindowSwitcherPanelController {
     private var globalMouseMonitor: Any?
     private var selectedIndex = 0
     private var tilePreviewHeight = WindowSwitcherLayout.previewHeight
+    private var showsVerticalScroller = false
     private var presentationID: UInt = 0
     private var activationGeneration: UInt = 0
     private var activationTask: Task<Void, Never>?
@@ -870,6 +872,7 @@ final class WindowSwitcherPanelController {
             backdropImage: backdropImage,
             selection: selection,
             previewHeight: tilePreviewHeight,
+            showsVerticalScroller: showsVerticalScroller,
             onWindowAction: { [weak self] action, windowID in self?.perform(action, on: windowID) },
             onSelect: { [weak self] windowID in self?.selectAndCommit(windowID: windowID) }
         ))
@@ -1069,6 +1072,7 @@ final class WindowSwitcherPanelController {
             screenFrame: workArea
         )
         tilePreviewHeight = layout.previewHeight
+        showsVerticalScroller = layout.needsScrolling
         let size = layout.panelSize
         return CGRect(
             x: workArea.midX - size.width / 2,
@@ -1091,6 +1095,7 @@ private struct WindowSwitcherView: View {
     let backdropImage: NSImage?
     @ObservedObject var selection: WindowSwitcherSelectionModel
     let previewHeight: CGFloat
+    let showsVerticalScroller: Bool
     let onWindowAction: (WindowSwitcherWindowAction, CGWindowID) -> Void
     let onSelect: (CGWindowID) -> Void
 
@@ -1110,7 +1115,9 @@ private struct WindowSwitcherView: View {
                 }
             }
             .padding(WindowSwitcherLayout.panelPadding)
-            .background(WindowSwitcherScrollViewConfigurator())
+            .background(WindowSwitcherScrollViewConfigurator(
+                showsVerticalScroller: showsVerticalScroller
+            ))
         }
         .scrollIndicators(.visible)
         .background {
@@ -1130,16 +1137,23 @@ private struct WindowSwitcherView: View {
 }
 
 private struct WindowSwitcherScrollViewConfigurator: NSViewRepresentable {
+    let showsVerticalScroller: Bool
+
     func makeNSView(context: Context) -> WindowSwitcherScrollViewProbe {
-        WindowSwitcherScrollViewProbe()
+        let probe = WindowSwitcherScrollViewProbe()
+        probe.showsVerticalScroller = showsVerticalScroller
+        return probe
     }
 
     func updateNSView(_ nsView: WindowSwitcherScrollViewProbe, context: Context) {
+        nsView.showsVerticalScroller = showsVerticalScroller
         nsView.configureEnclosingScrollView()
     }
 }
 
 private final class WindowSwitcherScrollViewProbe: NSView {
+    var showsVerticalScroller = false
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         configureEnclosingScrollView()
@@ -1152,15 +1166,16 @@ private final class WindowSwitcherScrollViewProbe: NSView {
             await Task.yield()
             guard let scrollView = self?.enclosingScrollView else { return }
             scrollView.scrollerStyle = .legacy
-            scrollView.autohidesScrollers = true
+            scrollView.autohidesScrollers = false
             scrollView.hasHorizontalScroller = false
-            if !(scrollView.verticalScroller is WindowSwitcherThinScroller) {
+            if self?.showsVerticalScroller == true,
+               !(scrollView.verticalScroller is WindowSwitcherThinScroller) {
                 let scroller = WindowSwitcherThinScroller()
                 scroller.scrollerStyle = .legacy
                 scroller.controlSize = .mini
                 scrollView.verticalScroller = scroller
             }
-            scrollView.hasVerticalScroller = true
+            scrollView.hasVerticalScroller = self?.showsVerticalScroller == true
             scrollView.tile()
         }
     }

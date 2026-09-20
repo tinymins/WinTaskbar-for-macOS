@@ -2910,11 +2910,7 @@ func runSelfTest() async -> Int32 {
     overflowingSwitcherLayout.previewHeight == WindowSwitcherLayout.minimumPreviewHeight,
     overflowingSwitcherLayout.rows.count > WindowSwitcherLayout.maximumFullyVisibleRows,
     overflowingSwitcherLayout.panelSize.height
-        == CGFloat(WindowSwitcherLayout.maximumFullyVisibleRows)
-            * WindowSwitcherLayout.tileHeight(for: WindowSwitcherLayout.minimumPreviewHeight)
-            + CGFloat(WindowSwitcherLayout.maximumFullyVisibleRows) * WindowSwitcherLayout.spacing
-            + WindowSwitcherLayout.titleBarHeight
-            + WindowSwitcherLayout.panelPadding * 2 else {
+        == switcherScreenFrame.height * WindowSwitcherLayout.maximumPanelHeightRatio else {
         fputs("SELF-TEST FAILED: Alt+Tab MRU or adaptive flow geometry mismatch\n", stderr)
         return 1
     }
