@@ -85,16 +85,25 @@ enum ShortcutCaptureAction: Equatable {
 }
 
 struct AltTabGestureState {
+    private static let physicalModifierCandidates: [NSEvent.ModifierFlags] = [
+        .control, .option, .command, .function
+    ]
+
     private let altModifier: NSEvent.ModifierFlags
     private(set) var isActive = false
+    private var physicalModifier: NSEvent.ModifierFlags?
 
     init(altModifier: NSEvent.ModifierFlags = .option) {
         self.altModifier = altModifier
     }
 
-    mutating func press(reverse: Bool) -> AltTabGestureAction {
+    mutating func press(
+        reverse: Bool,
+        physicalModifierFlags: NSEvent.ModifierFlags = []
+    ) -> AltTabGestureAction {
         if isActive { return reverse ? .retreat : .advance }
         isActive = true
+        physicalModifier = physicalModifier(in: physicalModifierFlags)
         return .present(reverse: reverse)
     }
 
@@ -103,13 +112,43 @@ struct AltTabGestureState {
         let flags = rawFlags.intersection(.deviceIndependentFlagsMask)
         guard !flags.contains(altModifier) else { return nil }
         isActive = false
+        physicalModifier = nil
+        return .commit
+    }
+
+    mutating func polledFlagsChanged(
+        hidFlags rawHIDFlags: NSEvent.ModifierFlags,
+        combinedFlags rawCombinedFlags: NSEvent.ModifierFlags
+    ) -> AltTabGestureAction? {
+        guard isActive else { return nil }
+        let modifierIsDown: Bool
+        if let physicalModifier {
+            let hidFlags = rawHIDFlags.intersection(.deviceIndependentFlagsMask)
+            modifierIsDown = hidFlags.contains(physicalModifier)
+        } else {
+            let combinedFlags = rawCombinedFlags.intersection(.deviceIndependentFlagsMask)
+            modifierIsDown = combinedFlags.contains(altModifier)
+        }
+        guard !modifierIsDown else { return nil }
+        isActive = false
+        physicalModifier = nil
         return .commit
     }
 
     mutating func cancel() -> AltTabGestureAction? {
         guard isActive else { return nil }
         isActive = false
+        physicalModifier = nil
         return .cancel
+    }
+
+    private func physicalModifier(
+        in rawFlags: NSEvent.ModifierFlags
+    ) -> NSEvent.ModifierFlags? {
+        let flags = rawFlags.intersection(.deviceIndependentFlagsMask)
+        if flags.contains(altModifier) { return altModifier }
+        let candidates = Self.physicalModifierCandidates.filter(flags.contains)
+        return candidates.count == 1 ? candidates[0] : nil
     }
 }
 
@@ -463,7 +502,11 @@ final class GlobalHotkeysService: ObservableObject {
 
     fileprivate func handle(id: Int) {
         if altTabTrackingEnabled, altTabHotKeyIDs.contains(id) {
-            let action = altTabGesture.press(reverse: id == Self.altTabReverseHotKeyID)
+            let hidFlags = CGEventSource.flagsState(.hidSystemState)
+            let action = altTabGesture.press(
+                reverse: id == Self.altTabReverseHotKeyID,
+                physicalModifierFlags: NSEvent.ModifierFlags(rawValue: UInt(hidFlags.rawValue))
+            )
             if case .present = action {
                 altTabSessionID &+= 1
                 altTabSessionStartedAt = AltTabDiagnostics.timestamp()
@@ -549,13 +592,16 @@ final class GlobalHotkeysService: ObservableObject {
                       let self,
                       self.altTabModifierPollingGeneration == generation,
                       self.altTabGesture.isActive else { break }
-                let flags = CGEventSource.flagsState(.hidSystemState)
-                let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(flags.rawValue))
-                if let action = self.altTabGesture.flagsChanged(to: modifierFlags) {
-                    let combinedFlags = CGEventSource.flagsState(.combinedSessionState)
-                    let combinedModifierFlags = NSEvent.ModifierFlags(
-                        rawValue: UInt(combinedFlags.rawValue)
-                    )
+                let hidFlags = CGEventSource.flagsState(.hidSystemState)
+                let hidModifierFlags = NSEvent.ModifierFlags(rawValue: UInt(hidFlags.rawValue))
+                let combinedFlags = CGEventSource.flagsState(.combinedSessionState)
+                let combinedModifierFlags = NSEvent.ModifierFlags(
+                    rawValue: UInt(combinedFlags.rawValue)
+                )
+                if let action = self.altTabGesture.polledFlagsChanged(
+                    hidFlags: hidModifierFlags,
+                    combinedFlags: combinedModifierFlags
+                ) {
                     let combinedModifierDown = combinedModifierFlags
                         .intersection(.deviceIndependentFlagsMask)
                         .contains(self.altTabModifier.eventModifier)
@@ -572,11 +618,14 @@ final class GlobalHotkeysService: ObservableObject {
     }
 
     private func commitAltTabIfModifierWasReleased() {
-        let flags = CGEventSource.flagsState(.hidSystemState)
-        let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(flags.rawValue))
-        guard let action = altTabGesture.flagsChanged(to: modifierFlags) else { return }
+        let hidFlags = CGEventSource.flagsState(.hidSystemState)
+        let hidModifierFlags = NSEvent.ModifierFlags(rawValue: UInt(hidFlags.rawValue))
         let combinedFlags = CGEventSource.flagsState(.combinedSessionState)
         let combinedModifierFlags = NSEvent.ModifierFlags(rawValue: UInt(combinedFlags.rawValue))
+        guard let action = altTabGesture.polledFlagsChanged(
+            hidFlags: hidModifierFlags,
+            combinedFlags: combinedModifierFlags
+        ) else { return }
         let combinedModifierDown = combinedModifierFlags
             .intersection(.deviceIndependentFlagsMask)
             .contains(altTabModifier.eventModifier)

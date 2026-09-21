@@ -2679,6 +2679,7 @@ func runSelfTest() async -> Int32 {
     var controlAltTabGesture = AltTabGestureState(altModifier: .control)
     var commandAltTabGesture = AltTabGestureState(altModifier: .command)
     var cancelledAltTabGesture = AltTabGestureState()
+    var remappedAltTabGesture = AltTabGestureState()
     var windowActivationOrder = WindowActivationOrder()
     let shortcutDefaults = GlobalShortcutCatalog.defaults(
         legacyShortcuts: GlobalShortcutCatalog.defaultLegacyShortcuts
@@ -2773,6 +2774,18 @@ func runSelfTest() async -> Int32 {
           commandAltTabGesture.flagsChanged(to: []) == .commit,
           cancelledAltTabGesture.press(reverse: true) == .present(reverse: true),
           cancelledAltTabGesture.cancel() == .cancel,
+          remappedAltTabGesture.press(
+              reverse: false,
+              physicalModifierFlags: [.command]
+          ) == .present(reverse: false),
+          remappedAltTabGesture.polledFlagsChanged(
+              hidFlags: [.command],
+              combinedFlags: [.option]
+          ) == nil,
+          remappedAltTabGesture.polledFlagsChanged(
+              hidFlags: [],
+              combinedFlags: [.option]
+          ) == .commit,
           optionAltTabConflicts[GlobalShortcutCatalog.taskViewID]
             == "Conflicts with Alt+Tab Window Switcher",
           commandAltTabConflicts[GlobalShortcutCatalog.taskViewID] == nil,
