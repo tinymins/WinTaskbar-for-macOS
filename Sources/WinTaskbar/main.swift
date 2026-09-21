@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         buildApplicationMenu()
+        KarabinerIntegrationService.shared.migrateManagedConfigurationIfNeeded(preferences: preferences)
 
         let taskbar = TaskbarWindowController(
             preferences: preferences,
@@ -122,10 +123,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let taskbarShortcutsEnabled = preferences.$taskbarEnabled
             .combineLatest(preferences.$globalHotkeysEnabled)
             .map { $0 && $1 }
+        let effectiveWindowsKeyMapping = KarabinerIntegrationService.shared.$isEnabled
+            .map { karabinerEnabled in
+                karabinerEnabled ? WindowsKeyMapping.control : .option
+            }
+            .removeDuplicates()
         Publishers.CombineLatest(
             Publishers.CombineLatest4(
                 taskbarShortcutsEnabled,
-                preferences.$windowsKeyMapping,
+                effectiveWindowsKeyMapping,
                 preferences.$windowsKeyOpensStart,
                 registeredShortcutConfigurations
             ),
@@ -872,7 +878,7 @@ func runSelfTest() async -> Int32 {
     guard let fileManagerShortcut = preferences.globalShortcutConfigurations.first(where: {
         $0.id == GlobalShortcutCatalog.fileManagerID
     }),
-    fileManagerShortcut.displayValue(mapping: .option) == "⌥E",
+    fileManagerShortcut.displayValue(mapping: .option) == "Win+E",
     fileManagerShortcut.resolvedShortcut(mapping: .option).modifiers == UInt32(optionKey),
     fileManagerShortcut.resolvedShortcut(mapping: .command).modifiers == UInt32(cmdKey) else {
         fputs("SELF-TEST FAILED: Windows shortcut mapping mismatch\n", stderr)

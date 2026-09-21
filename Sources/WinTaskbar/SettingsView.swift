@@ -51,6 +51,7 @@ struct SettingsView: View {
     @ObservedObject private var dockToggle = DockToggleService.shared
     @ObservedObject private var loginItem = LoginItemService.shared
     @ObservedObject private var globalHotkeys = GlobalHotkeysService.shared
+    @ObservedObject private var karabinerIntegration = KarabinerIntegrationService.shared
     @State private var showsDateTimeFormat = false
     @State private var editingAdditionalClockIndex: Int?
     @State private var additionalClockDraft = AdditionalClockConfiguration.defaults[0]
@@ -94,6 +95,7 @@ struct SettingsView: View {
         }
         .onAppear {
             loginItem.refresh()
+            karabinerIntegration.refresh()
         }
         .onChange(of: navigation.selectedPage) { _ in showsDateTimeFormat = false }
         .sheet(isPresented: Binding(
@@ -579,6 +581,73 @@ struct SettingsView: View {
 
     private var hotkeySettings: some View {
         VStack(alignment: .leading, spacing: 22) {
+            SettingsSection("Windows keyboard mode") {
+                HStack(spacing: 8) {
+                    Image(systemName: karabinerIntegration.isEnabled
+                        ? "checkmark.circle.fill"
+                        : (karabinerIntegration.isAvailable ? "circle" : "exclamationmark.triangle.fill"))
+                        .foregroundStyle(karabinerIntegration.isEnabled
+                            ? Color.green
+                            : (karabinerIntegration.isAvailable ? Color.secondary : Color.orange))
+                    Text(karabinerStatusText)
+                        .font(.callout.weight(.medium))
+                    Spacer()
+                    if let version = karabinerIntegration.version {
+                        Text(version)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 5) {
+                    GridRow {
+                        Text("Physical key").foregroundStyle(.secondary)
+                        Text("macOS logical key").foregroundStyle(.secondary)
+                        Text("Windows key").foregroundStyle(.secondary)
+                    }
+                    GridRow { Text("Fn / Globe"); Text("Command"); Text("Ctrl") }
+                    GridRow { Text("Control"); Text("Fn / Globe"); Text("Fn / Globe") }
+                    GridRow { Text("Option"); Text("Control"); Text("Win") }
+                    GridRow { Text("Command"); Text("Option"); Text("Alt") }
+                }
+                .font(.caption)
+
+                Text("The four logical modifier keys stay consistent in every local app. Terminal and iTerm keep native Command shortcuts and shell Control shortcuts; Ctrl+Shift+T/N/W/C/V/F are also available as Windows Terminal-style aliases.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if !karabinerIntegration.isEnabled, karabinerIntegration.conflictCount > 0 {
+                    Text("WinTaskbar will replace \(karabinerIntegration.conflictCount) conflicting Karabiner mappings. The complete current configuration is backed up first.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+                if let error = karabinerIntegration.lastError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                }
+
+                HStack {
+                    if karabinerIntegration.isEnabled {
+                        Button("Disable and restore previous configuration") {
+                            karabinerIntegration.disable(preferences: preferences)
+                        }
+                    } else {
+                        Button("Enable Windows keyboard mode") {
+                            karabinerIntegration.enable(preferences: preferences)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!karabinerIntegration.isAvailable)
+                    }
+                    Button("Refresh") { karabinerIntegration.refresh() }
+                    if !karabinerIntegration.isAvailable,
+                       let url = URL(string: "https://karabiner-elements.pqrs.org") {
+                        Link("Get Karabiner-Elements", destination: url)
+                    }
+                }
+            }
+
             if !preferences.taskbarEnabled {
                 featureDisabledNotice("Turn on Taskbar in General to configure Taskbar shortcuts.")
             }
@@ -600,6 +669,7 @@ struct SettingsView: View {
                         Text(modifier.title).tag(modifier)
                     }
                 }
+                .disabled(karabinerIntegration.isEnabled)
                 if let issue = globalHotkeys.altTabIssue,
                    preferences.altTabSwitcherEnabled {
                     Text(issue)
@@ -618,15 +688,18 @@ struct SettingsView: View {
             .disabled(!preferences.altTabSwitcherEnabled)
             .opacity(preferences.altTabSwitcherEnabled ? 1 : 0.5)
 
+        }
+    }
+
+    private var shortcutMappings: some View {
+        VStack(alignment: .leading, spacing: 22) {
             SettingsSection("Windows key") {
+                LabeledContent("Physical key", value: "Option")
+                if karabinerIntegration.isEnabled {
+                    LabeledContent("macOS logical key", value: "Control")
+                }
                 Toggle("Press Windows key alone to open Start", isOn: $preferences.windowsKeyOpensStart)
                     .disabled(!preferences.globalHotkeysEnabled)
-                Picker("Windows key", selection: $preferences.windowsKeyMapping) {
-                    ForEach(WindowsKeyMapping.allCases) { mapping in
-                        Text(mapping.rawValue).tag(mapping)
-                    }
-                }
-                .disabled(!preferences.globalHotkeysEnabled)
                 if let issue = globalHotkeys.windowsKeyIssue,
                    preferences.globalHotkeysEnabled,
                    preferences.windowsKeyOpensStart {
@@ -634,17 +707,11 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
-                Text("Choose which macOS modifier represents the Windows key for Start and built-in Windows shortcuts. Command matches the Windows-logo key on most PC keyboards connected to a Mac.")
+                Text("The physical Option key is always Win. Built-in shortcuts display Win; shortcuts you record yourself keep their exact modifiers.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            .disabled(!preferences.taskbarEnabled)
-            .opacity(preferences.taskbarEnabled ? 1 : 0.5)
-        }
-    }
 
-    private var shortcutMappings: some View {
-        VStack(alignment: .leading, spacing: 22) {
             SettingsSection("Built-in Windows shortcuts") {
                 ForEach(Array(preferences.globalShortcutConfigurations.enumerated()), id: \.element.id) { index, configuration in
                     GlobalShortcutRow(
@@ -689,6 +756,12 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private var karabinerStatusText: LocalizedStringKey {
+        if karabinerIntegration.isEnabled { return "Enabled through Karabiner-Elements" }
+        if karabinerIntegration.isAvailable { return "Ready to configure Karabiner-Elements" }
+        return "Karabiner-Elements is required"
     }
 
     private var about: some View {

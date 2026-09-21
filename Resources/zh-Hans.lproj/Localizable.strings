@@ -450,5 +450,67 @@
 	<string>时区</string>
 	<key>URL</key>
 	<string>URL</string>
+	<key>Windows keyboard mode</key>
+	<string>Windows 键盘模式</string>
+	<key>Enabled through Karabiner-Elements</key>
+	<string>已通过 Karabiner-Elements 启用</string>
+	<key>Ready to configure Karabiner-Elements</key>
+	<string>Karabiner-Elements 已就绪</string>
+	<key>Karabiner-Elements is required</key>
+	<string>需要安装 Karabiner-Elements</string>
+	<key>Physical key</key>
+	<string>实体按键</string>
+	<key>macOS logical key</key>
+	<string>macOS 逻辑键</string>
+	<key>Windows key</key>
+	<string>Windows 按键</string>
+	<key>Behavior</key>
+	<string>功能</string>
+	<key>Fn / Globe</key>
+	<string>Fn / 地球仪</string>
+	<key>Ctrl</key>
+	<string>Ctrl</string>
+	<key>Control</key>
+	<string>Control</string>
+	<key>Command</key>
+	<string>Command</string>
+	<key>Command + Option</key>
+	<string>Command + Option</string>
+	<key>Option (Windows keyboard mode)</key>
+	<string>Option（Windows 键盘模式）</string>
+	<key>Option</key>
+	<string>Option</string>
+	<key>Alt</key>
+	<string>Alt</string>
+	<key>The four logical modifier keys stay consistent in every local app. Terminal and iTerm keep native Command shortcuts and shell Control shortcuts; Ctrl+Shift+T/N/W/C/V/F are also available as Windows Terminal-style aliases.</key>
+	<string>四个逻辑修饰键在所有本机应用中保持一致。Terminal 和 iTerm 同时保留原生 Command 快捷键和 Shell Control 快捷键，并支持 Ctrl+Shift+T/N/W/C/V/F 作为 Windows Terminal 风格的快捷键。</string>
+	<key>WinTaskbar will replace %lld conflicting Karabiner mappings. The complete current configuration is backed up first.</key>
+	<string>WinTaskbar 将替换 %lld 条冲突的 Karabiner 映射；操作前会完整备份当前配置。</string>
+	<key>Disable and restore previous configuration</key>
+	<string>停用并恢复原配置</string>
+	<key>Enable Windows keyboard mode</key>
+	<string>启用 Windows 键盘模式</string>
+	<key>Refresh</key>
+	<string>刷新</string>
+	<key>Get Karabiner-Elements</key>
+	<string>获取 Karabiner-Elements</string>
+	<key>Default Windows shortcuts follow this setting. Shortcuts you record yourself keep their exact modifiers.</key>
+	<string>未单独修改的 Windows 默认快捷键会跟随此设置；你自行录制过的快捷键会保留原来的组合。</string>
+	<key>The physical Option key is always Win. Built-in shortcuts display Win; shortcuts you record yourself keep their exact modifiers.</key>
+	<string>实体 Option 键固定作为 Win。内置快捷键显示 Win；你自行录制的快捷键保留原来的组合。</string>
+	<key>Windows keyboard mode defaults to Option. Changing this selection also updates the Karabiner mapping.</key>
+	<string>Windows 键盘模式默认使用 Option；在这里切换按键时也会同步更新 Karabiner 映射。</string>
+	<key>Karabiner-Elements is not installed or has not created a configuration yet.</key>
+	<string>Karabiner-Elements 尚未安装，或还没有创建配置。</string>
+	<key>Karabiner-Elements configuration was not found.</key>
+	<string>找不到 Karabiner-Elements 配置。</string>
+	<key>Karabiner-Elements configuration is not valid JSON.</key>
+	<string>Karabiner-Elements 配置不是有效的 JSON。</string>
+	<key>Karabiner-Elements has no selected profile.</key>
+	<string>Karabiner-Elements 没有当前配置方案。</string>
+	<key>WinTaskbar's Karabiner recovery data is invalid.</key>
+	<string>WinTaskbar 的 Karabiner 恢复数据无效。</string>
+	<key>Karabiner settings changed after Windows keyboard mode was enabled. To protect those changes, WinTaskbar did not overwrite them. Original backup: %@</key>
+	<string>启用 Windows 键盘模式后，Karabiner 配置又发生了变化。为保护这些修改，WinTaskbar 没有覆盖配置。原始备份：%@</string>
 </dict>
 </plist>

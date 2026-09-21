@@ -444,5 +444,67 @@
 	<string>Time zone</string>
 	<key>URL</key>
 	<string>URL</string>
+	<key>Windows keyboard mode</key>
+	<string>Windows keyboard mode</string>
+	<key>Enabled through Karabiner-Elements</key>
+	<string>Enabled through Karabiner-Elements</string>
+	<key>Ready to configure Karabiner-Elements</key>
+	<string>Ready to configure Karabiner-Elements</string>
+	<key>Karabiner-Elements is required</key>
+	<string>Karabiner-Elements is required</string>
+	<key>Physical key</key>
+	<string>Physical key</string>
+	<key>macOS logical key</key>
+	<string>macOS logical key</string>
+	<key>Windows key</key>
+	<string>Windows key</string>
+	<key>Behavior</key>
+	<string>Behavior</string>
+	<key>Fn / Globe</key>
+	<string>Fn / Globe</string>
+	<key>Ctrl</key>
+	<string>Ctrl</string>
+	<key>Control</key>
+	<string>Control</string>
+	<key>Command</key>
+	<string>Command</string>
+	<key>Command + Option</key>
+	<string>Command + Option</string>
+	<key>Option (Windows keyboard mode)</key>
+	<string>Option (Windows keyboard mode)</string>
+	<key>Option</key>
+	<string>Option</string>
+	<key>Alt</key>
+	<string>Alt</string>
+	<key>The four logical modifier keys stay consistent in every local app. Terminal and iTerm keep native Command shortcuts and shell Control shortcuts; Ctrl+Shift+T/N/W/C/V/F are also available as Windows Terminal-style aliases.</key>
+	<string>The four logical modifier keys stay consistent in every local app. Terminal and iTerm keep native Command shortcuts and shell Control shortcuts; Ctrl+Shift+T/N/W/C/V/F are also available as Windows Terminal-style aliases.</string>
+	<key>WinTaskbar will replace %lld conflicting Karabiner mappings. The complete current configuration is backed up first.</key>
+	<string>WinTaskbar will replace %lld conflicting Karabiner mappings. The complete current configuration is backed up first.</string>
+	<key>Disable and restore previous configuration</key>
+	<string>Disable and restore previous configuration</string>
+	<key>Enable Windows keyboard mode</key>
+	<string>Enable Windows keyboard mode</string>
+	<key>Refresh</key>
+	<string>Refresh</string>
+	<key>Get Karabiner-Elements</key>
+	<string>Get Karabiner-Elements</string>
+	<key>Default Windows shortcuts follow this setting. Shortcuts you record yourself keep their exact modifiers.</key>
+	<string>Default Windows shortcuts follow this setting. Shortcuts you record yourself keep their exact modifiers.</string>
+	<key>The physical Option key is always Win. Built-in shortcuts display Win; shortcuts you record yourself keep their exact modifiers.</key>
+	<string>The physical Option key is always Win. Built-in shortcuts display Win; shortcuts you record yourself keep their exact modifiers.</string>
+	<key>Windows keyboard mode defaults to Option. Changing this selection also updates the Karabiner mapping.</key>
+	<string>Windows keyboard mode defaults to Option. Changing this selection also updates the Karabiner mapping.</string>
+	<key>Karabiner-Elements is not installed or has not created a configuration yet.</key>
+	<string>Karabiner-Elements is not installed or has not created a configuration yet.</string>
+	<key>Karabiner-Elements configuration was not found.</key>
+	<string>Karabiner-Elements configuration was not found.</string>
+	<key>Karabiner-Elements configuration is not valid JSON.</key>
+	<string>Karabiner-Elements configuration is not valid JSON.</string>
+	<key>Karabiner-Elements has no selected profile.</key>
+	<string>Karabiner-Elements has no selected profile.</string>
+	<key>WinTaskbar's Karabiner recovery data is invalid.</key>
+	<string>WinTaskbar's Karabiner recovery data is invalid.</string>
+	<key>Karabiner settings changed after Windows keyboard mode was enabled. To protect those changes, WinTaskbar did not overwrite them. Original backup: %@</key>
+	<string>Karabiner settings changed after Windows keyboard mode was enabled. To protect those changes, WinTaskbar did not overwrite them. Original backup: %@</string>
 </dict>
 </plist>

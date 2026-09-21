@@ -830,6 +830,7 @@ final class GlobalHotkeysService: ObservableObject {
 
     private static func carbonModifiers(_ flags: CGEventFlags) -> UInt32 {
         var result: UInt32 = 0
+        if flags.contains(.maskSecondaryFn) { result |= UInt32(kEventKeyModifierFnMask) }
         if flags.contains(.maskControl) { result |= UInt32(controlKey) }
         if flags.contains(.maskAlternate) { result |= UInt32(optionKey) }
         if flags.contains(.maskShift) { result |= UInt32(shiftKey) }
@@ -839,6 +840,7 @@ final class GlobalHotkeysService: ObservableObject {
 
     private static func carbonModifiers(_ flags: NSEvent.ModifierFlags) -> UInt32 {
         var result: UInt32 = 0
+        if flags.contains(.function) { result |= UInt32(kEventKeyModifierFnMask) }
         if flags.contains(.control) { result |= UInt32(controlKey) }
         if flags.contains(.option) { result |= UInt32(optionKey) }
         if flags.contains(.shift) { result |= UInt32(shiftKey) }

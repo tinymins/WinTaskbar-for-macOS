@@ -134,6 +134,7 @@ struct HotkeyShortcut: Codable, Hashable {
 
     var displayValue: String {
         var value = ""
+        if modifiers & UInt32(kEventKeyModifierFnMask) != 0 { value += "Fn+" }
         if modifiers & UInt32(controlKey) != 0 { value += "⌃" }
         if modifiers & UInt32(optionKey) != 0 { value += "⌥" }
         if modifiers & UInt32(shiftKey) != 0 { value += "⇧" }
@@ -142,14 +143,16 @@ struct HotkeyShortcut: Codable, Hashable {
     }
 }
 
-enum WindowsKeyMapping: String, Codable, CaseIterable, Identifiable {
+enum WindowsKeyMapping: String, Codable {
+    case function = "Fn / Globe"
+    case control = "Control"
     case option = "Option"
     case command = "Command"
 
-    var id: String { rawValue }
-
     var carbonModifier: UInt32 {
         switch self {
+        case .function: UInt32(kEventKeyModifierFnMask)
+        case .control: UInt32(controlKey)
         case .option: UInt32(optionKey)
         case .command: UInt32(cmdKey)
         }
@@ -157,6 +160,8 @@ enum WindowsKeyMapping: String, Codable, CaseIterable, Identifiable {
 
     var eventModifier: NSEvent.ModifierFlags {
         switch self {
+        case .function: .function
+        case .control: .control
         case .option: .option
         case .command: .command
         }
@@ -333,12 +338,17 @@ struct GlobalShortcutConfiguration: Codable, Hashable, Identifiable {
     func resolvedShortcut(mapping: WindowsKeyMapping) -> HotkeyShortcut {
         guard usesWindowsKey else { return shortcut }
         var resolved = shortcut
+        if mapping == .control, resolved.modifiers & UInt32(controlKey) != 0 {
+            resolved.modifiers &= ~UInt32(controlKey)
+            resolved.modifiers |= UInt32(cmdKey)
+        }
         resolved.modifiers |= mapping.carbonModifier
         return resolved
     }
 
     func displayValue(mapping: WindowsKeyMapping) -> String {
-        resolvedShortcut(mapping: mapping).displayValue
+        if usesWindowsKey { return windowsShortcutLabel }
+        return resolvedShortcut(mapping: mapping).displayValue
     }
 
     var validationIssue: String? {
@@ -583,6 +593,11 @@ enum GlobalShortcutCatalog {
             guard var storedConfiguration = storedByID[defaultConfiguration.id] else {
                 return defaultConfiguration
             }
+            if storedConfiguration.id == startMenuID,
+               !storedConfiguration.usesWindowsKey,
+               storedConfiguration.shortcut == temporaryManagedStartMenuShortcut {
+                storedConfiguration.shortcut = defaultConfiguration.shortcut
+            }
             if shouldMigrateLegacyTrigger(storedConfiguration, legacyShortcuts: legacyShortcuts) {
                 storedConfiguration.shortcut = defaultConfiguration.shortcut
                 storedConfiguration.usesWindowsKey = true
@@ -633,6 +648,12 @@ enum GlobalShortcutCatalog {
             HotkeyShortcut(keyCode: 25, modifiers: modifiers, keyLabel: "9")
         ]
     }()
+
+    private static let temporaryManagedStartMenuShortcut = HotkeyShortcut(
+        keyCode: 49,
+        modifiers: UInt32(cmdKey | optionKey | controlKey | shiftKey),
+        keyLabel: "Space"
+    )
 
     private static func configuration(
         id: String,
