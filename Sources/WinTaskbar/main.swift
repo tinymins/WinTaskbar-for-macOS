@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Carbon
 import Combine
 import EventKit
@@ -94,6 +95,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         globalHotkeysService.onAltTabGesture = { [weak self] action in
             self?.windowSwitcherController.handle(action)
+        }
+        windowActivationHistory.onWindowCreated = { [weak self] pid in
+            self?.windowSwitcherController.refreshWindowClassification(forPID: pid)
         }
         actions.showDesktopHandler = { [weak self] in self?.showDesktopService.toggle() }
         actions.powerHandler = { [weak self] action in self?.confirmAndPerform(action) }
@@ -2434,6 +2438,45 @@ func runSelfTest() async -> Int32 {
               accessibilityWindows: nil
           ) else {
         fputs("SELF-TEST FAILED: minimized window preview policy mismatch\n", stderr)
+        return 1
+    }
+
+    guard WindowPreviewWindowPolicy.shouldIncludeAccessibilityWindow(
+              role: kAXWindowRole,
+              subrole: kAXStandardWindowSubrole
+          ),
+          WindowPreviewWindowPolicy.shouldIncludeAccessibilityWindow(
+              role: kAXWindowRole,
+              subrole: kAXDialogSubrole
+          ),
+          WindowPreviewWindowPolicy.shouldIncludeAccessibilityWindow(
+              role: kAXWindowRole,
+              subrole: nil
+          ),
+          !WindowPreviewWindowPolicy.shouldIncludeAccessibilityWindow(
+              role: kAXWindowRole,
+              subrole: kAXSystemDialogSubrole
+          ),
+          !WindowPreviewWindowPolicy.shouldIncludeAccessibilityWindow(
+              role: kAXWindowRole,
+              subrole: kAXFloatingWindowSubrole
+          ),
+          !WindowPreviewWindowPolicy.shouldIncludeAccessibilityWindow(
+              role: kAXScrollAreaRole,
+              subrole: nil
+          ) else {
+        fputs("SELF-TEST FAILED: accessibility window role policy mismatch\n", stderr)
+        return 1
+    }
+
+    let refreshPlan = WindowSwitcherRefreshPlan.make(
+        windowIDs: [101, 202, 303],
+        cachedThumbnailWindowIDs: [101, 303],
+        cachedCapabilityWindowIDs: [101, 202]
+    )
+    guard refreshPlan.thumbnailWindowIDs == [202],
+          refreshPlan.capabilityWindowIDs == [303] else {
+        fputs("SELF-TEST FAILED: cached Alt-Tab windows scheduled for refresh\n", stderr)
         return 1
     }
 

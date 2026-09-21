@@ -403,10 +403,26 @@ private struct WindowSnapshotCandidate: Sendable {
     let isOnScreen: Bool
 }
 
+struct AccessibilityWindowSnapshot: Sendable {
+    let states: [CGWindowID: Bool]
+    let classifiedWindowIDs: Set<CGWindowID>
+}
+
+struct DetailedWindowSnapshot: Sendable {
+    let windows: [WindowInfo]
+    let accessibilitySnapshotsByPID: [pid_t: AccessibilityWindowSnapshot]
+}
+
+struct CachedWindowFilterResult {
+    let windows: [WindowInfo]
+    let hasUnclassifiedWindows: Bool
+}
+
 @MainActor
 final class WindowsService {
     private let thumbnailCache = WindowThumbnailCache()
     private var appearanceOrder = WindowAppearanceOrder()
+    private var accessibilitySnapshotsByPID: [pid_t: AccessibilityWindowSnapshot] = [:]
 
     func windows(forPID pid: pid_t) -> [WindowInfo] {
         windows(forPIDs: [pid])[pid] ?? []
@@ -435,16 +451,32 @@ final class WindowsService {
         }
     }
 
-    nonisolated static func detailedWindowsInFrontToBackOrder(forPIDs pids: [pid_t]) -> [WindowInfo] {
+    func filterUsingCachedAccessibility(_ windows: [WindowInfo]) -> CachedWindowFilterResult {
+        var hasUnclassifiedWindows = false
+        let filteredWindows = windows.filter { window in
+            guard let snapshot = accessibilitySnapshotsByPID[window.ownerPID],
+                  snapshot.classifiedWindowIDs.contains(window.windowID) else {
+                hasUnclassifiedWindows = true
+                return true
+            }
+            return snapshot.states[window.windowID] != nil
+        }
+        return CachedWindowFilterResult(
+            windows: filteredWindows,
+            hasUnclassifiedWindows: hasUnclassifiedWindows
+        )
+    }
+
+    nonisolated static func detailedWindowSnapshot(forPIDs pids: [pid_t]) -> DetailedWindowSnapshot {
         let candidates = windowCandidates(
             forPIDs: pids,
             options: WindowPreviewWindowPolicy.listOptions
         )
-        let statesByPID = Dictionary(uniqueKeysWithValues: Set(candidates.map(\.pid)).map { pid in
-            (pid, accessibilityWindowStates(forPID: pid))
-        })
-        return candidates.compactMap { candidate in
-            let states = statesByPID[candidate.pid] ?? nil
+        let snapshotsByPID = accessibilityWindowSnapshots(
+            forPIDs: Array(Set(candidates.map(\.pid)))
+        )
+        let windows: [WindowInfo] = candidates.compactMap { candidate in
+            let states = snapshotsByPID[candidate.pid]?.states
             guard WindowPreviewWindowPolicy.shouldInclude(
                 windowID: candidate.windowID,
                 isOnScreen: candidate.isOnScreen,
@@ -458,6 +490,14 @@ final class WindowsService {
                 isMinimized: states?[candidate.windowID] ?? false
             )
         }
+        return DetailedWindowSnapshot(
+            windows: windows,
+            accessibilitySnapshotsByPID: snapshotsByPID
+        )
+    }
+
+    func storeAccessibilityWindowSnapshots(_ snapshots: [pid_t: AccessibilityWindowSnapshot]) {
+        accessibilitySnapshotsByPID.merge(snapshots) { _, refreshed in refreshed }
     }
 
     private func windowSnapshot(
@@ -473,24 +513,25 @@ final class WindowsService {
             $0.map(\.windowID)
         }
 
-        var accessibilityWindowsByPID: [pid_t: [CGWindowID: Bool]] = [:]
-        for pid in observedWindowIDsByPID.keys {
-            accessibilityWindowsByPID[pid] = Self.accessibilityWindowStates(forPID: pid)
-        }
+        let refreshedSnapshots = Self.accessibilityWindowSnapshots(
+            forPIDs: Array(Set(candidates.map(\.pid)))
+        )
+        accessibilitySnapshotsByPID.merge(refreshedSnapshots) { _, refreshed in refreshed }
         var windowsByPID: [pid_t: [WindowInfo]] = [:]
         var frontToBackWindows: [WindowInfo] = []
         for candidate in candidates {
+            let states = refreshedSnapshots[candidate.pid]?.states
             guard WindowPreviewWindowPolicy.shouldInclude(
                 windowID: candidate.windowID,
                 isOnScreen: candidate.isOnScreen,
-                accessibilityWindows: accessibilityWindowsByPID[candidate.pid]
+                accessibilityWindows: states
             ) else { continue }
             let window = WindowInfo(
                 windowID: candidate.windowID,
                 title: candidate.title,
                 ownerPID: candidate.pid,
                 frame: candidate.frame,
-                isMinimized: accessibilityWindowsByPID[candidate.pid]?[candidate.windowID] ?? false
+                isMinimized: states?[candidate.windowID] ?? false
             )
             windowsByPID[candidate.pid, default: []].append(window)
             frontToBackWindows.append(window)
@@ -583,9 +624,9 @@ final class WindowsService {
         }
     }
 
-    nonisolated private static func accessibilityWindowStates(
+    nonisolated private static func accessibilityWindowSnapshot(
         forPID pid: pid_t
-    ) -> [CGWindowID: Bool]? {
+    ) -> AccessibilityWindowSnapshot? {
         guard AccessibilityWindowIdentity.isAvailable else { return nil }
         let application = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(application, 0.1)
@@ -594,23 +635,48 @@ final class WindowsService {
               let windows = rawWindows as? [AXUIElement] else { return nil }
         let names = [kAXRoleAttribute, kAXSubroleAttribute, kAXMinimizedAttribute] as CFArray
         var states: [CGWindowID: Bool] = [:]
+        var classifiedWindowIDs: Set<CGWindowID> = []
         for window in windows {
             AXUIElementSetMessagingTimeout(window, 0.1)
             var rawValues: CFArray?
             guard AXUIElementCopyMultipleAttributeValues(window, names, [], &rawValues) == .success,
                   let values = rawValues as? [Any], values.count == 3 else { return nil }
-            guard values[0] as? String == kAXWindowRole else { continue }
+            let role = values[0] as? String
             let subrole = values[1] as? String
-            guard subrole != kAXFloatingWindowSubrole else { continue }
+            guard role == kAXWindowRole else { continue }
             guard let windowID = AccessibilityWindowIdentity.windowID(of: window) else { return nil }
+            classifiedWindowIDs.insert(windowID)
+            guard WindowPreviewWindowPolicy.shouldIncludeAccessibilityWindow(
+                role: role,
+                subrole: subrole
+            ) else { continue }
             states[windowID] = values[2] as? Bool ?? false
         }
-        return states
+        return AccessibilityWindowSnapshot(
+            states: states,
+            classifiedWindowIDs: classifiedWindowIDs
+        )
+    }
+
+    nonisolated private static func accessibilityWindowSnapshots(
+        forPIDs pids: [pid_t]
+    ) -> [pid_t: AccessibilityWindowSnapshot] {
+        var snapshots: [pid_t: AccessibilityWindowSnapshot] = [:]
+        for pid in pids {
+            guard let snapshot = accessibilityWindowSnapshot(forPID: pid) else { continue }
+            snapshots[pid] = snapshot
+        }
+        return snapshots
     }
 }
 
 struct WindowPreviewWindowPolicy {
     static let listOptions: CGWindowListOption = [.excludeDesktopElements]
+
+    static func shouldIncludeAccessibilityWindow(role: String?, subrole: String?) -> Bool {
+        guard role == kAXWindowRole else { return false }
+        return subrole != kAXFloatingWindowSubrole && subrole != kAXSystemDialogSubrole
+    }
 
     static func shouldInclude(
         windowID: CGWindowID,

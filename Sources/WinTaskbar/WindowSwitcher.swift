@@ -43,6 +43,16 @@ private let focusedWindowChangedCallback: AXObserverCallback = { _, element, _, 
     }
 }
 
+private let windowCreatedCallback: AXObserverCallback = { _, element, _, context in
+    guard let context else { return }
+    let history = Unmanaged<WindowActivationHistory>.fromOpaque(context).takeUnretainedValue()
+    var pid: pid_t = 0
+    guard AXUIElementGetPid(element, &pid) == .success else { return }
+    MainActor.assumeIsolated {
+        history.onWindowCreated?(pid)
+    }
+}
+
 @MainActor
 final class WindowActivationHistory {
     private struct Observation {
@@ -57,6 +67,7 @@ final class WindowActivationHistory {
     private var isStarted = false
     private var focusedWindowCaptureTask: Task<Void, Never>?
     private var focusedWindowCaptureGeneration = 0
+    var onWindowCreated: ((pid_t) -> Void)?
 
     init(workspace: NSWorkspace = .shared) {
         self.workspace = workspace
@@ -202,6 +213,12 @@ final class WindowActivationHistory {
             kAXFocusedWindowChangedNotification as CFString,
             context
         ) == .success else { return }
+        _ = AXObserverAddNotification(
+            observer,
+            applicationElement,
+            kAXWindowCreatedNotification as CFString,
+            context
+        )
         let source = AXObserverGetRunLoopSource(observer)
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         observations[pid] = Observation(observer: observer, source: source)
@@ -541,6 +558,23 @@ private struct WindowSwitcherRefreshResult: @unchecked Sendable {
     let controlCapabilities: [CGWindowID: WindowControlCapabilities]
 }
 
+struct WindowSwitcherRefreshPlan: Equatable {
+    let thumbnailWindowIDs: Set<CGWindowID>
+    let capabilityWindowIDs: Set<CGWindowID>
+
+    static func make(
+        windowIDs: [CGWindowID],
+        cachedThumbnailWindowIDs: Set<CGWindowID>,
+        cachedCapabilityWindowIDs: Set<CGWindowID>
+    ) -> WindowSwitcherRefreshPlan {
+        let presentedWindowIDs = Set(windowIDs)
+        return WindowSwitcherRefreshPlan(
+            thumbnailWindowIDs: presentedWindowIDs.subtracting(cachedThumbnailWindowIDs),
+            capabilityWindowIDs: presentedWindowIDs.subtracting(cachedCapabilityWindowIDs)
+        )
+    }
+}
+
 @MainActor
 private final class WindowSwitcherSelectionModel: ObservableObject {
     @Published var windowID: CGWindowID?
@@ -576,6 +610,8 @@ final class WindowSwitcherPanelController {
     private var detailedWindowsCache: [WindowInfo] = []
     private var detailedWindowsCacheDate = Date.distantPast
     private var controlCapabilitiesCache: [CGWindowID: WindowControlCapabilities] = [:]
+    private var needsWindowCacheRefresh = false
+    private var windowClassificationTasks: [pid_t: Task<Void, Never>] = [:]
 
     init(
         windowsService: WindowsService,
@@ -644,12 +680,38 @@ final class WindowSwitcherPanelController {
     func deactivate() {
         activationTask?.cancel()
         activationTask = nil
+        refreshTask?.cancel()
+        refreshTask = nil
         windowCacheTask?.cancel()
         windowCacheTask = nil
+        for task in windowClassificationTasks.values { task.cancel() }
+        windowClassificationTasks = [:]
         detailedWindowsCache = []
         detailedWindowsCacheDate = .distantPast
         controlCapabilitiesCache = [:]
+        needsWindowCacheRefresh = false
         dismiss()
+    }
+
+    func refreshWindowClassification(forPID pid: pid_t) {
+        windowClassificationTasks[pid]?.cancel()
+        windowClassificationTasks[pid] = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled else { return }
+            let worker = Task.detached(priority: .utility) {
+                WindowsService.detailedWindowSnapshot(forPIDs: [pid])
+            }
+            let snapshot = await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.windowsService.storeAccessibilityWindowSnapshots(
+                snapshot.accessibilitySnapshotsByPID
+            )
+            self.windowClassificationTasks.removeValue(forKey: pid)
+        }
     }
 
     private func present(reverse: Bool) {
@@ -659,7 +721,6 @@ final class WindowSwitcherPanelController {
         activationTask = nil
         presentationWorkItem?.cancel()
         presentationWorkItem = nil
-        refreshTask?.cancel()
         presentationID &+= 1
         let currentPresentationID = presentationID
         let applications = workspace.runningApplications.filter {
@@ -672,10 +733,12 @@ final class WindowSwitcherPanelController {
         let visibleWindows = WindowsService.visibleWindowsInFrontToBackOrder(
             forPIDs: applicationPIDs
         )
+        let cachedFilter = windowsService.filterUsingCachedAccessibility(visibleWindows)
+        needsWindowCacheRefresh = cachedFilter.hasUnclassifiedWindows
         let cacheIsFresh = Date().timeIntervalSince(detailedWindowsCacheDate)
             <= WindowSwitcherWindowList.detailedCacheLifetime
         let frontToBackWindows = WindowSwitcherWindowList.initialWindows(
-            visibleWindows: visibleWindows,
+            visibleWindows: cachedFilter.windows,
             cachedWindows: detailedWindowsCache,
             activePIDs: Set(applicationPIDs),
             usesDetailedCache: cacheIsFresh
@@ -704,7 +767,6 @@ final class WindowSwitcherPanelController {
                   !self.windows.isEmpty else { return }
             self.presentationWorkItem = nil
             self.showPresentation(
-                applicationPIDs: applicationPIDs,
                 presentationID: currentPresentationID
             )
         }
@@ -715,7 +777,7 @@ final class WindowSwitcherPanelController {
         )
     }
 
-    private func showPresentation(applicationPIDs: [pid_t], presentationID: UInt) {
+    private func showPresentation(presentationID: UInt) {
         let startedAt = AltTabDiagnostics.timestamp()
         let screen = screenAtMouseLocation() ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
@@ -728,7 +790,6 @@ final class WindowSwitcherPanelController {
         AltTabDiagnostics.logger.notice(
             "presentation=\(presentationID, privacy: .public) panel-shown durationMs=\(AltTabDiagnostics.milliseconds(since: startedAt), privacy: .public)"
         )
-        refreshWindowCache(forPIDs: applicationPIDs)
         refreshPresentation(
             windows: windows,
             presentationID: presentationID
@@ -775,6 +836,7 @@ final class WindowSwitcherPanelController {
                   self.activationGeneration == currentActivationGeneration,
                   !self.panel.isVisible else { return }
             activationService.activateApplication(for: selectedWindow)
+            self.refreshWindowCacheIfNeeded()
             self.activationTask = nil
         }
     }
@@ -855,24 +917,50 @@ final class WindowSwitcherPanelController {
         windowCacheTask?.cancel()
         windowCacheTask = Task { @MainActor [weak self] in
             let worker = Task.detached(priority: .utility) {
-                WindowsService.detailedWindowsInFrontToBackOrder(forPIDs: pids)
+                WindowsService.detailedWindowSnapshot(forPIDs: pids)
             }
-            let windows = await withTaskCancellationHandler {
+            let snapshot = await withTaskCancellationHandler {
                 await worker.value
             } onCancel: {
                 worker.cancel()
             }
             guard let self, !Task.isCancelled else { return }
-            self.detailedWindowsCache = windows
+            self.windowsService.storeAccessibilityWindowSnapshots(
+                snapshot.accessibilitySnapshotsByPID
+            )
+            self.detailedWindowsCache = snapshot.windows
             self.detailedWindowsCacheDate = Date()
+            self.needsWindowCacheRefresh = false
             self.windowCacheTask = nil
         }
+    }
+
+    private func refreshWindowCacheIfNeeded() {
+        let cacheIsStale = Date().timeIntervalSince(detailedWindowsCacheDate)
+            > WindowSwitcherWindowList.detailedCacheLifetime
+        guard needsWindowCacheRefresh || cacheIsStale else { return }
+        prewarm()
     }
 
     private func refreshPresentation(
         windows presentedWindows: [WindowInfo],
         presentationID: UInt
     ) {
+        guard refreshTask == nil else { return }
+        let refreshPlan = WindowSwitcherRefreshPlan.make(
+            windowIDs: presentedWindows.map(\.windowID),
+            cachedThumbnailWindowIDs: Set(thumbnails.keys).union(
+                presentedWindows.lazy.filter(\.isMinimized).map(\.windowID)
+            ),
+            cachedCapabilityWindowIDs: Set(controlCapabilities.keys)
+        )
+        guard !refreshPlan.thumbnailWindowIDs.isEmpty
+                || !refreshPlan.capabilityWindowIDs.isEmpty else {
+            AltTabDiagnostics.logger.notice(
+                "presentation=\(presentationID, privacy: .public) refresh-skipped cache-hit windows=\(presentedWindows.count, privacy: .public)"
+            )
+            return
+        }
         let activationService = activationService
         refreshTask = Task { @MainActor [weak self] in
             let worker = Task.detached(priority: .userInitiated) {
@@ -881,14 +969,17 @@ final class WindowSwitcherPanelController {
                 var capabilities: [CGWindowID: WindowControlCapabilities] = [:]
                 for window in presentedWindows {
                     guard !Task.isCancelled else { break }
-                    if let image = WindowsService.captureThumbnailImage(for: window) {
+                    if refreshPlan.thumbnailWindowIDs.contains(window.windowID),
+                       let image = WindowsService.captureThumbnailImage(for: window) {
                         capturedThumbnails.append(WindowSwitcherCapturedThumbnail(
                             windowID: window.windowID,
                             image: image
                         ))
                     }
                     guard !Task.isCancelled else { break }
-                    capabilities[window.windowID] = activationService.controlCapabilities(for: window)
+                    if refreshPlan.capabilityWindowIDs.contains(window.windowID) {
+                        capabilities[window.windowID] = activationService.controlCapabilities(for: window)
+                    }
                 }
                 AltTabDiagnostics.logger.notice(
                     "presentation=\(presentationID, privacy: .public) refresh-worker-finished thumbnails=\(capturedThumbnails.count, privacy: .public) durationMs=\(AltTabDiagnostics.milliseconds(since: startedAt), privacy: .public)"
@@ -903,22 +994,30 @@ final class WindowSwitcherPanelController {
             } onCancel: {
                 worker.cancel()
             }
-            guard let self,
-                  !Task.isCancelled,
-                  self.panel.isVisible,
-                  self.presentationID == presentationID else { return }
-
-            let applyStartedAt = AltTabDiagnostics.timestamp()
-            let currentWindowIDs = Set(self.windows.map(\.windowID))
-            for capture in result.thumbnails where currentWindowIDs.contains(capture.windowID) {
+            guard let self else { return }
+            guard !Task.isCancelled else {
+                self.refreshTask = nil
+                return
+            }
+            var refreshedImages: [CGWindowID: NSImage] = [:]
+            for capture in result.thumbnails {
                 let image = NSImage(
                     cgImage: capture.image,
                     size: NSSize(width: capture.image.width, height: capture.image.height)
                 )
                 self.windowsService.storeThumbnail(image, for: capture.windowID)
-                self.thumbnails[capture.windowID] = image
+                refreshedImages[capture.windowID] = image
             }
             self.controlCapabilitiesCache.merge(result.controlCapabilities) { _, refreshed in refreshed }
+            self.refreshTask = nil
+            guard self.panel.isVisible,
+                  self.presentationID == presentationID else { return }
+
+            let applyStartedAt = AltTabDiagnostics.timestamp()
+            let currentWindowIDs = Set(self.windows.map(\.windowID))
+            for (windowID, image) in refreshedImages where currentWindowIDs.contains(windowID) {
+                self.thumbnails[windowID] = image
+            }
             self.controlCapabilities = self.controlCapabilitiesCache.filter {
                 currentWindowIDs.contains($0.key)
             }
@@ -926,7 +1025,6 @@ final class WindowSwitcherPanelController {
             AltTabDiagnostics.logger.notice(
                 "presentation=\(presentationID, privacy: .public) refresh-applied durationMs=\(AltTabDiagnostics.milliseconds(since: applyStartedAt), privacy: .public)"
             )
-            self.refreshTask = nil
         }
     }
 
@@ -934,8 +1032,6 @@ final class WindowSwitcherPanelController {
         let startedAt = AltTabDiagnostics.timestamp()
         presentationWorkItem?.cancel()
         presentationWorkItem = nil
-        refreshTask?.cancel()
-        refreshTask = nil
         presentationID &+= 1
         removeMouseMonitors()
         panel.orderOut(nil)
