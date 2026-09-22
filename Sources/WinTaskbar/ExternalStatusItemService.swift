@@ -532,6 +532,26 @@ private enum ExternalStatusItemDiscovery {
 
 @MainActor
 final class ExternalStatusItemService: NSObject, ObservableObject {
+    private struct ClickTarget {
+        let windowID: CGWindowID
+        let ownerProcessIdentifier: pid_t
+        let frame: CGRect
+    }
+
+    private struct WindowReactionState: Equatable {
+        let windowID: CGWindowID
+        let ownerProcessIdentifier: pid_t
+        let layer: Int
+        let frame: CGRect
+        let isOnScreen: Bool
+    }
+
+    private struct ActivationSnapshot: Equatable {
+        let windows: [WindowReactionState]
+        let imageFingerprint: UInt64?
+        let accessibilitySignature: String
+    }
+
     @Published private(set) var items: [ExternalStatusItem] = []
     @Published private(set) var layout: ExternalStatusItemLayout
     private(set) var isEnabled = false
@@ -692,20 +712,20 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         }
         let element = liveElement(for: item, cachedElement: cachedElement) ?? cachedElement
         let sourceFrame = frame(of: element) ?? item.sourceFrame
-        if let sourcePoint {
+        let target = liveClickTarget(for: item, sourceFrame: sourceFrame)
+        let activationPoint: CGPoint
+        if let sourcePoint, let target {
             let horizontalProgress = item.sourceFrame.width > 0
                 ? (sourcePoint.x - item.sourceFrame.minX) / item.sourceFrame.width
                 : 0.5
-            let liveSourcePoint = CGPoint(
-                x: sourceFrame.minX + horizontalProgress * sourceFrame.width,
-                y: sourceFrame.midY
+            activationPoint = CGPoint(
+                x: target.frame.minX + horizontalProgress * target.frame.width,
+                y: target.frame.midY
             )
-            postClick(
-                at: liveSourcePoint,
-                processIdentifier: item.processIdentifier,
-                windowID: liveStatusItemWindowID(for: item, sourceFrame: sourceFrame)
-            )
-            return
+        } else if let target {
+            activationPoint = CGPoint(x: target.frame.midX, y: target.frame.midY)
+        } else {
+            activationPoint = CGPoint(x: sourceFrame.midX, y: sourceFrame.midY)
         }
         if presentMirroredMenu(
             for: element,
@@ -715,54 +735,83 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
             return
         }
 
-        let result = AXUIElementPerformAction(element, kAXPressAction as CFString)
-        if result == .success || result == .cannotComplete { return }
-
-        if let windowID = liveStatusItemWindowID(for: item, sourceFrame: sourceFrame) {
-            postClick(
-                at: CGPoint(x: sourceFrame.midX, y: sourceFrame.midY),
-                processIdentifier: item.processIdentifier,
-                windowID: windowID
-            )
+        guard let target else {
+            performAccessibilityFallback(element: element, item: item)
             return
         }
-        activateApplication(processIdentifier: item.processIdentifier)
+        Task { [weak self] in
+            guard let self else { return }
+            let snapshot = activationSnapshot(for: item, element: element, target: target)
+            await postClick(at: activationPoint, target: target)
+            try? await Task.sleep(for: .milliseconds(250))
+            guard activationSnapshot(for: item, element: element, target: target) == snapshot else {
+                return
+            }
+            performAccessibilityFallback(element: element, item: item)
+        }
     }
 
-    private func postClick(
-        at point: CGPoint,
-        processIdentifier: pid_t,
-        windowID: CGWindowID?
-    ) {
-        let source = CGEventSource(stateID: .hidSystemState)
-        let mouseDown = CGEvent(
-            mouseEventSource: source,
-            mouseType: .leftMouseDown,
-            mouseCursorPosition: point,
-            mouseButton: .left
+    private func postClick(at point: CGPoint, target: ClickTarget) async {
+        guard let source = CGEventSource(stateID: .hidSystemState),
+              let originalPointerLocation = CGEvent(source: nil)?.location else { return }
+        let suppressionSource = CGEventSource(stateID: .combinedSessionState)
+        let permitAll: CGEventFilterMask = [
+            .permitLocalMouseEvents,
+            .permitLocalKeyboardEvents,
+            .permitSystemDefinedEvents,
+        ]
+        suppressionSource?.setLocalEventsFilterDuringSuppressionState(
+            permitAll,
+            state: .eventSuppressionStateRemoteMouseDrag
         )
-        let mouseUp = CGEvent(
-            mouseEventSource: source,
-            mouseType: .leftMouseUp,
-            mouseCursorPosition: point,
-            mouseButton: .left
+        suppressionSource?.setLocalEventsFilterDuringSuppressionState(
+            permitAll,
+            state: .eventSuppressionStateSuppressionInterval
         )
-        for event in [mouseDown, mouseUp].compactMap({ $0 }) {
+        suppressionSource?.localEventsSuppressionInterval = 0
+
+        CGWarpMouseCursorPosition(point)
+        try? await Task.sleep(for: .milliseconds(10))
+        CGDisplayHideCursor(CGMainDisplayID())
+        defer {
+            CGWarpMouseCursorPosition(originalPointerLocation)
+            CGDisplayShowCursor(CGMainDisplayID())
+        }
+
+        for type in [CGEventType.leftMouseDown, .leftMouseUp, .leftMouseUp] {
+            guard let event = CGEvent(
+                mouseEventSource: source,
+                mouseType: type,
+                mouseCursorPosition: point,
+                mouseButton: .left
+            ) else { continue }
             event.setIntegerValueField(
                 .eventTargetUnixProcessID,
-                value: Int64(processIdentifier)
+                value: Int64(target.ownerProcessIdentifier)
             )
-            if let windowID {
-                event.setIntegerValueField(
-                    .mouseEventWindowUnderMousePointer,
-                    value: Int64(windowID)
-                )
-                event.setIntegerValueField(
-                    .mouseEventWindowUnderMousePointerThatCanHandleThisEvent,
-                    value: Int64(windowID)
-                )
-            }
-            event.postToPid(processIdentifier)
+            event.setIntegerValueField(
+                .mouseEventWindowUnderMousePointer,
+                value: Int64(target.windowID)
+            )
+            event.setIntegerValueField(
+                .mouseEventWindowUnderMousePointerThatCanHandleThisEvent,
+                value: Int64(target.windowID)
+            )
+            event.setIntegerValueField(
+                .mouseEventClickState,
+                value: type == .leftMouseDown ? 1 : 0
+            )
+            event.post(tap: .cgSessionEventTap)
+        }
+    }
+
+    private func performAccessibilityFallback(
+        element: AXUIElement,
+        item: ExternalStatusItem
+    ) {
+        let result = AXUIElementPerformAction(element, kAXPressAction as CFString)
+        if result != .success, result != .cannotComplete {
+            activateApplication(processIdentifier: item.processIdentifier)
         }
     }
 
@@ -829,27 +878,94 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         return CGRect(origin: position, size: size)
     }
 
-    private func liveStatusItemWindowID(
+    private func liveClickTarget(
         for item: ExternalStatusItem,
         sourceFrame: CGRect
-    ) -> CGWindowID? {
-        guard let controlCenterProcessIdentifier,
-              let rawWindows = CGWindowListCopyWindowInfo(
+    ) -> ClickTarget? {
+        guard let rawWindows = CGWindowListCopyWindowInfo(
                   [.optionOnScreenOnly, .excludeDesktopElements],
                   kCGNullWindowID
-              ) as? [[String: Any]] else { return item.captureWindowID }
-        let matches = rawWindows.compactMap { window -> StatusItemWindow? in
-            guard window[kCGWindowOwnerPID as String] as? pid_t == controlCenterProcessIdentifier,
-                  window[kCGWindowLayer as String] as? Int == 25,
+              ) as? [[String: Any]] else { return nil }
+        let matches = rawWindows.compactMap { window -> ClickTarget? in
+            guard window[kCGWindowLayer as String] as? Int == 25,
                   let id = window[kCGWindowNumber as String] as? CGWindowID,
+                  let ownerProcessIdentifier = window[kCGWindowOwnerPID as String] as? pid_t,
                   let bounds = window[kCGWindowBounds as String] as? NSDictionary,
                   let frame = CGRect(dictionaryRepresentation: bounds),
                   frame.minX <= sourceFrame.midX,
                   frame.maxX >= sourceFrame.midX else { return nil }
-            return StatusItemWindow(id: id, frame: frame)
+            return ClickTarget(
+                windowID: id,
+                ownerProcessIdentifier: ownerProcessIdentifier,
+                frame: frame
+            )
         }
-        return matches.min(by: { $0.frame.width < $1.frame.width })?.id
-            ?? item.captureWindowID
+        return matches.first(where: { $0.windowID == item.captureWindowID })
+            ?? matches.min(by: { $0.frame.width < $1.frame.width })
+    }
+
+    private func activationSnapshot(
+        for item: ExternalStatusItem,
+        element: AXUIElement,
+        target: ClickTarget
+    ) -> ActivationSnapshot {
+        let ownerProcessIdentifiers = Set([
+            item.processIdentifier,
+            target.ownerProcessIdentifier,
+        ])
+        let rawWindows = CGWindowListCopyWindowInfo(
+            [.optionAll, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]] ?? []
+        let windows = rawWindows.compactMap { window -> WindowReactionState? in
+            guard let ownerProcessIdentifier = window[kCGWindowOwnerPID as String] as? pid_t,
+                  ownerProcessIdentifiers.contains(ownerProcessIdentifier),
+                  let windowID = window[kCGWindowNumber as String] as? CGWindowID,
+                  let layer = window[kCGWindowLayer as String] as? Int,
+                  let bounds = window[kCGWindowBounds as String] as? NSDictionary,
+                  let frame = CGRect(dictionaryRepresentation: bounds) else { return nil }
+            return WindowReactionState(
+                windowID: windowID,
+                ownerProcessIdentifier: ownerProcessIdentifier,
+                layer: layer,
+                frame: frame,
+                isOnScreen: window[kCGWindowIsOnscreen as String] as? Bool ?? false
+            )
+        }.sorted { $0.windowID < $1.windowID }
+        let title: String = attribute(element, kAXTitleAttribute) ?? ""
+        let description: String = attribute(element, kAXDescriptionAttribute) ?? ""
+        let help: String = attribute(element, kAXHelpAttribute) ?? ""
+        let signature = [
+            title,
+            description,
+            help,
+            String(children(of: element).count),
+        ].joined(separator: "\u{1F}")
+        return ActivationSnapshot(
+            windows: windows,
+            imageFingerprint: imageFingerprint(windowID: target.windowID),
+            accessibilitySignature: signature
+        )
+    }
+
+    private func imageFingerprint(windowID: CGWindowID) -> UInt64? {
+        guard let image = CGWindowListCreateImage(
+                  .null,
+                  .optionIncludingWindow,
+                  windowID,
+                  [.boundsIgnoreFraming, .bestResolution]
+              ),
+              let data = image.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else { return nil }
+        let length = CFDataGetLength(data)
+        guard length > 0 else { return nil }
+        let stride = max(1, length / 512)
+        var digest: UInt64 = 14_695_981_039_346_656_037
+        for offset in Swift.stride(from: 0, to: length, by: stride) {
+            digest ^= UInt64(bytes[offset])
+            digest &*= 1_099_511_628_211
+        }
+        return digest
     }
 
     private func postClick(at point: CGPoint) {
