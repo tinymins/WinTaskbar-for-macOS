@@ -293,6 +293,57 @@ private final class ExternalStatusMenuAction: NSObject {
     }
 }
 
+@MainActor
+private final class ExternalStatusItemCursorProxy {
+    private let window: NSPanel
+
+    init?(at location: CGPoint) {
+        let cursor = NSCursor.current
+        let image = cursor.image
+        let size = image.size
+        guard size.width > 0, size.height > 0 else { return nil }
+
+        let hotSpot = cursor.hotSpot
+        let frame = CGRect(
+            x: location.x - hotSpot.x,
+            y: location.y - size.height + hotSpot.y,
+            width: size.width,
+            height: size.height
+        )
+        window = NSPanel(
+            contentRect: frame,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = false
+        window.ignoresMouseEvents = true
+        window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.cursorWindow)) + 1)
+        window.collectionBehavior = [
+            .canJoinAllSpaces,
+            .stationary,
+            .ignoresCycle,
+            .fullScreenAuxiliary,
+        ]
+        let imageView = NSImageView(frame: CGRect(origin: .zero, size: size))
+        imageView.image = image
+        imageView.imageScaling = .scaleNone
+        window.contentView = imageView
+    }
+
+    func show() {
+        window.orderFrontRegardless()
+        window.display()
+    }
+
+    func close() {
+        window.orderOut(nil)
+        window.close()
+    }
+}
+
 enum ExternalStatusItemPolicy {
     static func shouldInspectApplication(
         processIdentifier: pid_t,
@@ -791,7 +842,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
 
     func performPrimaryAction(
         _ item: ExternalStatusItem,
-        sourcePoint _: CGPoint? = nil,
+        sourcePoint: CGPoint? = nil,
         anchorRect: CGRect? = nil,
         taskbarPosition: TaskbarPosition? = nil
     ) {
@@ -803,6 +854,20 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         let element = liveElement(for: item, cachedElement: cachedElement) ?? cachedElement
         let sourceFrame = frame(of: element) ?? item.sourceFrame
         let target = liveClickTarget(for: item, sourceFrame: sourceFrame)
+        let activationPoint: CGPoint
+        if let sourcePoint, let target {
+            let horizontalProgress = item.sourceFrame.width > 0
+                ? (sourcePoint.x - item.sourceFrame.minX) / item.sourceFrame.width
+                : 0.5
+            activationPoint = CGPoint(
+                x: target.frame.minX + horizontalProgress * target.frame.width,
+                y: target.frame.midY
+            )
+        } else if let target {
+            activationPoint = CGPoint(x: target.frame.midX, y: target.frame.midY)
+        } else {
+            activationPoint = CGPoint(x: sourceFrame.midX, y: sourceFrame.midY)
+        }
         let resolvedAnchor = anchorRect ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
         if presentMirroredMenu(
             for: element,
@@ -814,8 +879,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
 
         guard let target else {
             activationLogger.notice("tray activation has no live window target")
-            let result = AXUIElementPerformAction(element, kAXPressAction as CFString)
-            if result != .success, result != .cannotComplete { NSSound.beep() }
+            NSSound.beep()
             return
         }
         Task { [weak self] in
@@ -824,12 +888,8 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
                 "tray activation sourcePID=\(item.processIdentifier) ownerPID=\(target.ownerProcessIdentifier) window=\(target.windowID)"
             )
             let snapshot = activationSnapshot(for: item, target: target)
-            let accessibilityResult = AXUIElementPerformAction(
-                element,
-                kAXPressAction as CFString
-            )
-            guard accessibilityResult == .success || accessibilityResult == .cannotComplete else {
-                activationLogger.error("tray AX rejected result=\(accessibilityResult.rawValue)")
+            guard await postNativeClick(at: activationPoint, target: target) else {
+                activationLogger.error("tray native click could not be posted")
                 NSSound.beep()
                 return
             }
@@ -842,21 +902,103 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
                 taskbarPosition: taskbarPosition
             ) {
             case .completed:
-                activationLogger.notice("tray AX accepted and reaction observed")
+                activationLogger.notice("tray native click posted and reaction observed")
                 finishActivation(
                     element: element,
                     anchor: resolvedAnchor,
                     taskbarPosition: taskbarPosition
                 )
             case .unmovablePopup:
-                activationLogger.error("tray AX opened a popup that could not be relocated")
+                activationLogger.error("tray native click opened a popup that could not be relocated")
                 NSSound.beep()
             case .noReaction:
-                // A successful AXPress may toggle owner state without creating a
-                // window. Do not issue a second activation that could undo it.
-                activationLogger.notice("tray AX accepted without observable window reaction")
+                activationLogger.notice("tray native click posted without observable window reaction")
             }
         }
+    }
+
+    private func postNativeClick(
+        at point: CGPoint,
+        target: ClickTarget
+    ) async -> Bool {
+        guard target.frame.contains(point),
+              let originalPointerLocation = CGEvent(source: nil)?.location,
+              let source = CGEventSource(stateID: .hidSystemState) else { return false }
+
+        let eventTypes: [CGEventType] = [.leftMouseDown, .leftMouseUp, .leftMouseUp]
+        let events = eventTypes.compactMap { type -> CGEvent? in
+            guard let event = CGEvent(
+                mouseEventSource: source,
+                mouseType: type,
+                mouseCursorPosition: point,
+                mouseButton: .left
+            ) else { return nil }
+            event.flags = []
+            event.setIntegerValueField(
+                .eventTargetUnixProcessID,
+                value: Int64(target.ownerProcessIdentifier)
+            )
+            event.setIntegerValueField(
+                .mouseEventWindowUnderMousePointer,
+                value: Int64(target.windowID)
+            )
+            event.setIntegerValueField(
+                .mouseEventWindowUnderMousePointerThatCanHandleThisEvent,
+                value: Int64(target.windowID)
+            )
+            event.setIntegerValueField(
+                .mouseEventClickState,
+                value: type == .leftMouseDown ? 1 : 0
+            )
+            return event
+        }
+        guard events.count == eventTypes.count else { return false }
+
+        let suppressionSource = CGEventSource(stateID: .combinedSessionState)
+        let permitAll: CGEventFilterMask = [
+            .permitLocalMouseEvents,
+            .permitLocalKeyboardEvents,
+            .permitSystemDefinedEvents,
+        ]
+        suppressionSource?.setLocalEventsFilterDuringSuppressionState(
+            permitAll,
+            state: .eventSuppressionStateRemoteMouseDrag
+        )
+        suppressionSource?.setLocalEventsFilterDuringSuppressionState(
+            permitAll,
+            state: .eventSuppressionStateSuppressionInterval
+        )
+        suppressionSource?.localEventsSuppressionInterval = 0
+
+        let cursorProxy = ExternalStatusItemCursorProxy(at: NSEvent.mouseLocation)
+        cursorProxy?.show()
+        try? await Task.sleep(for: .milliseconds(16))
+
+        let displayID = displayID(at: NSEvent.mouseLocation)
+        let cursorHidden = CGDisplayHideCursor(displayID) == .success
+        CGWarpMouseCursorPosition(point)
+        try? await Task.sleep(for: .milliseconds(10))
+        for (index, event) in events.enumerated() {
+            event.post(tap: .cgSessionEventTap)
+            if index == 0 { try? await Task.sleep(for: .milliseconds(2)) }
+        }
+        try? await Task.sleep(for: .milliseconds(24))
+        CGWarpMouseCursorPosition(originalPointerLocation)
+        try? await Task.sleep(for: .milliseconds(16))
+        if cursorHidden { CGDisplayShowCursor(displayID) }
+        cursorProxy?.close()
+
+        guard let restoredPointerLocation = CGEvent(source: nil)?.location else { return false }
+        return abs(restoredPointerLocation.x - originalPointerLocation.x) < 0.5
+            && abs(restoredPointerLocation.y - originalPointerLocation.y) < 0.5
+    }
+
+    private func displayID(at location: CGPoint) -> CGDirectDisplayID {
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(location) }),
+              let number = screen.deviceDescription[
+                  NSDeviceDescriptionKey("NSScreenNumber")
+              ] as? NSNumber else { return CGMainDisplayID() }
+        return CGDirectDisplayID(number.uint32Value)
     }
 
     private func finishActivation(
