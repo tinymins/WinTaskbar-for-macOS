@@ -387,9 +387,8 @@ struct WindowAppearanceOrder {
         let observedWindowIDSet = Set(observedWindowIDs)
         var orderedWindowIDs = (orderedWindowIDsByPID[pid] ?? []).filter(observedWindowIDSet.contains)
         var knownWindowIDs = Set(orderedWindowIDs)
-        for windowID in observedWindowIDs where knownWindowIDs.insert(windowID).inserted {
-            orderedWindowIDs.append(windowID)
-        }
+        let newWindowIDs = observedWindowIDs.filter { knownWindowIDs.insert($0).inserted }
+        orderedWindowIDs.append(contentsOf: newWindowIDs.reversed())
         orderedWindowIDsByPID[pid] = orderedWindowIDs
         return orderedWindowIDs
     }

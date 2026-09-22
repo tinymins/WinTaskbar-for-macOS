@@ -2517,7 +2517,8 @@ func runSelfTest() async -> Int32 {
     }
 
     var windowAppearanceOrder = WindowAppearanceOrder()
-    guard windowAppearanceOrder.reconcile(observedWindowIDs: [101], forPID: 42) == [101],
+    guard windowAppearanceOrder.reconcile(observedWindowIDs: [303, 202, 101], forPID: 41) == [101, 202, 303],
+          windowAppearanceOrder.reconcile(observedWindowIDs: [101], forPID: 42) == [101],
           windowAppearanceOrder.reconcile(observedWindowIDs: [202, 101], forPID: 42) == [101, 202],
           windowAppearanceOrder.reconcile(observedWindowIDs: [202, 303, 101], forPID: 42) == [101, 202, 303],
           windowAppearanceOrder.reconcile(observedWindowIDs: [303, 202], forPID: 42) == [202, 303],
