@@ -625,11 +625,8 @@ struct SettingsView: View {
 
                 Picker(selection: windowsKeyMappingBinding) {
                     ForEach(WindowsKeyMapping.selectableCases) { mapping in
-                        HStack(spacing: 6) {
-                            Text(mapping.shortcutGlyph)
-                            Text(LocalizedStringKey(mapping.rawValue))
-                        }
-                        .tag(mapping)
+                        Text("\(mapping.shortcutGlyph) \(mapping.localizedTitle)")
+                            .tag(mapping)
                     }
                 } label: {
                     Label("Logical modifier used as Windows key", systemImage: "square.grid.2x2")
@@ -1355,6 +1352,10 @@ private extension String {
 }
 
 private extension WindowsKeyMapping {
+    var localizedTitle: String {
+        NSLocalizedString(rawValue, comment: "Keyboard logical modifier")
+    }
+
     var shortcutGlyph: String {
         switch self {
         case .function: "fn"
