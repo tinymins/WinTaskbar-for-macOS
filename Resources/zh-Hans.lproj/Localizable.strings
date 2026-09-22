@@ -586,5 +586,19 @@
 	<string>WinTaskbar 的 Karabiner 恢复数据无效。</string>
 	<key>Karabiner settings changed after Windows keyboard mode was enabled. To protect those changes, WinTaskbar did not overwrite them. Original backup: %@</key>
 	<string>启用 Windows 键盘模式后，Karabiner 配置又发生了变化。为保护这些修改，WinTaskbar 没有覆盖配置。原始备份：%@</string>
+	<key>Alt+Tab</key>
+	<string>Alt+Tab</string>
+	<key>Alt+Tab and Taskbar need Accessibility access to list and manage app windows.</key>
+	<string>Alt+Tab 和任务栏需要辅助功能权限，才能列出并管理应用窗口。</string>
+	<key>Alt+Tab window switcher</key>
+	<string>Alt+Tab 窗口切换器</string>
+	<key>Alt+Tab modifier</key>
+	<string>Alt+Tab 修饰键</string>
+	<key>Turn on Alt+Tab in General to configure window switching.</key>
+	<string>请先在“通用”中开启 Alt+Tab，再配置窗口切换。</string>
+	<key>Physical keys after Karabiner mapping</key>
+	<string>Karabiner 映射后的实体按键</string>
+	<key>Not mapped</key>
+	<string>未映射</string>
 </dict>
 </plist>

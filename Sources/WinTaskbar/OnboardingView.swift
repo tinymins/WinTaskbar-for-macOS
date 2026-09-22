@@ -19,7 +19,7 @@ struct OnboardingView: View {
                     Text("Choose either feature, both, or neither. You can change this anytime in Settings.")
                     VStack(alignment: .leading, spacing: 16) {
                         onboardingFeature(
-                            title: "AllTab",
+                            title: "Alt+Tab",
                             description: "Switch between open windows with a Windows-style Alt+Tab interface.",
                             isOn: $allTabEnabled
                         )
@@ -31,7 +31,7 @@ struct OnboardingView: View {
                     }
                 } else if step == 1 {
                     Text("Accessibility").font(.title.bold())
-                    Text("AllTab and Taskbar need Accessibility access to list and manage app windows.")
+                    Text("Alt+Tab and Taskbar need Accessibility access to list and manage app windows.")
                     Button(permissions.accessibilityTrusted ? "Granted" : "Grant Accessibility") {
                         permissions.promptForAccessibility()
                     }

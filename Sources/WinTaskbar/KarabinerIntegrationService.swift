@@ -138,6 +138,20 @@ struct KeyboardMappingProfile: Codable, Hashable, Identifiable {
         }?.physicalKey
     }
 
+    func physicalKeys(
+        for modifier: AltTabModifier,
+        windowsKeyMapping: WindowsKeyMapping
+    ) -> [String] {
+        assignments.compactMap { assignment in
+            assignment.role.localOutput(
+                for: assignment.side,
+                windowsKeyMapping: windowsKeyMapping
+            ) == modifier.karabinerKeyCode(for: assignment.side)
+                ? assignment.physicalKey
+                : nil
+        }
+    }
+
     func preservingLogicalOutputs(
         from previousWindowsKeyMapping: WindowsKeyMapping,
         to updatedWindowsKeyMapping: WindowsKeyMapping
@@ -161,6 +175,16 @@ struct KeyboardMappingProfile: Codable, Hashable, Identifiable {
             )
         }
         return KeyboardMappingProfile(device: device, assignments: updatedAssignments)
+    }
+}
+
+private extension AltTabModifier {
+    func karabinerKeyCode(for side: KeyboardModifierSide) -> String {
+        switch self {
+        case .control: side == .left ? "left_control" : "right_control"
+        case .option: side == .left ? "left_option" : "right_option"
+        case .command: side == .left ? "left_command" : "right_command"
+        }
     }
 }
 

@@ -926,7 +926,9 @@ func runSelfTest() async -> Int32 {
             KeyboardModifierAssignment(side: .left, role: .control, physicalKey: "fn"),
             KeyboardModifierAssignment(side: .left, role: .function, physicalKey: "left_control"),
             KeyboardModifierAssignment(side: .left, role: .windows, physicalKey: "left_option"),
-            KeyboardModifierAssignment(side: .left, role: .alt, physicalKey: "left_command")
+            KeyboardModifierAssignment(side: .left, role: .alt, physicalKey: "left_command"),
+            KeyboardModifierAssignment(side: .right, role: .windows, physicalKey: "right_option"),
+            KeyboardModifierAssignment(side: .right, role: .alt, physicalKey: "right_command")
         ]
     )
     for previousMapping in WindowsKeyMapping.selectableCases {
@@ -957,6 +959,17 @@ func runSelfTest() async -> Int32 {
     guard controlToOptionMapping.assignment(side: .left, role: .windows)?.physicalKey == "left_command",
           controlToOptionMapping.assignment(side: .left, role: .alt)?.physicalKey == "left_option" else {
         fputs("SELF-TEST FAILED: Control-to-Option Windows key migration did not preserve the recorded layout\n", stderr)
+        return 1
+    }
+    guard controlToOptionMapping.physicalKeys(
+        for: .control,
+        windowsKeyMapping: .option
+    ) == ["left_option", "right_option"],
+    controlToOptionMapping.physicalKeys(
+        for: .option,
+        windowsKeyMapping: .option
+    ) == ["left_command", "right_command"] else {
+        fputs("SELF-TEST FAILED: physical keys for Alt+Tab modifier did not follow the mapped logical output\n", stderr)
         return 1
     }
     guard AltTabModifier.followingWindowsKeyboardLayout(.control) == .option,

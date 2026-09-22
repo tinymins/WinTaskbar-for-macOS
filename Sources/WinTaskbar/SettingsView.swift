@@ -203,7 +203,7 @@ struct SettingsView: View {
     private var general: some View {
         VStack(alignment: .leading, spacing: 22) {
             SettingsSection("Features") {
-                Toggle("AllTab", isOn: $preferences.altTabSwitcherEnabled)
+                Toggle("Alt+Tab", isOn: $preferences.altTabSwitcherEnabled)
                 Text("Windows-style window switching. Its modifier can be configured in Hotkeys.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -814,12 +814,28 @@ struct SettingsView: View {
             .opacity(preferences.taskbarEnabled ? 1 : 0.5)
 
             if !preferences.altTabSwitcherEnabled {
-                featureDisabledNotice("Turn on AllTab in General to configure window switching.")
+                featureDisabledNotice("Turn on Alt+Tab in General to configure window switching.")
             }
-            SettingsSection("AllTab window switcher") {
-                Picker("AllTab modifier", selection: $preferences.altTabModifier) {
+            SettingsSection("Alt+Tab window switcher") {
+                Picker("Alt+Tab modifier", selection: $preferences.altTabModifier) {
                     ForEach(AltTabModifier.allCases) { modifier in
                         Text("\(modifier.shortcutGlyph) \(modifier.title)").tag(modifier)
+                    }
+                }
+                if karabinerIntegration.isEnabled {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Physical keys after Karabiner mapping", systemImage: "keyboard")
+                            .font(.caption.weight(.medium))
+                        if karabinerIntegration.keyboards.isEmpty {
+                            Text("No physical keyboards found.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(karabinerIntegration.keyboards) { keyboard in
+                                altTabPhysicalKeyRow(for: keyboard)
+                            }
+                        }
                     }
                 }
                 Text("Windows keyboard mode updates this modifier when the recorded Alt key moves. You can override it here.")
@@ -843,6 +859,39 @@ struct SettingsView: View {
             .disabled(!preferences.altTabSwitcherEnabled)
             .opacity(preferences.altTabSwitcherEnabled ? 1 : 0.5)
 
+        }
+    }
+
+    @ViewBuilder
+    private func altTabPhysicalKeyRow(for keyboard: KarabinerKeyboardDevice) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(keyboard.name)
+                .font(.caption)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            if let mapping = karabinerIntegration.mapping(for: keyboard) {
+                let keys = mapping.physicalKeys(
+                    for: preferences.altTabModifier,
+                    windowsKeyMapping: preferences.windowsKeyMapping
+                )
+                if keys.isEmpty {
+                    Text("Not mapped")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    HStack(spacing: 5) {
+                        ForEach(keys, id: \.self) { key in
+                            ShortcutKeycap {
+                                Text(key.displayPhysicalShortcutKey)
+                            }
+                        }
+                    }
+                }
+            } else {
+                Text("Not identified")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
         }
     }
 
@@ -1354,6 +1403,16 @@ private extension String {
         case "left_command": NSLocalizedString("Left Command", comment: "Keyboard key")
         case "right_command": NSLocalizedString("Right Command", comment: "Keyboard key")
         default: self
+        }
+    }
+
+    var displayPhysicalShortcutKey: String {
+        switch self {
+        case "fn": "fn"
+        case "left_control", "right_control": "⌃ \(displayKeyboardKey)"
+        case "left_option", "right_option": "⌥ \(displayKeyboardKey)"
+        case "left_command", "right_command": "⌘ \(displayKeyboardKey)"
+        default: displayKeyboardKey
         }
     }
 }
