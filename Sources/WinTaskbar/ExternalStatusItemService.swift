@@ -686,25 +686,170 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
     }
 
     func performPrimaryAction(_ item: ExternalStatusItem, sourcePoint: CGPoint? = nil) {
-        guard let element = elements[item.id] else {
+        guard let cachedElement = elements[item.id] else {
             refresh()
             return
         }
+        let element = liveElement(for: item, cachedElement: cachedElement) ?? cachedElement
+        let sourceFrame = frame(of: element) ?? item.sourceFrame
         if let sourcePoint {
-            postClick(at: sourcePoint)
+            let horizontalProgress = item.sourceFrame.width > 0
+                ? (sourcePoint.x - item.sourceFrame.minX) / item.sourceFrame.width
+                : 0.5
+            let liveSourcePoint = CGPoint(
+                x: sourceFrame.minX + horizontalProgress * sourceFrame.width,
+                y: sourceFrame.midY
+            )
+            postClick(
+                at: liveSourcePoint,
+                processIdentifier: item.processIdentifier,
+                windowID: liveStatusItemWindowID(for: item, sourceFrame: sourceFrame)
+            )
             return
         }
-        if children(of: element).contains(where: {
-            attribute($0, kAXRoleAttribute) == kAXMenuRole as String
-        }) {
-            activateApplication(processIdentifier: item.processIdentifier)
+        if presentMirroredMenu(
+            for: element,
+            at: NSEvent.mouseLocation,
+            cancelSourceMenu: false
+        ) {
             return
         }
 
         let result = AXUIElementPerformAction(element, kAXPressAction as CFString)
-        if result != .success, result != .cannotComplete {
-            activateApplication(processIdentifier: item.processIdentifier)
+        if result == .success || result == .cannotComplete { return }
+
+        if let windowID = liveStatusItemWindowID(for: item, sourceFrame: sourceFrame) {
+            postClick(
+                at: CGPoint(x: sourceFrame.midX, y: sourceFrame.midY),
+                processIdentifier: item.processIdentifier,
+                windowID: windowID
+            )
+            return
         }
+        activateApplication(processIdentifier: item.processIdentifier)
+    }
+
+    private func postClick(
+        at point: CGPoint,
+        processIdentifier: pid_t,
+        windowID: CGWindowID?
+    ) {
+        let source = CGEventSource(stateID: .hidSystemState)
+        let mouseDown = CGEvent(
+            mouseEventSource: source,
+            mouseType: .leftMouseDown,
+            mouseCursorPosition: point,
+            mouseButton: .left
+        )
+        let mouseUp = CGEvent(
+            mouseEventSource: source,
+            mouseType: .leftMouseUp,
+            mouseCursorPosition: point,
+            mouseButton: .left
+        )
+        for event in [mouseDown, mouseUp].compactMap({ $0 }) {
+            event.setIntegerValueField(
+                .eventTargetUnixProcessID,
+                value: Int64(processIdentifier)
+            )
+            if let windowID {
+                event.setIntegerValueField(
+                    .mouseEventWindowUnderMousePointer,
+                    value: Int64(windowID)
+                )
+                event.setIntegerValueField(
+                    .mouseEventWindowUnderMousePointerThatCanHandleThisEvent,
+                    value: Int64(windowID)
+                )
+            }
+            event.postToPid(processIdentifier)
+        }
+    }
+
+    private func liveElement(
+        for item: ExternalStatusItem,
+        cachedElement: AXUIElement
+    ) -> AXUIElement? {
+        let referenceFrame = frame(of: cachedElement) ?? item.sourceFrame
+        let point = CGPoint(x: referenceFrame.midX, y: referenceFrame.midY)
+        let systemWideElement = AXUIElementCreateSystemWide()
+        var hitElement: AXUIElement?
+        if AXUIElementCopyElementAtPosition(
+            systemWideElement,
+            Float(point.x),
+            Float(point.y),
+            &hitElement
+        ) == .success,
+           let hitElement,
+           isStatusItem(hitElement, for: item, referenceFrame: referenceFrame) {
+            return hitElement
+        }
+
+        let application = AXUIElementCreateApplication(item.processIdentifier)
+        AXUIElementSetMessagingTimeout(application, 0.1)
+        guard let extrasMenuBar: AXUIElement = attribute(application, kAXExtrasMenuBarAttribute) else {
+            return nil
+        }
+        AXUIElementSetMessagingTimeout(extrasMenuBar, 0.1)
+        let candidates = children(of: extrasMenuBar).compactMap { element -> (AXUIElement, CGFloat)? in
+            AXUIElementSetMessagingTimeout(element, 0.1)
+            guard attribute(element, kAXRoleAttribute) == kAXMenuBarItemRole as String,
+                  let frame = frame(of: element) else { return nil }
+            let distance = hypot(frame.midX - referenceFrame.midX, frame.midY - referenceFrame.midY)
+            return (element, distance)
+        }
+        guard let match = candidates.min(by: { $0.1 < $1.1 }),
+              match.1 <= max(referenceFrame.width, referenceFrame.height) else { return nil }
+        return match.0
+    }
+
+    private func isStatusItem(
+        _ element: AXUIElement,
+        for item: ExternalStatusItem,
+        referenceFrame: CGRect
+    ) -> Bool {
+        var processIdentifier: pid_t = 0
+        guard AXUIElementGetPid(element, &processIdentifier) == .success,
+              processIdentifier == item.processIdentifier,
+              attribute(element, kAXRoleAttribute) == kAXMenuBarItemRole as String,
+              let frame = frame(of: element) else { return false }
+        return abs(frame.midX - referenceFrame.midX) <= 2
+            && abs(frame.midY - referenceFrame.midY) <= 2
+    }
+
+    private func frame(of element: AXUIElement) -> CGRect? {
+        guard let positionValue: AXValue = attribute(element, kAXPositionAttribute),
+              let sizeValue: AXValue = attribute(element, kAXSizeAttribute),
+              AXValueGetType(positionValue) == .cgPoint,
+              AXValueGetType(sizeValue) == .cgSize else { return nil }
+        var position = CGPoint.zero
+        var size = CGSize.zero
+        guard AXValueGetValue(positionValue, .cgPoint, &position),
+              AXValueGetValue(sizeValue, .cgSize, &size) else { return nil }
+        return CGRect(origin: position, size: size)
+    }
+
+    private func liveStatusItemWindowID(
+        for item: ExternalStatusItem,
+        sourceFrame: CGRect
+    ) -> CGWindowID? {
+        guard let controlCenterProcessIdentifier,
+              let rawWindows = CGWindowListCopyWindowInfo(
+                  [.optionOnScreenOnly, .excludeDesktopElements],
+                  kCGNullWindowID
+              ) as? [[String: Any]] else { return item.captureWindowID }
+        let matches = rawWindows.compactMap { window -> StatusItemWindow? in
+            guard window[kCGWindowOwnerPID as String] as? pid_t == controlCenterProcessIdentifier,
+                  window[kCGWindowLayer as String] as? Int == 25,
+                  let id = window[kCGWindowNumber as String] as? CGWindowID,
+                  let bounds = window[kCGWindowBounds as String] as? NSDictionary,
+                  let frame = CGRect(dictionaryRepresentation: bounds),
+                  frame.minX <= sourceFrame.midX,
+                  frame.maxX >= sourceFrame.midX else { return nil }
+            return StatusItemWindow(id: id, frame: frame)
+        }
+        return matches.min(by: { $0.frame.width < $1.frame.width })?.id
+            ?? item.captureWindowID
     }
 
     private func postClick(at point: CGPoint) {
