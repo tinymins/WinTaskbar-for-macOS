@@ -181,6 +181,45 @@ final class KarabinerIntegrationService: ObservableObject {
         }
     }
 
+    func updateConfiguration(
+        _ transform: ([String: Any]) throws -> [String: Any]
+    ) throws {
+        let currentRoot = try readConfiguration()
+        let currentData = try canonicalData(currentRoot)
+        let updatedData = try canonicalData(transform(currentRoot))
+
+        guard fileManager.fileExists(atPath: stateURL.path) else {
+            try writeConfiguration(updatedData)
+            refresh()
+            return
+        }
+
+        let state = try readState()
+        guard currentData.base64EncodedString() == state.installedConfiguration else {
+            throw IntegrationError.configurationChanged(backupPath: state.backupPath)
+        }
+        guard let originalData = Data(base64Encoded: state.originalConfiguration),
+              let originalRoot = try JSONSerialization.jsonObject(with: originalData) as? [String: Any] else {
+            throw IntegrationError.invalidRecoveryState
+        }
+
+        let updatedOriginalData = try canonicalData(transform(originalRoot))
+        let updatedState = IntegrationState(
+            originalConfiguration: updatedOriginalData.base64EncodedString(),
+            installedConfiguration: updatedData.base64EncodedString(),
+            backupPath: state.backupPath,
+            previousPreferences: state.previousPreferences
+        )
+        try writeState(updatedState)
+        do {
+            try writeConfiguration(updatedData)
+        } catch {
+            try? writeState(state)
+            throw error
+        }
+        refresh()
+    }
+
     private func readConfiguration() throws -> [String: Any] {
         guard fileManager.fileExists(atPath: configURL.path) else {
             throw IntegrationError.configurationMissing

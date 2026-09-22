@@ -52,6 +52,7 @@ struct SettingsView: View {
     @ObservedObject private var loginItem = LoginItemService.shared
     @ObservedObject private var globalHotkeys = GlobalHotkeysService.shared
     @ObservedObject private var karabinerIntegration = KarabinerIntegrationService.shared
+    @ObservedObject private var mouseScrollIntegration = KarabinerMouseScrollService.shared
     @State private var showsDateTimeFormat = false
     @State private var editingAdditionalClockIndex: Int?
     @State private var additionalClockDraft = AdditionalClockConfiguration.defaults[0]
@@ -96,6 +97,7 @@ struct SettingsView: View {
         .onAppear {
             loginItem.refresh()
             karabinerIntegration.refresh()
+            mouseScrollIntegration.refresh()
         }
         .onChange(of: navigation.selectedPage) { _ in showsDateTimeFormat = false }
         .sheet(isPresented: Binding(
@@ -646,6 +648,53 @@ struct SettingsView: View {
                         Link("Get Karabiner-Elements", destination: url)
                     }
                 }
+            }
+
+            SettingsSection("Mouse scrolling") {
+                Toggle(
+                    "Trackpad natural, mouse standard",
+                    isOn: Binding(
+                        get: { mouseScrollIntegration.isEnabled },
+                        set: { mouseScrollIntegration.setEnabled($0) }
+                    )
+                )
+                .disabled(
+                    !mouseScrollIntegration.isAvailable
+                        || (mouseScrollIntegration.mice.isEmpty && !mouseScrollIntegration.isEnabled)
+                )
+
+                Text("Keeps macOS Natural scrolling on for trackpads and reverses only the vertical wheel on connected external mice through Karabiner-Elements.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if mouseScrollIntegration.mice.isEmpty {
+                    Text("No external mouse found.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(
+                        String(
+                            format: NSLocalizedString(
+                                "%lld of %lld connected mice configured",
+                                comment: "Karabiner mouse scroll configuration status"
+                            ),
+                            Int64(mouseScrollIntegration.configuredMouseCount),
+                            Int64(mouseScrollIntegration.mice.count)
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+
+                if let error = mouseScrollIntegration.lastError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                }
+
+                Button("Refresh mice") { mouseScrollIntegration.refresh() }
+                    .controlSize(.small)
             }
 
             if !preferences.taskbarEnabled {

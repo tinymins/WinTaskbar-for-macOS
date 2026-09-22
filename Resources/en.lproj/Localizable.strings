@@ -446,6 +446,24 @@
 	<string>URL</string>
 	<key>Windows keyboard mode</key>
 	<string>Windows keyboard mode</string>
+	<key>Mouse scrolling</key>
+	<string>Mouse scrolling</string>
+	<key>Trackpad natural, mouse standard</key>
+	<string>Trackpad natural, mouse standard</string>
+	<key>Keeps macOS Natural scrolling on for trackpads and reverses only the vertical wheel on connected external mice through Karabiner-Elements.</key>
+	<string>Keeps macOS Natural scrolling on for trackpads and reverses only the vertical wheel on connected external mice through Karabiner-Elements.</string>
+	<key>No external mouse found.</key>
+	<string>No external mouse found.</string>
+	<key>%lld of %lld connected mice configured</key>
+	<string>%lld of %lld connected mice configured</string>
+	<key>Refresh mice</key>
+	<string>Refresh mice</string>
+	<key>Connect an external mouse before enabling this option.</key>
+	<string>Connect an external mouse before enabling this option.</string>
+	<key>Karabiner mouse discovery failed: %@</key>
+	<string>Karabiner mouse discovery failed: %@</string>
+	<key>Karabiner mouse settings changed after this option was enabled. WinTaskbar did not overwrite them. Original backup: %@</key>
+	<string>Karabiner mouse settings changed after this option was enabled. WinTaskbar did not overwrite them. Original backup: %@</string>
 	<key>Enabled through Karabiner-Elements</key>
 	<string>Enabled through Karabiner-Elements</string>
 	<key>Ready to configure Karabiner-Elements</key>

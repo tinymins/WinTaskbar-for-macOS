@@ -452,6 +452,24 @@
 	<string>URL</string>
 	<key>Windows keyboard mode</key>
 	<string>Windows 键盘模式</string>
+	<key>Mouse scrolling</key>
+	<string>鼠标滚动</string>
+	<key>Trackpad natural, mouse standard</key>
+	<string>触控板自然滚动，鼠标标准滚动</string>
+	<key>Keeps macOS Natural scrolling on for trackpads and reverses only the vertical wheel on connected external mice through Karabiner-Elements.</key>
+	<string>保持 macOS 触控板自然滚动，并通过 Karabiner-Elements 仅反转已连接外接鼠标的垂直滚轮。</string>
+	<key>No external mouse found.</key>
+	<string>未发现外接鼠标。</string>
+	<key>%lld of %lld connected mice configured</key>
+	<string>已配置 %lld/%lld 个已连接鼠标</string>
+	<key>Refresh mice</key>
+	<string>刷新鼠标</string>
+	<key>Connect an external mouse before enabling this option.</key>
+	<string>请先连接外接鼠标，再启用此选项。</string>
+	<key>Karabiner mouse discovery failed: %@</key>
+	<string>Karabiner 鼠标发现失败：%@</string>
+	<key>Karabiner mouse settings changed after this option was enabled. WinTaskbar did not overwrite them. Original backup: %@</key>
+	<string>启用此选项后，Karabiner 鼠标设置又发生了变化。WinTaskbar 未覆盖这些修改。原始备份：%@</string>
 	<key>Enabled through Karabiner-Elements</key>
 	<string>已通过 Karabiner-Elements 启用</string>
 	<key>Ready to configure Karabiner-Elements</key>
