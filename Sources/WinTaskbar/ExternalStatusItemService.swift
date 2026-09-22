@@ -771,10 +771,6 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         suppressionSource?.localEventsSuppressionInterval = 0
 
         CGDisplayHideCursor(CGMainDisplayID())
-        defer {
-            CGWarpMouseCursorPosition(originalPointerLocation)
-            CGDisplayShowCursor(CGMainDisplayID())
-        }
         CGWarpMouseCursorPosition(point)
         try? await Task.sleep(for: .milliseconds(10))
 
@@ -803,6 +799,10 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
             )
             event.post(tap: .cgSessionEventTap)
         }
+        try? await Task.sleep(for: .milliseconds(30))
+        CGWarpMouseCursorPosition(originalPointerLocation)
+        try? await Task.sleep(for: .milliseconds(10))
+        CGDisplayShowCursor(CGMainDisplayID())
     }
 
     private func performAccessibilityFallback(
