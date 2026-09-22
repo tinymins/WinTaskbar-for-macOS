@@ -1,6 +1,7 @@
 import AppKit
 @preconcurrency import ApplicationServices
 import Combine
+import OSLog
 import SwiftUI
 
 struct ExternalStatusItem: Identifiable {
@@ -150,6 +151,68 @@ enum ExternalStatusItemClickMapper {
             x: sourceFrame.minX + horizontalProgress * sourceFrame.width,
             y: sourceFrame.midY
         )
+    }
+}
+
+enum ExternalStatusItemPopupPlacement {
+    static let gap: CGFloat = 8
+
+    static func cocoaOrigin(
+        anchor: CGRect,
+        popupSize: CGSize,
+        screenFrame: CGRect,
+        position: TaskbarPosition?
+    ) -> CGPoint {
+        let resolvedPosition = position ?? nearestEdge(to: anchor, in: screenFrame)
+        let proposed: CGPoint
+        switch resolvedPosition {
+        case .bottom:
+            proposed = CGPoint(
+                x: anchor.midX - popupSize.width / 2,
+                y: anchor.maxY + gap
+            )
+        case .top:
+            proposed = CGPoint(
+                x: anchor.midX - popupSize.width / 2,
+                y: anchor.minY - popupSize.height - gap
+            )
+        case .left:
+            proposed = CGPoint(
+                x: anchor.maxX + gap,
+                y: anchor.midY - popupSize.height / 2
+            )
+        case .right:
+            proposed = CGPoint(
+                x: anchor.minX - popupSize.width - gap,
+                y: anchor.midY - popupSize.height / 2
+            )
+        }
+        return CGPoint(
+            x: clamp(
+                proposed.x,
+                minimum: screenFrame.minX + gap,
+                maximum: screenFrame.maxX - popupSize.width - gap
+            ),
+            y: clamp(
+                proposed.y,
+                minimum: screenFrame.minY + gap,
+                maximum: screenFrame.maxY - popupSize.height - gap
+            )
+        )
+    }
+
+    private static func nearestEdge(to anchor: CGRect, in screenFrame: CGRect) -> TaskbarPosition {
+        let distances: [(TaskbarPosition, CGFloat)] = [
+            (.bottom, abs(anchor.minY - screenFrame.minY)),
+            (.top, abs(screenFrame.maxY - anchor.maxY)),
+            (.left, abs(anchor.minX - screenFrame.minX)),
+            (.right, abs(screenFrame.maxX - anchor.maxX)),
+        ]
+        return distances.min(by: { $0.1 < $1.1 })?.0 ?? .bottom
+    }
+
+    private static func clamp(_ value: CGFloat, minimum: CGFloat, maximum: CGFloat) -> CGFloat {
+        min(max(value, minimum), max(minimum, maximum))
     }
 }
 
@@ -548,8 +611,17 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
 
     private struct ActivationSnapshot: Equatable {
         let windows: [WindowReactionState]
-        let imageFingerprint: UInt64?
-        let accessibilitySignature: String
+    }
+
+    private struct RelocatedWindow {
+        let ownerProcessIdentifier: pid_t
+        let originalOrigin: CGPoint
+    }
+
+    private enum ActivationOutcome {
+        case noReaction
+        case completed
+        case unmovablePopup
     }
 
     @Published private(set) var items: [ExternalStatusItem] = []
@@ -573,6 +645,12 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
     private var cachedApplications: [ExternalStatusApplicationSnapshot]?
     private var controlCenterProcessIdentifier: pid_t?
     private var presentedMenu: NSMenu?
+    private var relocatedWindows: [CGWindowID: RelocatedWindow] = [:]
+    private let skyLightBridge = SkyLightStatusItemBridge.shared
+    private let activationLogger = Logger(
+        subsystem: "io.github.tinymins.WinTaskbar",
+        category: "ExternalStatusItemActivation"
+    )
 
     init(defaults: UserDefaults = .standard) {
         let layoutStore = ExternalStatusItemLayoutStore(defaults: defaults)
@@ -600,6 +678,11 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
     }
 
     isolated deinit {
+        for (windowID, relocation) in relocatedWindows {
+            guard Self.windowOwnerProcessIdentifier(windowID: windowID)
+                    == relocation.ownerProcessIdentifier else { continue }
+            _ = skyLightBridge.move(windowID: windowID, to: relocation.originalOrigin)
+        }
         timer?.invalidate()
         liveCaptureTimer?.invalidate()
         refreshTask?.cancel()
@@ -627,6 +710,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         refreshTask = nil
         liveCaptureTask?.cancel()
         liveCaptureTask = nil
+        restoreRelocatedWindows(onlyHidden: false)
         refreshPending = false
         captureCadences = [:]
         capturedImages = [:]
@@ -705,7 +789,13 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         layoutStore.save(nextLayout)
     }
 
-    func performPrimaryAction(_ item: ExternalStatusItem, sourcePoint: CGPoint? = nil) {
+    func performPrimaryAction(
+        _ item: ExternalStatusItem,
+        sourcePoint _: CGPoint? = nil,
+        anchorRect: CGRect? = nil,
+        taskbarPosition: TaskbarPosition? = nil
+    ) {
+        restoreRelocatedWindows(onlyHidden: true)
         guard let cachedElement = elements[item.id] else {
             refresh()
             return
@@ -713,106 +803,73 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         let element = liveElement(for: item, cachedElement: cachedElement) ?? cachedElement
         let sourceFrame = frame(of: element) ?? item.sourceFrame
         let target = liveClickTarget(for: item, sourceFrame: sourceFrame)
-        let activationPoint: CGPoint
-        if let sourcePoint, let target {
-            let horizontalProgress = item.sourceFrame.width > 0
-                ? (sourcePoint.x - item.sourceFrame.minX) / item.sourceFrame.width
-                : 0.5
-            activationPoint = CGPoint(
-                x: target.frame.minX + horizontalProgress * target.frame.width,
-                y: target.frame.midY
-            )
-        } else if let target {
-            activationPoint = CGPoint(x: target.frame.midX, y: target.frame.midY)
-        } else {
-            activationPoint = CGPoint(x: sourceFrame.midX, y: sourceFrame.midY)
-        }
+        let resolvedAnchor = anchorRect ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
         if presentMirroredMenu(
             for: element,
-            at: NSEvent.mouseLocation,
+            at: menuLocation(anchor: resolvedAnchor, position: taskbarPosition),
             cancelSourceMenu: false
         ) {
             return
         }
 
         guard let target else {
-            performAccessibilityFallback(element: element, item: item)
+            activationLogger.notice("tray activation has no live window target")
+            let result = AXUIElementPerformAction(element, kAXPressAction as CFString)
+            if result != .success, result != .cannotComplete { NSSound.beep() }
             return
         }
         Task { [weak self] in
             guard let self else { return }
-            let snapshot = activationSnapshot(for: item, element: element, target: target)
-            await postClick(at: activationPoint, target: target)
-            try? await Task.sleep(for: .milliseconds(250))
-            guard activationSnapshot(for: item, element: element, target: target) == snapshot else {
+            activationLogger.notice(
+                "tray activation sourcePID=\(item.processIdentifier) ownerPID=\(target.ownerProcessIdentifier) window=\(target.windowID)"
+            )
+            let snapshot = activationSnapshot(for: item, target: target)
+            let accessibilityResult = AXUIElementPerformAction(
+                element,
+                kAXPressAction as CFString
+            )
+            guard accessibilityResult == .success || accessibilityResult == .cannotComplete else {
+                activationLogger.error("tray AX rejected result=\(accessibilityResult.rawValue)")
+                NSSound.beep()
                 return
             }
-            performAccessibilityFallback(element: element, item: item)
+
+            switch await waitForActivation(
+                from: snapshot,
+                item: item,
+                target: target,
+                anchor: resolvedAnchor,
+                taskbarPosition: taskbarPosition
+            ) {
+            case .completed:
+                activationLogger.notice("tray AX accepted and reaction observed")
+                finishActivation(
+                    element: element,
+                    anchor: resolvedAnchor,
+                    taskbarPosition: taskbarPosition
+                )
+            case .unmovablePopup:
+                activationLogger.error("tray AX opened a popup that could not be relocated")
+                NSSound.beep()
+            case .noReaction:
+                // A successful AXPress may toggle owner state without creating a
+                // window. Do not issue a second activation that could undo it.
+                activationLogger.notice("tray AX accepted without observable window reaction")
+            }
         }
     }
 
-    private func postClick(at point: CGPoint, target: ClickTarget) async {
-        guard let source = CGEventSource(stateID: .hidSystemState),
-              let originalPointerLocation = CGEvent(source: nil)?.location else { return }
-        let suppressionSource = CGEventSource(stateID: .combinedSessionState)
-        let permitAll: CGEventFilterMask = [
-            .permitLocalMouseEvents,
-            .permitLocalKeyboardEvents,
-            .permitSystemDefinedEvents,
-        ]
-        suppressionSource?.setLocalEventsFilterDuringSuppressionState(
-            permitAll,
-            state: .eventSuppressionStateRemoteMouseDrag
-        )
-        suppressionSource?.setLocalEventsFilterDuringSuppressionState(
-            permitAll,
-            state: .eventSuppressionStateSuppressionInterval
-        )
-        suppressionSource?.localEventsSuppressionInterval = 0
-
-        CGDisplayHideCursor(CGMainDisplayID())
-        CGWarpMouseCursorPosition(point)
-        try? await Task.sleep(for: .milliseconds(10))
-
-        for type in [CGEventType.leftMouseDown, .leftMouseUp, .leftMouseUp] {
-            guard let event = CGEvent(
-                mouseEventSource: source,
-                mouseType: type,
-                mouseCursorPosition: point,
-                mouseButton: .left
-            ) else { continue }
-            event.setIntegerValueField(
-                .eventTargetUnixProcessID,
-                value: Int64(target.ownerProcessIdentifier)
-            )
-            event.setIntegerValueField(
-                .mouseEventWindowUnderMousePointer,
-                value: Int64(target.windowID)
-            )
-            event.setIntegerValueField(
-                .mouseEventWindowUnderMousePointerThatCanHandleThisEvent,
-                value: Int64(target.windowID)
-            )
-            event.setIntegerValueField(
-                .mouseEventClickState,
-                value: type == .leftMouseDown ? 1 : 0
-            )
-            event.post(tap: .cgSessionEventTap)
-        }
-        try? await Task.sleep(for: .milliseconds(30))
-        CGWarpMouseCursorPosition(originalPointerLocation)
-        try? await Task.sleep(for: .milliseconds(10))
-        CGDisplayShowCursor(CGMainDisplayID())
-    }
-
-    private func performAccessibilityFallback(
+    private func finishActivation(
         element: AXUIElement,
-        item: ExternalStatusItem
+        anchor: CGRect,
+        taskbarPosition: TaskbarPosition?
     ) {
-        let result = AXUIElementPerformAction(element, kAXPressAction as CFString)
-        if result != .success, result != .cannotComplete {
-            activateApplication(processIdentifier: item.processIdentifier)
-        }
+        let mirrored = presentMirroredMenu(
+            for: element,
+            at: menuLocation(anchor: anchor, position: taskbarPosition),
+            cancelSourceMenu: true
+        )
+        activationLogger.notice("tray delayed menu mirrored=\(mirrored)")
     }
 
     private func liveElement(
@@ -831,6 +888,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         ) == .success,
            let hitElement,
            isStatusItem(hitElement, for: item, referenceFrame: referenceFrame) {
+            activationLogger.notice("tray AX element resolved by system hit-test")
             return hitElement
         }
 
@@ -849,18 +907,16 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         }
         guard let match = candidates.min(by: { $0.1 < $1.1 }),
               match.1 <= max(referenceFrame.width, referenceFrame.height) else { return nil }
+        activationLogger.notice("tray AX element resolved from source extras menu")
         return match.0
     }
 
     private func isStatusItem(
         _ element: AXUIElement,
-        for item: ExternalStatusItem,
+        for _: ExternalStatusItem,
         referenceFrame: CGRect
     ) -> Bool {
-        var processIdentifier: pid_t = 0
-        guard AXUIElementGetPid(element, &processIdentifier) == .success,
-              processIdentifier == item.processIdentifier,
-              attribute(element, kAXRoleAttribute) == kAXMenuBarItemRole as String,
+        guard attribute(element, kAXRoleAttribute) == kAXMenuBarItemRole as String,
               let frame = frame(of: element) else { return false }
         return abs(frame.midX - referenceFrame.midX) <= 2
             && abs(frame.midY - referenceFrame.midY) <= 2
@@ -906,18 +962,24 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
 
     private func activationSnapshot(
         for item: ExternalStatusItem,
-        element: AXUIElement,
         target: ClickTarget
     ) -> ActivationSnapshot {
         let ownerProcessIdentifiers = Set([
             item.processIdentifier,
             target.ownerProcessIdentifier,
         ])
+        let windows = windowReactionStates(ownerProcessIdentifiers: ownerProcessIdentifiers)
+        return ActivationSnapshot(windows: windows)
+    }
+
+    private func windowReactionStates(
+        ownerProcessIdentifiers: Set<pid_t>
+    ) -> [WindowReactionState] {
         let rawWindows = CGWindowListCopyWindowInfo(
             [.optionAll, .excludeDesktopElements],
             kCGNullWindowID
         ) as? [[String: Any]] ?? []
-        let windows = rawWindows.compactMap { window -> WindowReactionState? in
+        return rawWindows.compactMap { window -> WindowReactionState? in
             guard let ownerProcessIdentifier = window[kCGWindowOwnerPID as String] as? pid_t,
                   ownerProcessIdentifiers.contains(ownerProcessIdentifier),
                   let windowID = window[kCGWindowNumber as String] as? CGWindowID,
@@ -932,58 +994,188 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
                 isOnScreen: window[kCGWindowIsOnscreen as String] as? Bool ?? false
             )
         }.sorted { $0.windowID < $1.windowID }
-        let title: String = attribute(element, kAXTitleAttribute) ?? ""
-        let description: String = attribute(element, kAXDescriptionAttribute) ?? ""
-        let help: String = attribute(element, kAXHelpAttribute) ?? ""
-        let signature = [
-            title,
-            description,
-            help,
-            String(children(of: element).count),
-        ].joined(separator: "\u{1F}")
-        return ActivationSnapshot(
-            windows: windows,
-            imageFingerprint: imageFingerprint(windowID: target.windowID),
-            accessibilitySignature: signature
+    }
+
+    private func waitForActivation(
+        from baseline: ActivationSnapshot,
+        item: ExternalStatusItem,
+        target: ClickTarget,
+        anchor: CGRect,
+        taskbarPosition: TaskbarPosition?
+    ) async -> ActivationOutcome {
+        let ownerProcessIdentifiers = Set([
+            item.processIdentifier,
+            target.ownerProcessIdentifier,
+        ])
+        for _ in 0..<16 {
+            try? await Task.sleep(for: .milliseconds(16))
+            let currentWindows = windowReactionStates(
+                ownerProcessIdentifiers: ownerProcessIdentifiers
+            )
+            if let popup = popupCandidate(
+                before: baseline.windows,
+                after: currentWindows,
+                excluding: target.windowID
+            ) {
+                let moved = relocatePopup(
+                    popup,
+                    anchor: anchor,
+                    taskbarPosition: taskbarPosition
+                )
+                activationLogger.notice(
+                    "tray popup window=\(popup.windowID) moved=\(moved) frame=\(String(describing: popup.frame))"
+                )
+                return moved ? .completed : .unmovablePopup
+            }
+        }
+        return activationSnapshot(for: item, target: target) == baseline
+            ? .noReaction
+            : .completed
+    }
+
+    private func popupCandidate(
+        before: [WindowReactionState],
+        after: [WindowReactionState],
+        excluding sourceWindowID: CGWindowID
+    ) -> WindowReactionState? {
+        let previousByID = Dictionary(uniqueKeysWithValues: before.map { ($0.windowID, $0) })
+        return after.filter { window in
+            guard window.windowID != sourceWindowID,
+                  window.isOnScreen,
+                  window.layer != 25,
+                  window.frame.width >= 80,
+                  window.frame.height >= 40 else { return false }
+            guard let previous = previousByID[window.windowID] else { return true }
+            return !previous.isOnScreen
+        }.max { lhs, rhs in
+            if lhs.layer != rhs.layer { return lhs.layer < rhs.layer }
+            return lhs.frame.width * lhs.frame.height < rhs.frame.width * rhs.frame.height
+        }
+    }
+
+    private func relocatePopup(
+        _ popup: WindowReactionState,
+        anchor: CGRect,
+        taskbarPosition: TaskbarPosition?
+    ) -> Bool {
+        guard let screen = NSScreen.screens.first(where: {
+                  $0.frame.contains(CGPoint(x: anchor.midX, y: anchor.midY))
+              }) ?? NSScreen.main,
+              let primaryScreen = NSScreen.screens.first else { return false }
+        let cocoaOrigin = ExternalStatusItemPopupPlacement.cocoaOrigin(
+            anchor: anchor,
+            popupSize: popup.frame.size,
+            screenFrame: screen.visibleFrame,
+            position: taskbarPosition
+        )
+        let quartzOrigin = CGPoint(
+            x: cocoaOrigin.x,
+            y: primaryScreen.frame.maxY - cocoaOrigin.y - popup.frame.height
+        )
+        if approximatelyEqual(popup.frame.origin, quartzOrigin) { return true }
+
+        relocatedWindows[popup.windowID] = RelocatedWindow(
+            ownerProcessIdentifier: popup.ownerProcessIdentifier,
+            originalOrigin: popup.frame.origin
+        )
+        if moveWindowUsingAccessibility(
+            windowID: popup.windowID,
+            processIdentifier: popup.ownerProcessIdentifier,
+            origin: quartzOrigin
+        ), windowIsAt(windowID: popup.windowID, origin: quartzOrigin) {
+            return true
+        }
+        guard skyLightBridge.move(windowID: popup.windowID, to: quartzOrigin),
+              windowIsAt(windowID: popup.windowID, origin: quartzOrigin) else {
+            relocatedWindows[popup.windowID] = nil
+            return false
+        }
+        return true
+    }
+
+    private func moveWindowUsingAccessibility(
+        windowID: CGWindowID,
+        processIdentifier: pid_t,
+        origin: CGPoint
+    ) -> Bool {
+        let application = AXUIElementCreateApplication(processIdentifier)
+        AXUIElementSetMessagingTimeout(application, 0.05)
+        let windows: [AXUIElement] = attribute(application, kAXWindowsAttribute) ?? []
+        guard let window = windows.first(where: {
+                  AccessibilityWindowIdentity.windowID(of: $0) == windowID
+              }) else { return false }
+        var origin = origin
+        guard let value = AXValueCreate(.cgPoint, &origin) else { return false }
+        return AXUIElementSetAttributeValue(
+            window,
+            kAXPositionAttribute as CFString,
+            value
+        ) == .success
+    }
+
+    private func windowIsAt(windowID: CGWindowID, origin: CGPoint) -> Bool {
+        guard let window = Self.windowState(windowID: windowID) else { return false }
+        return approximatelyEqual(window.frame.origin, origin)
+    }
+
+    private func approximatelyEqual(_ lhs: CGPoint, _ rhs: CGPoint) -> Bool {
+        abs(lhs.x - rhs.x) <= 2 && abs(lhs.y - rhs.y) <= 2
+    }
+
+    private func restoreRelocatedWindows(onlyHidden: Bool) {
+        for (windowID, relocation) in relocatedWindows {
+            guard let window = Self.windowState(windowID: windowID),
+                  window.ownerProcessIdentifier == relocation.ownerProcessIdentifier else {
+                relocatedWindows[windowID] = nil
+                continue
+            }
+            guard !onlyHidden || !window.isOnScreen else { continue }
+            if skyLightBridge.move(windowID: windowID, to: relocation.originalOrigin) {
+                relocatedWindows[windowID] = nil
+            }
+        }
+    }
+
+    private static func windowState(windowID: CGWindowID) -> WindowReactionState? {
+        guard let windows = CGWindowListCopyWindowInfo(
+                  [.optionIncludingWindow],
+                  windowID
+              ) as? [[String: Any]],
+              let window = windows.first(where: {
+                  ($0[kCGWindowNumber as String] as? CGWindowID) == windowID
+              }),
+              let ownerProcessIdentifier = window[kCGWindowOwnerPID as String] as? pid_t,
+              let layer = window[kCGWindowLayer as String] as? Int,
+              let bounds = window[kCGWindowBounds as String] as? NSDictionary,
+              let frame = CGRect(dictionaryRepresentation: bounds) else { return nil }
+        return WindowReactionState(
+            windowID: windowID,
+            ownerProcessIdentifier: ownerProcessIdentifier,
+            layer: layer,
+            frame: frame,
+            isOnScreen: window[kCGWindowIsOnscreen as String] as? Bool ?? false
         )
     }
 
-    private func imageFingerprint(windowID: CGWindowID) -> UInt64? {
-        guard let image = CGWindowListCreateImage(
-                  .null,
-                  .optionIncludingWindow,
-                  windowID,
-                  [.boundsIgnoreFraming, .bestResolution]
-              ),
-              let data = image.dataProvider?.data,
-              let bytes = CFDataGetBytePtr(data) else { return nil }
-        let length = CFDataGetLength(data)
-        guard length > 0 else { return nil }
-        let stride = max(1, length / 512)
-        var digest: UInt64 = 14_695_981_039_346_656_037
-        for offset in Swift.stride(from: 0, to: length, by: stride) {
-            digest ^= UInt64(bytes[offset])
-            digest &*= 1_099_511_628_211
-        }
-        return digest
+    private static func windowOwnerProcessIdentifier(windowID: CGWindowID) -> pid_t? {
+        windowState(windowID: windowID)?.ownerProcessIdentifier
     }
 
-    private func postClick(at point: CGPoint) {
-        let originalPointerLocation = CGEvent(source: nil)?.location
-        CGEvent(
-            mouseEventSource: nil,
-            mouseType: .leftMouseDown,
-            mouseCursorPosition: point,
-            mouseButton: .left
-        )?.post(tap: .cghidEventTap)
-        CGEvent(
-            mouseEventSource: nil,
-            mouseType: .leftMouseUp,
-            mouseCursorPosition: point,
-            mouseButton: .left
-        )?.post(tap: .cghidEventTap)
-        if let originalPointerLocation {
-            CGWarpMouseCursorPosition(originalPointerLocation)
+    private func menuLocation(
+        anchor: CGRect,
+        position: TaskbarPosition?
+    ) -> CGPoint {
+        switch position {
+        case .bottom:
+            CGPoint(x: anchor.midX, y: anchor.maxY)
+        case .top:
+            CGPoint(x: anchor.midX, y: anchor.minY)
+        case .left:
+            CGPoint(x: anchor.maxX, y: anchor.midY)
+        case .right:
+            CGPoint(x: anchor.minX, y: anchor.midY)
+        case nil:
+            CGPoint(x: anchor.midX, y: anchor.midY)
         }
     }
 
@@ -1005,19 +1197,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
             return
         }
 
-        let point = CGPoint(x: item.sourceFrame.midX, y: item.sourceFrame.midY)
-        CGEvent(
-            mouseEventSource: nil,
-            mouseType: .leftMouseDown,
-            mouseCursorPosition: point,
-            mouseButton: .left
-        )?.post(tap: .cghidEventTap)
-        CGEvent(
-            mouseEventSource: nil,
-            mouseType: .leftMouseUp,
-            mouseCursorPosition: point,
-            mouseButton: .left
-        )?.post(tap: .cghidEventTap)
+        NSSound.beep()
     }
 
     @discardableResult
@@ -1065,12 +1245,6 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
             }
         }
         return nil
-    }
-
-    private func activateApplication(processIdentifier: pid_t) {
-        guard let application = NSRunningApplication(processIdentifier: processIdentifier) else { return }
-        application.unhide()
-        application.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
     }
 
     private func mirroredMenu(
@@ -1188,6 +1362,7 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
 
     private func refresh() {
         guard isEnabled else { return }
+        restoreRelocatedWindows(onlyHidden: true)
         guard AXIsProcessTrusted() else {
             refreshTask?.cancel()
             refreshTask = nil
@@ -1695,7 +1870,15 @@ struct ExternalStatusItemButton: View {
                     renderedContentSize: renderedContentSize,
                     sourceFrame: item.interactionFrame
                 ) : nil
-                service.performPrimaryAction(item, sourcePoint: sourcePoint)
+                let anchorRect = control.window.map {
+                    $0.convertToScreen(control.convert(control.bounds, to: nil))
+                }
+                service.performPrimaryAction(
+                    item,
+                    sourcePoint: sourcePoint,
+                    anchorRect: anchorRect,
+                    taskbarPosition: taskbarPosition
+                )
                 onActivate?()
             },
             contextAction: { service.presentContextMenu(item) },

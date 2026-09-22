@@ -663,6 +663,8 @@ func runSelfTest() async -> Int32 {
         renderedContentSize: compositeTrayContentSize,
         sourceFrame: compositeTraySourceFrame
     )
+    let popupTestScreen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+    let popupTestSize = CGSize(width: 200, height: 150)
     guard SettingsPage.allCases.map(\.rawValue) == [
         "General",
         "Appearance",
@@ -789,6 +791,30 @@ func runSelfTest() async -> Int32 {
               sourceFrame: CGRect(x: 100, y: 2, width: 24, height: 24)
           ),
           compositeTrayCenterPoint == CGPoint(x: 1048, y: 15),
+          ExternalStatusItemPopupPlacement.cocoaOrigin(
+              anchor: CGRect(x: 100, y: 10, width: 32, height: 40),
+              popupSize: popupTestSize,
+              screenFrame: popupTestScreen,
+              position: .bottom
+          ) == CGPoint(x: 16, y: 58),
+          ExternalStatusItemPopupPlacement.cocoaOrigin(
+              anchor: CGRect(x: 100, y: 850, width: 32, height: 40),
+              popupSize: popupTestSize,
+              screenFrame: popupTestScreen,
+              position: .top
+          ) == CGPoint(x: 16, y: 692),
+          ExternalStatusItemPopupPlacement.cocoaOrigin(
+              anchor: CGRect(x: 10, y: 400, width: 32, height: 40),
+              popupSize: popupTestSize,
+              screenFrame: popupTestScreen,
+              position: .left
+          ) == CGPoint(x: 50, y: 345),
+          ExternalStatusItemPopupPlacement.cocoaOrigin(
+              anchor: CGRect(x: 1398, y: 400, width: 32, height: 40),
+              popupSize: popupTestSize,
+              screenFrame: popupTestScreen,
+              position: .right
+          ) == CGPoint(x: 1190, y: 345),
           ExternalStatusItemClickMapper.sourcePoint(
               activationLocation: CGPoint(x: 6, y: 20),
               controlBounds: compositeTrayControlBounds,
