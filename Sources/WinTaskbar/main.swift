@@ -127,15 +127,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let taskbarShortcutsEnabled = preferences.$taskbarEnabled
             .combineLatest(preferences.$globalHotkeysEnabled)
             .map { $0 && $1 }
-        let effectiveWindowsKeyMapping = KarabinerIntegrationService.shared.$isEnabled
-            .map { karabinerEnabled in
-                karabinerEnabled ? WindowsKeyMapping.control : .option
-            }
-            .removeDuplicates()
         Publishers.CombineLatest(
             Publishers.CombineLatest4(
                 taskbarShortcutsEnabled,
-                effectiveWindowsKeyMapping,
+                preferences.$windowsKeyMapping,
                 preferences.$windowsKeyOpensStart,
                 registeredShortcutConfigurations
             ),
@@ -873,7 +868,7 @@ func runSelfTest() async -> Int32 {
           ).height > 32,
           preferences.menuButtonPlacement == .standard,
           preferences.altTabModifier == .option,
-          preferences.windowsKeyMapping == .option,
+          preferences.windowsKeyMapping == .control,
           preferences.windowsKeyOpensStart,
           preferences.globalShortcutConfigurations.count == 43,
           preferences.customShortcutConfigurations.isEmpty,

@@ -1,6 +1,144 @@
 import Combine
 import Foundation
 
+enum KeyboardModifierRole: String, Codable, CaseIterable, Identifiable {
+    case control
+    case function
+    case windows
+    case alt
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .control: "Ctrl"
+        case .function: "Fn"
+        case .windows: "Win"
+        case .alt: "Alt"
+        }
+    }
+
+    func localOutput(
+        for side: KeyboardModifierSide,
+        windowsKeyMapping: WindowsKeyMapping
+    ) -> String {
+        switch self {
+        case .control:
+            windowsKeyMapping == .command
+                ? windowsKeyMapping.karabinerFallbackKeyCode(for: side)
+                : (side == .left ? "left_command" : "right_command")
+        case .function:
+            windowsKeyMapping == .function
+                ? windowsKeyMapping.karabinerFallbackKeyCode(for: side)
+                : "fn"
+        case .windows: windowsKeyMapping.karabinerKeyCode(for: side)
+        case .alt:
+            windowsKeyMapping == .option
+                ? windowsKeyMapping.karabinerFallbackKeyCode(for: side)
+                : (side == .left ? "left_option" : "right_option")
+        }
+    }
+
+    func windowsAppOutput(for side: KeyboardModifierSide) -> String {
+        switch self {
+        case .control: side == .left ? "left_control" : "right_control"
+        case .function: "fn"
+        case .windows: side == .left ? "left_command" : "right_command"
+        case .alt: side == .left ? "left_option" : "right_option"
+        }
+    }
+}
+
+private extension WindowsKeyMapping {
+    func karabinerKeyCode(for side: KeyboardModifierSide) -> String {
+        switch self {
+        case .function: "fn"
+        case .control: side == .left ? "left_control" : "right_control"
+        case .option: side == .left ? "left_option" : "right_option"
+        case .command: side == .left ? "left_command" : "right_command"
+        }
+    }
+
+    func karabinerFallbackKeyCode(for side: KeyboardModifierSide) -> String {
+        side == .left ? "left_control" : "right_control"
+    }
+}
+
+enum KeyboardModifierSide: String, Codable, CaseIterable, Identifiable {
+    case left
+    case right
+
+    var id: String { rawValue }
+    var title: String {
+        NSLocalizedString(self == .left ? "Left" : "Right", comment: "Keyboard modifier side")
+    }
+}
+
+struct KeyboardModifierAssignment: Codable, Hashable, Identifiable {
+    var side: KeyboardModifierSide
+    var role: KeyboardModifierRole
+    var physicalKey: String
+
+    var id: String { "\(side.rawValue).\(role.rawValue)" }
+}
+
+struct KarabinerKeyboardDevice: Codable, Hashable, Identifiable {
+    var id: String
+    var name: String
+    var manufacturer: String?
+    var vendorID: Int?
+    var productID: Int?
+    var locationID: Int?
+    var deviceAddress: String?
+    var isBuiltIn: Bool
+
+    var subtitle: String {
+        if isBuiltIn {
+            return NSLocalizedString("Built-in keyboard", comment: "Keyboard device type")
+        }
+        let vendor = vendorID.map(String.init) ?? "?"
+        let product = productID.map(String.init) ?? "?"
+        return String(
+            format: NSLocalizedString("Vendor %@ · Product %@", comment: "Keyboard device identifiers"),
+            vendor,
+            product
+        )
+    }
+
+    var conditionIdentifier: [String: Any] {
+        if isBuiltIn { return ["is_built_in_keyboard": true] }
+        var identifier: [String: Any] = ["is_keyboard": true]
+        if let vendorID { identifier["vendor_id"] = vendorID }
+        if let productID { identifier["product_id"] = productID }
+        if let deviceAddress, !deviceAddress.isEmpty {
+            identifier["device_address"] = deviceAddress
+        } else if let locationID {
+            identifier["location_id"] = locationID
+        }
+        return identifier
+    }
+}
+
+struct KeyboardMappingProfile: Codable, Hashable, Identifiable {
+    var device: KarabinerKeyboardDevice
+    var assignments: [KeyboardModifierAssignment]
+
+    var id: String { device.id }
+
+    func assignment(side: KeyboardModifierSide, role: KeyboardModifierRole) -> KeyboardModifierAssignment? {
+        assignments.first { $0.side == side && $0.role == role }
+    }
+
+    func physicalKey(
+        forLogicalKey logicalKey: String,
+        windowsKeyMapping: WindowsKeyMapping
+    ) -> String? {
+        assignments.first {
+            $0.role.localOutput(for: $0.side, windowsKeyMapping: windowsKeyMapping) == logicalKey
+        }?.physicalKey
+    }
+}
+
 @MainActor
 final class KarabinerIntegrationService: ObservableObject {
     static let shared = KarabinerIntegrationService()
@@ -8,13 +146,17 @@ final class KarabinerIntegrationService: ObservableObject {
     private static let managedRulePrefix = "WinTaskbar managed: Windows keyboard mode"
     private static let managedRuleDescription = "WinTaskbar managed: Windows keyboard mode v1"
     private static let karabinerCLIPath = "/Library/Application Support/org.pqrs/Karabiner-Elements/bin/karabiner_cli"
-    private static let managedModifierKeys: Set<String> = ["fn", "left_command", "left_control", "left_option"]
+    private static let managedModifierKeys: Set<String> = [
+        "fn", "left_command", "right_command", "left_control", "right_control", "left_option", "right_option"
+    ]
 
     @Published private(set) var isAvailable = false
     @Published private(set) var isEnabled = false
     @Published private(set) var version: String?
     @Published private(set) var conflictCount = 0
     @Published private(set) var lastError: String?
+    @Published private(set) var keyboards: [KarabinerKeyboardDevice] = []
+    @Published private(set) var keyboardMappings: [KeyboardMappingProfile] = []
 
     private let fileManager = FileManager.default
 
@@ -36,6 +178,10 @@ final class KarabinerIntegrationService: ObservableObject {
         supportDirectoryURL.appendingPathComponent("karabiner-integration-state.json")
     }
 
+    private var keyboardMappingsURL: URL {
+        supportDirectoryURL.appendingPathComponent("keyboard-mappings.json")
+    }
+
     private init() {
         refresh()
     }
@@ -47,6 +193,12 @@ final class KarabinerIntegrationService: ObservableObject {
         version = isAvailable ? Self.readKarabinerVersion() : nil
 
         do {
+            keyboards = isAvailable ? try Self.readConnectedKeyboards() : []
+            keyboardMappings = try readKeyboardMappings()
+            if keyboardMappings.isEmpty,
+               let builtInKeyboard = keyboards.first(where: \.isBuiltIn) {
+                keyboardMappings = [Self.defaultBuiltInMapping(for: builtInKeyboard)]
+            }
             let root = try readConfiguration()
             guard let profile = Self.selectedProfile(in: root) else {
                 isEnabled = false
@@ -54,7 +206,7 @@ final class KarabinerIntegrationService: ObservableObject {
                 return
             }
             isEnabled = Self.containsManagedRule(profile)
-            conflictCount = isEnabled ? 0 : Self.countConflicts(in: profile)
+            conflictCount = isEnabled ? 0 : Self.countConflicts(in: profile, mappings: keyboardMappings)
         } catch {
             isEnabled = false
             conflictCount = 0
@@ -78,11 +230,14 @@ final class KarabinerIntegrationService: ObservableObject {
 
             let originalData = try canonicalData(root)
             let previousPreferences = StoredPreferences(preferences: preferences)
-            let removal = Self.removingConflicts(from: profiles[selectedIndex])
+            let removal = Self.removingConflicts(from: profiles[selectedIndex], mappings: keyboardMappings)
             var profile = removal.profile
             var complexModifications = profile["complex_modifications"] as? [String: Any] ?? [:]
             var rules = complexModifications["rules"] as? [[String: Any]] ?? []
-            rules.insert(Self.managedRule(), at: 0)
+            rules.insert(Self.managedRule(
+                mappings: keyboardMappings,
+                windowsKeyMapping: preferences.windowsKeyMapping
+            ), at: 0)
             complexModifications["rules"] = rules
             profile["complex_modifications"] = complexModifications
             profiles[selectedIndex] = profile
@@ -102,6 +257,7 @@ final class KarabinerIntegrationService: ObservableObject {
             try writeState(state)
             do {
                 try writeConfiguration(installedData)
+                try writeKeyboardMappings(keyboardMappings)
             } catch {
                 try? fileManager.removeItem(at: stateURL)
                 throw error
@@ -126,7 +282,11 @@ final class KarabinerIntegrationService: ObservableObject {
             guard var profiles = root["profiles"] as? [[String: Any]],
                   let selectedIndex = profiles.firstIndex(where: { ($0["selected"] as? Bool) == true }),
                   Self.containsManagedRule(profiles[selectedIndex]),
-                  !Self.containsCurrentManagedRule(profiles[selectedIndex]) else { return }
+                  !Self.containsCurrentManagedRule(
+                      profiles[selectedIndex],
+                      mappings: keyboardMappings,
+                      windowsKeyMapping: preferences.windowsKeyMapping
+                  ) else { return }
 
             let state = try readState()
             let currentData = try canonicalData(root)
@@ -138,7 +298,10 @@ final class KarabinerIntegrationService: ObservableObject {
             var complexModifications = profile["complex_modifications"] as? [String: Any] ?? [:]
             var rules = complexModifications["rules"] as? [[String: Any]] ?? []
             rules.removeAll { Self.isManagedRule($0) }
-            rules.insert(Self.managedRule(), at: 0)
+            rules.insert(Self.managedRule(
+                mappings: keyboardMappings,
+                windowsKeyMapping: preferences.windowsKeyMapping
+            ), at: 0)
             complexModifications["rules"] = rules
             profile["complex_modifications"] = complexModifications
             profiles[selectedIndex] = profile
@@ -153,9 +316,52 @@ final class KarabinerIntegrationService: ObservableObject {
             )
             try writeState(updatedState)
             try writeConfiguration(installedData)
+            try writeKeyboardMappings(keyboardMappings)
             refresh()
         } catch {
             lastError = error.localizedDescription
+        }
+    }
+
+    func mapping(for device: KarabinerKeyboardDevice) -> KeyboardMappingProfile? {
+        keyboardMappings.first { $0.device.id == device.id }
+    }
+
+    func saveKeyboardMapping(
+        for device: KarabinerKeyboardDevice,
+        assignments: [KeyboardModifierAssignment],
+        windowsKeyMapping: WindowsKeyMapping
+    ) {
+        lastError = nil
+        do {
+            var updatedMappings = keyboardMappings.filter { $0.device.id != device.id }
+            updatedMappings.append(KeyboardMappingProfile(device: device, assignments: assignments))
+            updatedMappings.sort { $0.device.name.localizedCaseInsensitiveCompare($1.device.name) == .orderedAscending }
+            try writeKeyboardMappings(updatedMappings)
+
+            if isEnabled {
+                try replaceManagedRule(
+                    mappings: updatedMappings,
+                    windowsKeyMapping: windowsKeyMapping
+                )
+            }
+            keyboardMappings = updatedMappings
+            refresh()
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    func updateWindowsKeyMapping(_ mapping: WindowsKeyMapping) -> Bool {
+        lastError = nil
+        guard isEnabled else { return true }
+        do {
+            try replaceManagedRule(mappings: keyboardMappings, windowsKeyMapping: mapping)
+            refresh()
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
         }
     }
 
@@ -254,6 +460,71 @@ final class KarabinerIntegrationService: ObservableObject {
         return try JSONDecoder().decode(IntegrationState.self, from: data)
     }
 
+    private func readKeyboardMappings() throws -> [KeyboardMappingProfile] {
+        guard fileManager.fileExists(atPath: keyboardMappingsURL.path) else { return [] }
+        let data = try Data(contentsOf: keyboardMappingsURL)
+        return try JSONDecoder().decode([KeyboardMappingProfile].self, from: data)
+    }
+
+    private func writeKeyboardMappings(_ mappings: [KeyboardMappingProfile]) throws {
+        try fileManager.createDirectory(at: supportDirectoryURL, withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(mappings).write(to: keyboardMappingsURL, options: .atomic)
+    }
+
+    private func replaceManagedRule(
+        mappings: [KeyboardMappingProfile],
+        windowsKeyMapping: WindowsKeyMapping
+    ) throws {
+        var root = try readConfiguration()
+        guard var profiles = root["profiles"] as? [[String: Any]],
+              let selectedIndex = profiles.firstIndex(where: { ($0["selected"] as? Bool) == true }) else {
+            throw IntegrationError.selectedProfileMissing
+        }
+        let state = try readState()
+        let currentData = try canonicalData(root)
+        guard currentData.base64EncodedString() == state.installedConfiguration else {
+            throw IntegrationError.configurationChanged(backupPath: state.backupPath)
+        }
+
+        var profile = profiles[selectedIndex]
+        if var devices = profile["devices"] as? [[String: Any]] {
+            let mappedDevices = mappings.map(\.device)
+            for index in devices.indices {
+                let identifiers = devices[index]["identifiers"] as? [String: Any] ?? [:]
+                guard Self.targetsManagedKeyboard(identifiers, devices: mappedDevices) else { continue }
+                let modifications = devices[index]["simple_modifications"] as? [[String: Any]] ?? []
+                devices[index]["simple_modifications"] = modifications.filter {
+                    !Self.simpleModificationTouchesManagedModifier($0)
+                }
+            }
+            profile["devices"] = devices
+        }
+
+        var complexModifications = profile["complex_modifications"] as? [String: Any] ?? [:]
+        var rules = complexModifications["rules"] as? [[String: Any]] ?? []
+        rules.removeAll { Self.isManagedRule($0) }
+        rules.insert(Self.managedRule(
+            mappings: mappings,
+            windowsKeyMapping: windowsKeyMapping
+        ), at: 0)
+        complexModifications["rules"] = rules
+        profile["complex_modifications"] = complexModifications
+        profiles[selectedIndex] = profile
+        root["profiles"] = profiles
+
+        let installedData = try canonicalData(root)
+        let updatedState = IntegrationState(
+            originalConfiguration: state.originalConfiguration,
+            installedConfiguration: installedData.base64EncodedString(),
+            backupPath: state.backupPath,
+            previousPreferences: state.previousPreferences
+        )
+        try writeState(updatedState)
+        try writeConfiguration(installedData)
+    }
+
     private static func readKarabinerVersion() -> String? {
         let process = Process()
         let pipe = Pipe()
@@ -273,6 +544,70 @@ final class KarabinerIntegrationService: ObservableObject {
         }
     }
 
+    private static func readConnectedKeyboards() throws -> [KarabinerKeyboardDevice] {
+        let process = Process()
+        let output = Pipe()
+        let errors = Pipe()
+        process.executableURL = URL(fileURLWithPath: karabinerCLIPath)
+        process.arguments = ["--list-connected-devices"]
+        process.standardOutput = output
+        process.standardError = errors
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            let data = errors.fileHandleForReading.readDataToEndOfFile()
+            let message = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            throw IntegrationError.deviceDiscoveryFailed(message ?? "Karabiner CLI failed")
+        }
+
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        return try JSONDecoder().decode([ConnectedDevice].self, from: data)
+            .filter {
+                $0.deviceIdentifiers.isKeyboard == true
+                    && $0.isVirtualDevice != true
+                    && $0.deviceIdentifiers.isVirtualDevice != true
+            }
+            .map { device in
+                let identifiers = device.deviceIdentifiers
+                let isBuiltIn = device.isBuiltInKeyboard == true
+                let identity: String
+                if isBuiltIn {
+                    identity = "built-in-keyboard"
+                } else if let address = identifiers.deviceAddress, !address.isEmpty {
+                    identity = "\(identifiers.vendorID ?? 0):\(identifiers.productID ?? 0):\(address)"
+                } else {
+                    identity = "\(identifiers.vendorID ?? 0):\(identifiers.productID ?? 0):\(device.locationID ?? 0)"
+                }
+                return KarabinerKeyboardDevice(
+                    id: identity,
+                    name: device.product.isEmpty ? "Keyboard" : device.product,
+                    manufacturer: device.manufacturer,
+                    vendorID: identifiers.vendorID,
+                    productID: identifiers.productID,
+                    locationID: device.locationID,
+                    deviceAddress: identifiers.deviceAddress,
+                    isBuiltIn: isBuiltIn
+                )
+            }
+            .sorted {
+                if $0.isBuiltIn != $1.isBuiltIn { return $0.isBuiltIn }
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+    }
+
+    private static func defaultBuiltInMapping(for device: KarabinerKeyboardDevice) -> KeyboardMappingProfile {
+        KeyboardMappingProfile(
+            device: device,
+            assignments: [
+                KeyboardModifierAssignment(side: .left, role: .control, physicalKey: "fn"),
+                KeyboardModifierAssignment(side: .left, role: .function, physicalKey: "left_control"),
+                KeyboardModifierAssignment(side: .left, role: .windows, physicalKey: "left_option"),
+                KeyboardModifierAssignment(side: .left, role: .alt, physicalKey: "left_command")
+            ]
+        )
+    }
+
     private static func selectedProfile(in root: [String: Any]) -> [String: Any]? {
         (root["profiles"] as? [[String: Any]])?.first { ($0["selected"] as? Bool) == true }
     }
@@ -283,28 +618,51 @@ final class KarabinerIntegrationService: ObservableObject {
         return rules.contains(where: isManagedRule)
     }
 
-    private static func containsCurrentManagedRule(_ profile: [String: Any]) -> Bool {
+    private static func containsCurrentManagedRule(
+        _ profile: [String: Any],
+        mappings: [KeyboardMappingProfile],
+        windowsKeyMapping: WindowsKeyMapping
+    ) -> Bool {
         let complexModifications = profile["complex_modifications"] as? [String: Any]
         let rules = complexModifications?["rules"] as? [[String: Any]] ?? []
-        return rules.contains { ($0["description"] as? String) == managedRuleDescription }
+        guard let currentRule = rules.first(where: isManagedRule),
+              let currentData = try? JSONSerialization.data(
+                  withJSONObject: currentRule,
+                  options: [.sortedKeys]
+              ),
+              let expectedData = try? JSONSerialization.data(
+                  withJSONObject: managedRule(
+                      mappings: mappings,
+                      windowsKeyMapping: windowsKeyMapping
+                  ),
+                  options: [.sortedKeys]
+              ) else { return false }
+        return currentData == expectedData
     }
 
     private static func isManagedRule(_ rule: [String: Any]) -> Bool {
         (rule["description"] as? String)?.hasPrefix(managedRulePrefix) == true
     }
 
-    private static func countConflicts(in profile: [String: Any]) -> Int {
-        removingConflicts(from: profile).count
+    private static func countConflicts(
+        in profile: [String: Any],
+        mappings: [KeyboardMappingProfile]
+    ) -> Int {
+        removingConflicts(from: profile, mappings: mappings).count
     }
 
-    private static func removingConflicts(from profile: [String: Any]) -> (profile: [String: Any], count: Int) {
+    private static func removingConflicts(
+        from profile: [String: Any],
+        mappings: [KeyboardMappingProfile]
+    ) -> (profile: [String: Any], count: Int) {
         var profile = profile
         var count = 0
 
         if var devices = profile["devices"] as? [[String: Any]] {
             for index in devices.indices {
                 let identifiers = devices[index]["identifiers"] as? [String: Any] ?? [:]
-                guard Self.targetsBuiltInOrGenericKeyboard(identifiers) else { continue }
+                guard Self.targetsBuiltInOrGenericKeyboard(identifiers)
+                        || Self.targetsManagedKeyboard(identifiers, devices: mappings.map(\.device)) else { continue }
                 let modifications = devices[index]["simple_modifications"] as? [[String: Any]] ?? []
                 let retained = modifications.filter { modification in
                     let conflicts = Self.simpleModificationTouchesManagedModifier(modification)
@@ -342,6 +700,27 @@ final class KarabinerIntegrationService: ObservableObject {
         return identifiers["vendor_id"] == nil && identifiers["product_id"] == nil
     }
 
+    private static func targetsManagedKeyboard(
+        _ identifiers: [String: Any],
+        devices: [KarabinerKeyboardDevice]
+    ) -> Bool {
+        devices.contains { device in
+            if device.isBuiltIn {
+                return (identifiers["is_built_in_keyboard"] as? Bool) == true
+            }
+            guard identifiers["vendor_id"] as? Int == device.vendorID,
+                  identifiers["product_id"] as? Int == device.productID else { return false }
+            if let address = device.deviceAddress, !address.isEmpty {
+                return identifiers["device_address"] as? String == address
+            }
+            if let locationID = device.locationID,
+               let configuredLocation = identifiers["location_id"] as? Int {
+                return configuredLocation == locationID
+            }
+            return true
+        }
+    }
+
     private static func simpleModificationTouchesManagedModifier(_ modification: [String: Any]) -> Bool {
         let from = modification["from"] as? [String: Any]
         if let keyCode = from?["key_code"] as? String, managedModifierKeys.contains(keyCode) { return true }
@@ -358,9 +737,11 @@ final class KarabinerIntegrationService: ObservableObject {
         return managedModifierKeys.contains(keyCode)
     }
 
-    private static func managedRule() -> [String: Any] {
+    private static func managedRule(
+        mappings: [KeyboardMappingProfile],
+        windowsKeyMapping: WindowsKeyMapping
+    ) -> [String: Any] {
         var manipulators: [[String: Any]] = []
-        let builtInCondition = deviceCondition()
         let terminalCondition = applicationCondition(
             type: "frontmost_application_if",
             bundleIdentifiers: ["^com\\.apple\\.Terminal$", "^com\\.googlecode\\.iterm2$"]
@@ -374,20 +755,39 @@ final class KarabinerIntegrationService: ObservableObject {
             bundleIdentifiers: ["^com\\.microsoft\\.rdc\\.macos$"]
         )
 
-        manipulators.append(keyMapping(
-            from: "left_option",
-            to: "left_command",
-            conditions: [builtInCondition, windowsAppCondition]
-        ))
-        manipulators.append(keyMapping(
-            from: "left_option",
-            to: "left_control",
-            conditions: [builtInCondition, regularApplicationCondition]
-        ))
-        manipulators.append(keyMapping(from: "fn", to: "left_control", conditions: [builtInCondition, windowsAppCondition]))
-        manipulators.append(keyMapping(from: "fn", to: "left_command", conditions: [builtInCondition, regularApplicationCondition]))
-        manipulators.append(keyMapping(from: "left_control", to: "fn", conditions: [builtInCondition]))
-        manipulators.append(keyMapping(from: "left_command", to: "left_option", conditions: [builtInCondition]))
+        for mapping in mappings {
+            let deviceCondition = deviceCondition(for: mapping.device)
+            for assignment in mapping.assignments {
+                let localOutput = assignment.role.localOutput(
+                    for: assignment.side,
+                    windowsKeyMapping: windowsKeyMapping
+                )
+                let windowsOutput = assignment.role.windowsAppOutput(for: assignment.side)
+                if localOutput == windowsOutput {
+                    if assignment.physicalKey != localOutput {
+                        manipulators.append(keyMapping(
+                            from: assignment.physicalKey,
+                            to: localOutput,
+                            conditions: [deviceCondition]
+                        ))
+                    }
+                } else {
+                    if assignment.physicalKey != localOutput {
+                        manipulators.append(keyMapping(
+                            from: assignment.physicalKey,
+                            to: localOutput,
+                            conditions: [deviceCondition, regularApplicationCondition]
+                        ))
+                    }
+                    guard assignment.physicalKey != windowsOutput else { continue }
+                    manipulators.append(keyMapping(
+                        from: assignment.physicalKey,
+                        to: windowsOutput,
+                        conditions: [deviceCondition, windowsAppCondition]
+                    ))
+                }
+            }
+        }
 
         for key in ["t", "n", "w", "c", "v", "f"] {
             manipulators.append(controlShiftShortcut(
@@ -403,10 +803,10 @@ final class KarabinerIntegrationService: ObservableObject {
         ]
     }
 
-    private static func deviceCondition() -> [String: Any] {
+    private static func deviceCondition(for device: KarabinerKeyboardDevice) -> [String: Any] {
         [
             "type": "device_if",
-            "identifiers": [["is_built_in_keyboard": true]]
+            "identifiers": [device.conditionIdentifier]
         ]
     }
 
@@ -444,6 +844,40 @@ final class KarabinerIntegrationService: ObservableObject {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         return "karabiner-\(formatter.string(from: Date())).json"
+    }
+}
+
+private struct ConnectedDevice: Decodable {
+    let deviceIdentifiers: ConnectedDeviceIdentifiers
+    let isBuiltInKeyboard: Bool?
+    let isVirtualDevice: Bool?
+    let locationID: Int?
+    let manufacturer: String?
+    let product: String
+
+    enum CodingKeys: String, CodingKey {
+        case deviceIdentifiers = "device_identifiers"
+        case isBuiltInKeyboard = "is_built_in_keyboard"
+        case isVirtualDevice = "is_virtual_device"
+        case locationID = "location_id"
+        case manufacturer
+        case product
+    }
+}
+
+private struct ConnectedDeviceIdentifiers: Decodable {
+    let vendorID: Int?
+    let productID: Int?
+    let deviceAddress: String?
+    let isKeyboard: Bool?
+    let isVirtualDevice: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case vendorID = "vendor_id"
+        case productID = "product_id"
+        case deviceAddress = "device_address"
+        case isKeyboard = "is_keyboard"
+        case isVirtualDevice = "is_virtual_device"
     }
 }
 
@@ -486,6 +920,7 @@ private enum IntegrationError: LocalizedError {
     case invalidConfiguration
     case selectedProfileMissing
     case invalidRecoveryState
+    case deviceDiscoveryFailed(String)
     case configurationChanged(backupPath: String)
 
     var errorDescription: String? {
@@ -503,6 +938,14 @@ private enum IntegrationError: LocalizedError {
             NSLocalizedString("Karabiner-Elements has no selected profile.", comment: "Karabiner integration error")
         case .invalidRecoveryState:
             NSLocalizedString("WinTaskbar's Karabiner recovery data is invalid.", comment: "Karabiner integration error")
+        case let .deviceDiscoveryFailed(message):
+            String(
+                format: NSLocalizedString(
+                    "Karabiner keyboard discovery failed: %@",
+                    comment: "Karabiner integration error"
+                ),
+                message
+            )
         case let .configurationChanged(backupPath):
             String(
                 format: NSLocalizedString(

@@ -478,8 +478,6 @@
 	<string>Karabiner-Elements 已就绪</string>
 	<key>Karabiner-Elements is required</key>
 	<string>需要安装 Karabiner-Elements</string>
-	<key>Physical key</key>
-	<string>实体按键</string>
 	<key>macOS logical key</key>
 	<string>macOS 逻辑键</string>
 	<key>Windows key</key>
@@ -504,6 +502,54 @@
 	<string>Alt</string>
 	<key>The four logical modifier keys stay consistent in every local app. Terminal and iTerm keep native Command shortcuts and shell Control shortcuts; Ctrl+Shift+T/N/W/C/V/F are also available as Windows Terminal-style aliases.</key>
 	<string>四个逻辑修饰键在所有本机应用中保持一致。Terminal 和 iTerm 同时保留原生 Command 快捷键和 Shell Control 快捷键，并支持 Ctrl+Shift+T/N/W/C/V/F 作为 Windows Terminal 风格的快捷键。</string>
+	<key>Keyboards</key>
+	<string>键盘</string>
+	<key>Refresh keyboards</key>
+	<string>刷新键盘</string>
+	<key>No physical keyboards found.</key>
+	<string>未发现实体键盘。</string>
+	<key>Not identified</key>
+	<string>未识别</string>
+	<key>Mapped</key>
+	<string>已映射</string>
+	<key>Identify</key>
+	<string>识别</string>
+	<key>Identify again</key>
+	<string>重新识别</string>
+	<key>Built-in keyboard</key>
+	<string>内建键盘</string>
+	<key>Vendor %@ · Product %@</key>
+	<string>厂商 %@ · 产品 %@</string>
+	<key>Identify keyboard</key>
+	<string>识别键盘</string>
+	<key>Review the detected layout before applying it.</key>
+	<string>应用前请检查识别出的键位。</string>
+	<key>Press the key you want to use as %@ %@.</key>
+	<string>请按下你希望作为%@侧 %@ 的按键。</string>
+	<key>Use this keyboard and press only one modifier key. Release it before continuing.</key>
+	<string>请使用这台键盘，并且每次只按一个修饰键；松开后再继续。</string>
+	<key>This keyboard may not have an Fn key. You can skip this step.</key>
+	<string>这台键盘可能没有 Fn 键，可以跳过此步骤。</string>
+	<key>Apply Mapping</key>
+	<string>应用映射</string>
+	<key>That is a %@ key. Press a key on the %@ side.</key>
+	<string>这是%@侧按键，请按%@侧的按键。</string>
+	<key>That key is already assigned. Press a different key or go back.</key>
+	<string>该按键已分配，请按另一个键或返回修改。</string>
+	<key>Left Control</key>
+	<string>左 Control</string>
+	<key>Right Control</key>
+	<string>右 Control</string>
+	<key>Left Option</key>
+	<string>左 Option</string>
+	<key>Right Option</key>
+	<string>右 Option</string>
+	<key>Left Command</key>
+	<string>左 Command</string>
+	<key>Right Command</key>
+	<string>右 Command</string>
+	<key>Karabiner keyboard discovery failed: %@</key>
+	<string>Karabiner 键盘发现失败：%@</string>
 	<key>WinTaskbar will replace %lld conflicting Karabiner mappings. The complete current configuration is backed up first.</key>
 	<string>WinTaskbar 将替换 %lld 条冲突的 Karabiner 映射；操作前会完整备份当前配置。</string>
 	<key>Disable and restore previous configuration</key>
@@ -516,10 +562,6 @@
 	<string>获取 Karabiner-Elements</string>
 	<key>Default Windows shortcuts follow this setting. Shortcuts you record yourself keep their exact modifiers.</key>
 	<string>未单独修改的 Windows 默认快捷键会跟随此设置；你自行录制过的快捷键会保留原来的组合。</string>
-	<key>The physical Option key is always Win. Built-in shortcuts display Win; shortcuts you record yourself keep their exact modifiers.</key>
-	<string>实体 Option 键固定作为 Win。内置快捷键显示 Win；你自行录制的快捷键保留原来的组合。</string>
-	<key>Windows keyboard mode defaults to Option. Changing this selection also updates the Karabiner mapping.</key>
-	<string>Windows 键盘模式默认使用 Option；在这里切换按键时也会同步更新 Karabiner 映射。</string>
 	<key>Karabiner-Elements is not installed or has not created a configuration yet.</key>
 	<string>Karabiner-Elements 尚未安装，或还没有创建配置。</string>
 	<key>Karabiner-Elements configuration was not found.</key>

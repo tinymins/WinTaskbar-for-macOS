@@ -143,11 +143,15 @@ struct HotkeyShortcut: Codable, Hashable {
     }
 }
 
-enum WindowsKeyMapping: String, Codable {
+enum WindowsKeyMapping: String, Codable, Identifiable {
     case function = "Fn / Globe"
     case control = "Control"
     case option = "Option"
     case command = "Command"
+
+    var id: String { rawValue }
+
+    static let selectableCases: [WindowsKeyMapping] = [.control, .command, .option]
 
     var carbonModifier: UInt32 {
         switch self {

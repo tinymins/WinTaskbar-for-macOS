@@ -58,6 +58,7 @@ struct SettingsView: View {
     @State private var showsDateTimeFormat = false
     @State private var editingAdditionalClockIndex: Int?
     @State private var additionalClockDraft = AdditionalClockConfiguration.defaults[0]
+    @State private var identifyingKeyboard: KarabinerKeyboardDevice?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -110,6 +111,24 @@ struct SettingsView: View {
                 configuration: $additionalClockDraft,
                 onSave: saveAdditionalClock,
                 onCancel: { editingAdditionalClockIndex = nil }
+            )
+        }
+        .sheet(item: $identifyingKeyboard) { keyboard in
+            KeyboardIdentificationView(
+                device: keyboard,
+                activeMapping: karabinerIntegration.isEnabled
+                    ? karabinerIntegration.mapping(for: keyboard)
+                    : nil,
+                windowsKeyMapping: preferences.windowsKeyMapping,
+                onSave: { assignments in
+                    karabinerIntegration.saveKeyboardMapping(
+                        for: keyboard,
+                        assignments: assignments,
+                        windowsKeyMapping: preferences.windowsKeyMapping
+                    )
+                    identifyingKeyboard = nil
+                },
+                onCancel: { identifyingKeyboard = nil }
             )
         }
     }
@@ -606,20 +625,46 @@ struct SettingsView: View {
 
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 5) {
                     GridRow {
-                        Text("Physical key").foregroundStyle(.secondary)
-                        Text("macOS logical key").foregroundStyle(.secondary)
                         Text("Windows key").foregroundStyle(.secondary)
+                        Text("macOS logical key").foregroundStyle(.secondary)
                     }
-                    GridRow { Text("Fn / Globe"); Text("Command"); Text("Ctrl") }
-                    GridRow { Text("Control"); Text("Fn / Globe"); Text("Fn / Globe") }
-                    GridRow { Text("Option"); Text("Control"); Text("Win") }
-                    GridRow { Text("Command"); Text("Option"); Text("Alt") }
+                    ForEach(KeyboardModifierRole.allCases) { role in
+                        GridRow {
+                            Text(role.title)
+                            Text(role.localOutput(
+                                for: .left,
+                                windowsKeyMapping: preferences.windowsKeyMapping
+                            ).displayLogicalModifier)
+                        }
+                    }
                 }
                 .font(.caption)
 
                 Text("The four logical modifier keys stay consistent in every local app. Terminal and iTerm keep native Command shortcuts and shell Control shortcuts; Ctrl+Shift+T/N/W/C/V/F are also available as Windows Terminal-style aliases.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Divider()
+
+                HStack {
+                    Text("Keyboards")
+                        .font(.callout.weight(.semibold))
+                    Spacer()
+                    Button("Refresh keyboards") { karabinerIntegration.refresh() }
+                        .controlSize(.small)
+                }
+
+                if karabinerIntegration.keyboards.isEmpty {
+                    Text("No physical keyboards found.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 10) {
+                        ForEach(karabinerIntegration.keyboards) { keyboard in
+                            keyboardMappingCard(keyboard)
+                        }
+                    }
+                }
 
                 if !karabinerIntegration.isEnabled, karabinerIntegration.conflictCount > 0 {
                     Text("WinTaskbar will replace \(karabinerIntegration.conflictCount) conflicting Karabiner mappings. The complete current configuration is backed up first.")
@@ -747,13 +792,60 @@ struct SettingsView: View {
         }
     }
 
+    private func keyboardMappingCard(_ keyboard: KarabinerKeyboardDevice) -> some View {
+        let mapping = karabinerIntegration.mapping(for: keyboard)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(keyboard.name)
+                        .font(.callout.weight(.medium))
+                    Text(keyboard.subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(mapping == nil ? "Not identified" : "Mapped")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(mapping == nil ? Color.orange : Color.green)
+                Button(mapping == nil ? "Identify" : "Identify again") {
+                    identifyingKeyboard = keyboard
+                }
+                .controlSize(.small)
+                .disabled(!karabinerIntegration.isAvailable)
+            }
+
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
+                GridRow {
+                    Text("")
+                    ForEach(KeyboardModifierRole.allCases) { role in
+                        Text(role.title).foregroundStyle(.secondary)
+                    }
+                }
+                ForEach(KeyboardModifierSide.allCases) { side in
+                    GridRow {
+                        Text(side.title).foregroundStyle(.secondary)
+                        ForEach(KeyboardModifierRole.allCases) { role in
+                            Text(mapping?.assignment(side: side, role: role)?.physicalKey.displayKeyboardKey ?? "—")
+                                .monospaced()
+                        }
+                    }
+                }
+            }
+            .font(.caption2)
+        }
+        .padding(10)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+    }
+
     private var shortcutMappings: some View {
         VStack(alignment: .leading, spacing: 22) {
             SettingsSection("Windows key") {
-                LabeledContent("Physical key", value: "Option")
-                if karabinerIntegration.isEnabled {
-                    LabeledContent("macOS logical key", value: "Control")
+                Picker("macOS logical key", selection: windowsKeyMappingBinding) {
+                    ForEach(WindowsKeyMapping.selectableCases) { mapping in
+                        Text(mapping.rawValue).tag(mapping)
+                    }
                 }
+                .disabled(!preferences.globalHotkeysEnabled)
                 Toggle("Press Windows key alone to open Start", isOn: $preferences.windowsKeyOpensStart)
                     .disabled(!preferences.globalHotkeysEnabled)
                 if let issue = globalHotkeys.windowsKeyIssue,
@@ -763,7 +855,7 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
-                Text("The physical Option key is always Win. Built-in shortcuts display Win; shortcuts you record yourself keep their exact modifiers.")
+                Text("Default Windows shortcuts follow this setting. Shortcuts you record yourself keep their exact modifiers.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -818,6 +910,16 @@ struct SettingsView: View {
         if karabinerIntegration.isEnabled { return "Enabled through Karabiner-Elements" }
         if karabinerIntegration.isAvailable { return "Ready to configure Karabiner-Elements" }
         return "Karabiner-Elements is required"
+    }
+
+    private var windowsKeyMappingBinding: Binding<WindowsKeyMapping> {
+        Binding(
+            get: { preferences.windowsKeyMapping },
+            set: { mapping in
+                guard karabinerIntegration.updateWindowsKeyMapping(mapping) else { return }
+                preferences.windowsKeyMapping = mapping
+            }
+        )
     }
 
     private var about: some View {
@@ -926,6 +1028,283 @@ struct SettingsView: View {
               ) else { return }
         preferences.globalShortcutConfigurations[index].shortcut = defaultConfiguration.shortcut
         preferences.globalShortcutConfigurations[index].usesWindowsKey = defaultConfiguration.usesWindowsKey
+    }
+}
+
+private struct KeyboardIdentificationStep: Identifiable {
+    let side: KeyboardModifierSide
+    let role: KeyboardModifierRole
+
+    var id: String { "\(side.rawValue).\(role.rawValue)" }
+
+    static let all = KeyboardModifierSide.allCases.flatMap { side in
+        KeyboardModifierRole.allCases.map { role in
+            KeyboardIdentificationStep(side: side, role: role)
+        }
+    }
+}
+
+private struct KeyboardIdentificationView: View {
+    let device: KarabinerKeyboardDevice
+    let activeMapping: KeyboardMappingProfile?
+    let windowsKeyMapping: WindowsKeyMapping
+    let onSave: ([KeyboardModifierAssignment]) -> Void
+    let onCancel: () -> Void
+
+    @State private var stepIndex = 0
+    @State private var assignments: [KeyboardModifierAssignment] = []
+    @State private var captureError: String?
+    @State private var isReviewing = false
+    @State private var activeKeys: Set<String> = []
+    @State private var captureOwner = UUID()
+
+    private var step: KeyboardIdentificationStep {
+        KeyboardIdentificationStep.all[min(stepIndex, KeyboardIdentificationStep.all.count - 1)]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 10) {
+                Image(systemName: "keyboard.badge.ellipsis")
+                    .font(.title2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Identify keyboard")
+                        .font(.title2.weight(.semibold))
+                    Text(device.name)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+
+            if isReviewing {
+                Text("Review the detected layout before applying it.")
+                    .font(.callout)
+                mappingGrid
+            } else {
+                ProgressView(
+                    value: Double(stepIndex + 1),
+                    total: Double(KeyboardIdentificationStep.all.count)
+                )
+                Text(
+                    String(
+                        format: NSLocalizedString(
+                            "Press the key you want to use as %@ %@.",
+                            comment: "Keyboard identification prompt"
+                        ),
+                        step.side.title,
+                        step.role.title
+                    )
+                )
+                .font(.title3.weight(.medium))
+                Text("Use this keyboard and press only one modifier key. Release it before continuing.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                if step.role == .function {
+                    Text("This keyboard may not have an Fn key. You can skip this step.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let captureError {
+                    Text(captureError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                mappingGrid
+            }
+
+            Spacer()
+
+            HStack {
+                Button("Cancel", action: onCancel)
+                Spacer()
+                Button("Back", action: moveBack)
+                    .disabled(stepIndex == 0 && !isReviewing)
+                if isReviewing {
+                    Button("Apply Mapping") { onSave(orderedAssignments) }
+                        .buttonStyle(.borderedProminent)
+                } else {
+                    Button("Skip", action: skipStep)
+                }
+            }
+        }
+        .padding(22)
+        .frame(width: 560, height: 430)
+        .onAppear(perform: startMonitoring)
+        .onDisappear(perform: stopMonitoring)
+    }
+
+    private var mappingGrid: some View {
+        Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 6) {
+            GridRow {
+                Text("")
+                ForEach(KeyboardModifierRole.allCases) { role in
+                    Text(role.title).foregroundStyle(.secondary)
+                }
+            }
+            ForEach(KeyboardModifierSide.allCases) { side in
+                GridRow {
+                    Text(side.title).foregroundStyle(.secondary)
+                    ForEach(KeyboardModifierRole.allCases) { role in
+                        Text(assignment(side: side, role: role)?.physicalKey.displayKeyboardKey ?? "—")
+                            .monospaced()
+                    }
+                }
+            }
+        }
+        .font(.callout)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var orderedAssignments: [KeyboardModifierAssignment] {
+        KeyboardIdentificationStep.all.compactMap { step in
+            assignment(side: step.side, role: step.role)
+        }
+    }
+
+    private func assignment(
+        side: KeyboardModifierSide,
+        role: KeyboardModifierRole
+    ) -> KeyboardModifierAssignment? {
+        assignments.first { $0.side == side && $0.role == role }
+    }
+
+    private func startMonitoring() {
+        let installed = GlobalHotkeysService.shared.beginKeyboardIdentification(owner: captureOwner) { keyCode, flags in
+            handle(keyCode: keyCode, flags: flags)
+        }
+        if !installed {
+            captureError = NSLocalizedString(
+                "Keyboard input could not be intercepted. Allow Input Monitoring for WinTaskbar, then try again.",
+                comment: "Keyboard identification input monitoring error"
+            )
+        }
+    }
+
+    private func stopMonitoring() {
+        GlobalHotkeysService.shared.endKeyboardIdentification(owner: captureOwner)
+    }
+
+    private func handle(keyCode: UInt16, flags: NSEvent.ModifierFlags) {
+        guard !isReviewing,
+              let logicalKey = Self.karabinerKey(for: keyCode) else { return }
+        if !Self.isPressed(logicalKey, flags: flags) {
+            activeKeys.remove(logicalKey)
+            return
+        }
+        guard activeKeys.insert(logicalKey).inserted else { return }
+
+        let physicalKey = activeMapping?.physicalKey(
+            forLogicalKey: logicalKey,
+            windowsKeyMapping: windowsKeyMapping
+        ) ?? logicalKey
+        if let detectedSide = Self.side(of: physicalKey),
+           detectedSide != step.side {
+            captureError = String(
+                format: NSLocalizedString(
+                    "That is a %@ key. Press a key on the %@ side.",
+                    comment: "Keyboard identification side mismatch"
+                ),
+                detectedSide.title.lowercased(),
+                step.side.title.lowercased()
+            )
+            return
+        }
+        if assignments.contains(where: { $0.physicalKey == physicalKey && $0.id != step.id }) {
+            captureError = NSLocalizedString(
+                "That key is already assigned. Press a different key or go back.",
+                comment: "Keyboard identification duplicate"
+            )
+            return
+        }
+
+        assignments.removeAll { $0.id == step.id }
+        assignments.append(KeyboardModifierAssignment(
+            side: step.side,
+            role: step.role,
+            physicalKey: physicalKey
+        ))
+        captureError = nil
+        advance()
+    }
+
+    private func skipStep() {
+        assignments.removeAll { $0.id == step.id }
+        captureError = nil
+        advance()
+    }
+
+    private func advance() {
+        if stepIndex + 1 == KeyboardIdentificationStep.all.count {
+            isReviewing = true
+        } else {
+            stepIndex += 1
+        }
+    }
+
+    private func moveBack() {
+        captureError = nil
+        if isReviewing {
+            isReviewing = false
+            stepIndex = KeyboardIdentificationStep.all.count - 1
+        } else if stepIndex > 0 {
+            stepIndex -= 1
+        }
+    }
+
+    private static func karabinerKey(for keyCode: UInt16) -> String? {
+        switch keyCode {
+        case 54: "right_command"
+        case 55: "left_command"
+        case 58: "left_option"
+        case 59: "left_control"
+        case 61: "right_option"
+        case 62: "right_control"
+        case 63: "fn"
+        default: nil
+        }
+    }
+
+    private static func isPressed(_ key: String, flags: NSEvent.ModifierFlags) -> Bool {
+        switch key {
+        case "left_command", "right_command": flags.contains(.command)
+        case "left_option", "right_option": flags.contains(.option)
+        case "left_control", "right_control": flags.contains(.control)
+        case "fn": flags.contains(.function)
+        default: false
+        }
+    }
+
+    private static func side(of key: String) -> KeyboardModifierSide? {
+        if key.hasPrefix("left_") { return .left }
+        if key.hasPrefix("right_") { return .right }
+        return nil
+    }
+}
+
+private extension String {
+    var displayLogicalModifier: String {
+        switch self {
+        case "fn": NSLocalizedString("Fn / Globe", comment: "Keyboard logical modifier")
+        case "left_control", "right_control": NSLocalizedString("Control", comment: "Keyboard logical modifier")
+        case "left_option", "right_option": NSLocalizedString("Option", comment: "Keyboard logical modifier")
+        case "left_command", "right_command": NSLocalizedString("Command", comment: "Keyboard logical modifier")
+        default: self
+        }
+    }
+
+    var displayKeyboardKey: String {
+        switch self {
+        case "fn": NSLocalizedString("Fn / Globe", comment: "Keyboard key")
+        case "left_control": NSLocalizedString("Left Control", comment: "Keyboard key")
+        case "right_control": NSLocalizedString("Right Control", comment: "Keyboard key")
+        case "left_option": NSLocalizedString("Left Option", comment: "Keyboard key")
+        case "right_option": NSLocalizedString("Right Option", comment: "Keyboard key")
+        case "left_command": NSLocalizedString("Left Command", comment: "Keyboard key")
+        case "right_command": NSLocalizedString("Right Command", comment: "Keyboard key")
+        default: self
+        }
     }
 }
 

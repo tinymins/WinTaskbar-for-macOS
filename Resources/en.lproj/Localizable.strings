@@ -472,8 +472,6 @@
 	<string>Ready to configure Karabiner-Elements</string>
 	<key>Karabiner-Elements is required</key>
 	<string>Karabiner-Elements is required</string>
-	<key>Physical key</key>
-	<string>Physical key</string>
 	<key>macOS logical key</key>
 	<string>macOS logical key</string>
 	<key>Windows key</key>
@@ -498,6 +496,54 @@
 	<string>Alt</string>
 	<key>The four logical modifier keys stay consistent in every local app. Terminal and iTerm keep native Command shortcuts and shell Control shortcuts; Ctrl+Shift+T/N/W/C/V/F are also available as Windows Terminal-style aliases.</key>
 	<string>The four logical modifier keys stay consistent in every local app. Terminal and iTerm keep native Command shortcuts and shell Control shortcuts; Ctrl+Shift+T/N/W/C/V/F are also available as Windows Terminal-style aliases.</string>
+	<key>Keyboards</key>
+	<string>Keyboards</string>
+	<key>Refresh keyboards</key>
+	<string>Refresh keyboards</string>
+	<key>No physical keyboards found.</key>
+	<string>No physical keyboards found.</string>
+	<key>Not identified</key>
+	<string>Not identified</string>
+	<key>Mapped</key>
+	<string>Mapped</string>
+	<key>Identify</key>
+	<string>Identify</string>
+	<key>Identify again</key>
+	<string>Identify again</string>
+	<key>Built-in keyboard</key>
+	<string>Built-in keyboard</string>
+	<key>Vendor %@ · Product %@</key>
+	<string>Vendor %@ · Product %@</string>
+	<key>Identify keyboard</key>
+	<string>Identify keyboard</string>
+	<key>Review the detected layout before applying it.</key>
+	<string>Review the detected layout before applying it.</string>
+	<key>Press the key you want to use as %@ %@.</key>
+	<string>Press the key you want to use as %@ %@.</string>
+	<key>Use this keyboard and press only one modifier key. Release it before continuing.</key>
+	<string>Use this keyboard and press only one modifier key. Release it before continuing.</string>
+	<key>This keyboard may not have an Fn key. You can skip this step.</key>
+	<string>This keyboard may not have an Fn key. You can skip this step.</string>
+	<key>Apply Mapping</key>
+	<string>Apply Mapping</string>
+	<key>That is a %@ key. Press a key on the %@ side.</key>
+	<string>That is a %@ key. Press a key on the %@ side.</string>
+	<key>That key is already assigned. Press a different key or go back.</key>
+	<string>That key is already assigned. Press a different key or go back.</string>
+	<key>Left Control</key>
+	<string>Left Control</string>
+	<key>Right Control</key>
+	<string>Right Control</string>
+	<key>Left Option</key>
+	<string>Left Option</string>
+	<key>Right Option</key>
+	<string>Right Option</string>
+	<key>Left Command</key>
+	<string>Left Command</string>
+	<key>Right Command</key>
+	<string>Right Command</string>
+	<key>Karabiner keyboard discovery failed: %@</key>
+	<string>Karabiner keyboard discovery failed: %@</string>
 	<key>WinTaskbar will replace %lld conflicting Karabiner mappings. The complete current configuration is backed up first.</key>
 	<string>WinTaskbar will replace %lld conflicting Karabiner mappings. The complete current configuration is backed up first.</string>
 	<key>Disable and restore previous configuration</key>
@@ -510,10 +556,6 @@
 	<string>Get Karabiner-Elements</string>
 	<key>Default Windows shortcuts follow this setting. Shortcuts you record yourself keep their exact modifiers.</key>
 	<string>Default Windows shortcuts follow this setting. Shortcuts you record yourself keep their exact modifiers.</string>
-	<key>The physical Option key is always Win. Built-in shortcuts display Win; shortcuts you record yourself keep their exact modifiers.</key>
-	<string>The physical Option key is always Win. Built-in shortcuts display Win; shortcuts you record yourself keep their exact modifiers.</string>
-	<key>Windows keyboard mode defaults to Option. Changing this selection also updates the Karabiner mapping.</key>
-	<string>Windows keyboard mode defaults to Option. Changing this selection also updates the Karabiner mapping.</string>
 	<key>Karabiner-Elements is not installed or has not created a configuration yet.</key>
 	<string>Karabiner-Elements is not installed or has not created a configuration yet.</string>
 	<key>Karabiner-Elements configuration was not found.</key>

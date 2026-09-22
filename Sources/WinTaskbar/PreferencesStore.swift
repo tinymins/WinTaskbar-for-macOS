@@ -192,7 +192,7 @@ final class PreferencesStore: ObservableObject {
         altTabModifier = AltTabModifier(
             rawValue: defaults.string(forKey: "wintaskbar.altTabModifier") ?? ""
         ) ?? .option
-        windowsKeyMapping = WindowsKeyMapping(rawValue: defaults.string(forKey: "wintaskbar.windowsKeyMapping") ?? "") ?? .option
+        windowsKeyMapping = WindowsKeyMapping(rawValue: defaults.string(forKey: "wintaskbar.windowsKeyMapping") ?? "") ?? .control
         windowsKeyOpensStart = defaults.object(forKey: "wintaskbar.windowsKeyOpensStart") as? Bool ?? true
         let legacyShortcuts = Self.load([HotkeyShortcut].self, key: "wintaskbar.hotkeyShortcuts", defaults: defaults)
             ?? GlobalShortcutCatalog.defaultLegacyShortcuts
@@ -311,7 +311,7 @@ final class PreferencesStore: ObservableObject {
         globalHotkeysEnabled = true
         altTabSwitcherEnabled = false
         altTabModifier = .option
-        windowsKeyMapping = .option
+        windowsKeyMapping = .control
         windowsKeyOpensStart = true
         globalShortcutConfigurations = GlobalShortcutCatalog.defaults(
             legacyShortcuts: GlobalShortcutCatalog.defaultLegacyShortcuts

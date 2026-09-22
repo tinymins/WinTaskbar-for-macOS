@@ -215,11 +215,13 @@ private let shortcutCaptureEventTapHandler: CGEventTapCallBack = { _, eventType,
     let service = Unmanaged<GlobalHotkeysService>.fromOpaque(userData).takeUnretainedValue()
     let rawFlags = event.flags.rawValue
     let keyCode = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
-    let keyLabel = NSEvent(cgEvent: event)?.charactersIgnoringModifiers?.uppercased()
+    let keyLabel = eventType == .keyDown
+        ? NSEvent(cgEvent: event)?.charactersIgnoringModifiers?.uppercased()
+        : nil
     let shouldSuppress = MainActor.assumeIsolated {
-        service.handleShortcutCaptureEvent(
+        service.handleInputCaptureEvent(
             eventType,
-            rawFlags: rawFlags,
+            flags: NSEvent.ModifierFlags(rawValue: UInt(rawFlags)),
             keyCode: keyCode,
             keyLabel: keyLabel
         )
@@ -289,6 +291,8 @@ final class GlobalHotkeysService: ObservableObject {
     private var shortcutCaptureLocalMonitor: Any?
     private var shortcutCaptureOwner: UUID?
     private var shortcutCaptureCompletion: ((HotkeyShortcut?) -> Void)?
+    private var keyboardIdentificationOwners: Set<UUID> = []
+    private var keyboardIdentificationHandler: ((UInt16, NSEvent.ModifierFlags) -> Void)?
     private var workspaceTerminationObserver: NSObjectProtocol?
     private var registrationRetryTask: Task<Void, Never>?
 
@@ -355,6 +359,37 @@ final class GlobalHotkeysService: ObservableObject {
         finishShortcutCapture(owner: owner, with: nil)
     }
 
+    func beginKeyboardIdentification(
+        owner: UUID,
+        onModifierEvent: @escaping (UInt16, NSEvent.ModifierFlags) -> Void
+    ) -> Bool {
+        if isCapturingShortcut {
+            completeShortcutCapture(with: nil)
+        }
+        keyboardIdentificationOwners.insert(owner)
+        keyboardIdentificationHandler = onModifierEvent
+        applyConfiguration()
+        installShortcutCaptureLocalMonitor()
+        guard installShortcutCaptureEventTap() else {
+            keyboardIdentificationOwners.remove(owner)
+            keyboardIdentificationHandler = nil
+            removeShortcutCaptureLocalMonitor()
+            applyConfiguration()
+            return false
+        }
+        return true
+    }
+
+    func endKeyboardIdentification(owner: UUID) {
+        keyboardIdentificationOwners.remove(owner)
+        if keyboardIdentificationOwners.isEmpty {
+            keyboardIdentificationHandler = nil
+            removeShortcutCaptureEventTap()
+            removeShortcutCaptureLocalMonitor()
+        }
+        applyConfiguration()
+    }
+
     private func applyConfiguration() {
         unregisterAll()
         windowsKeyGesture = WindowsKeyGestureState(windowsModifier: windowsKeyMapping.eventModifier)
@@ -378,8 +413,9 @@ final class GlobalHotkeysService: ObservableObject {
         }
         windowsKeyIssue = nil
         altTabIssue = nil
-        let taskbarShortcutsActive = requestedEnabled && !isCapturingShortcut
-        let allTabActive = altTabSwitcherEnabled && !isCapturingShortcut
+        let isInputCaptureActive = isCapturingShortcut || !keyboardIdentificationOwners.isEmpty
+        let taskbarShortcutsActive = requestedEnabled && !isInputCaptureActive
+        let allTabActive = altTabSwitcherEnabled && !isInputCaptureActive
         if taskbarShortcutsActive {
             for (index, configuration) in configurations.enumerated() where configuration.isEnabled {
                 guard issues[configuration.id] == nil else { continue }
@@ -420,7 +456,7 @@ final class GlobalHotkeysService: ObservableObject {
             altTabTrackingEnabled = altTabIssue == nil
         }
         registrationIssues = issues
-        isEnabled = (requestedEnabled || altTabSwitcherEnabled) && !isCapturingShortcut
+        isEnabled = (requestedEnabled || altTabSwitcherEnabled) && !isInputCaptureActive
     }
 
     static func duplicateIssues(
@@ -795,13 +831,13 @@ final class GlobalHotkeysService: ObservableObject {
             }
             let rawFlags = event.modifierFlags.rawValue
             let keyCode = UInt32(event.keyCode)
-            let keyLabel = event.charactersIgnoringModifiers?.uppercased()
+            let keyLabel = eventType == .keyDown
+                ? event.charactersIgnoringModifiers?.uppercased()
+                : nil
             let shouldSuppress = MainActor.assumeIsolated {
-                self?.handleShortcutCaptureEvent(
+                self?.handleInputCaptureEvent(
                     eventType,
-                    modifiers: Self.carbonModifiers(
-                        NSEvent.ModifierFlags(rawValue: rawFlags)
-                    ),
+                    flags: NSEvent.ModifierFlags(rawValue: rawFlags),
                     keyCode: keyCode,
                     keyLabel: keyLabel
                 ) ?? false
@@ -829,15 +865,32 @@ final class GlobalHotkeysService: ObservableObject {
         applyConfiguration()
     }
 
-    fileprivate func handleShortcutCaptureEvent(
+    fileprivate func handleInputCaptureEvent(
         _ eventType: CGEventType,
-        rawFlags: UInt64,
+        flags: NSEvent.ModifierFlags,
         keyCode: UInt32,
         keyLabel: String?
     ) -> Bool {
-        handleShortcutCaptureEvent(
+        guard NSApp.isActive else { return false }
+        if let keyboardIdentificationHandler, !keyboardIdentificationOwners.isEmpty {
+            if eventType == .tapDisabledByTimeout || eventType == .tapDisabledByUserInput {
+                if let eventTap = shortcutCaptureEventTap {
+                    CGEvent.tapEnable(tap: eventTap, enable: true)
+                }
+                return false
+            }
+            if eventType == .flagsChanged {
+                let capturedKeyCode = UInt16(keyCode)
+                let capturedFlags = flags
+                DispatchQueue.main.async {
+                    keyboardIdentificationHandler(capturedKeyCode, capturedFlags)
+                }
+            }
+            return true
+        }
+        return handleShortcutCaptureEvent(
             eventType,
-            modifiers: Self.carbonModifiers(CGEventFlags(rawValue: rawFlags)),
+            modifiers: Self.carbonModifiers(flags),
             keyCode: keyCode,
             keyLabel: keyLabel
         )
