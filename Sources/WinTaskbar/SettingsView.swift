@@ -625,16 +625,58 @@ struct SettingsView: View {
 
                 Picker(selection: windowsKeyMappingBinding) {
                     ForEach(WindowsKeyMapping.selectableCases) { mapping in
-                        Text(mapping.rawValue).tag(mapping)
+                        HStack(spacing: 6) {
+                            Text(mapping.shortcutGlyph)
+                            Text(LocalizedStringKey(mapping.rawValue))
+                        }
+                        .tag(mapping)
                     }
                 } label: {
-                    Label("Windows key", systemImage: "square.grid.2x2")
+                    Label("Logical modifier used as Windows key", systemImage: "square.grid.2x2")
+                }
+
+                HStack(spacing: 7) {
+                    ShortcutKeycap {
+                        Text(preferences.windowsKeyMapping.shortcutGlyph)
+                    }
+                    Image(systemName: "arrow.right")
+                        .foregroundStyle(.secondary)
+                    ShortcutKeycap {
+                        Image(systemName: "square.grid.2x2")
+                            .accessibilityLabel("Windows key")
+                    }
+                    Text("The selected logical modifier acts as the Windows key in local apps.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Label("Shortcut conflicts are not resolved automatically.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.orange)
+                    HStack(spacing: 5) {
+                        ShortcutKeycap {
+                            Image(systemName: "square.grid.2x2")
+                                .accessibilityLabel("Windows key")
+                        }
+                        Text("+").foregroundStyle(.secondary)
+                        ShortcutKeycap { Text("D") }
+                        Image(systemName: "equal")
+                            .foregroundStyle(.secondary)
+                        ShortcutKeycap {
+                            Text(preferences.windowsKeyMapping.shortcutGlyph)
+                        }
+                        Text("+").foregroundStyle(.secondary)
+                        ShortcutKeycap { Text("D") }
+                        Text("The original macOS shortcut action is overridden.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 5) {
                     GridRow {
-                        Label("Windows key", systemImage: "square.grid.2x2")
-                            .foregroundStyle(.secondary)
+                        Text("Windows keyboard role").foregroundStyle(.secondary)
                         Text("macOS logical key").foregroundStyle(.secondary)
                     }
                     ForEach(KeyboardModifierRole.allCases) { role in
@@ -1309,6 +1351,38 @@ private extension String {
         case "right_command": NSLocalizedString("Right Command", comment: "Keyboard key")
         default: self
         }
+    }
+}
+
+private extension WindowsKeyMapping {
+    var shortcutGlyph: String {
+        switch self {
+        case .function: "fn"
+        case .control: "⌃"
+        case .option: "⌥"
+        case .command: "⌘"
+        }
+    }
+}
+
+private struct ShortcutKeycap<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .font(.caption.weight(.semibold))
+            .frame(minWidth: 18, minHeight: 18)
+            .padding(.horizontal, 4)
+            .background(Color.primary.opacity(0.07))
+            .overlay {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .stroke(Color.primary.opacity(0.16), lineWidth: 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
     }
 }
 

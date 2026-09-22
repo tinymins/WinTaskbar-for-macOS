@@ -474,6 +474,16 @@
 	<string>Karabiner-Elements is required</string>
 	<key>macOS logical key</key>
 	<string>macOS logical key</string>
+	<key>Logical modifier used as Windows key</key>
+	<string>Logical modifier used as Windows key</string>
+	<key>Windows keyboard role</key>
+	<string>Windows keyboard role</string>
+	<key>The selected logical modifier acts as the Windows key in local apps.</key>
+	<string>The selected logical modifier acts as the Windows key in local apps.</string>
+	<key>Shortcut conflicts are not resolved automatically.</key>
+	<string>Shortcut conflicts are not resolved automatically.</string>
+	<key>The original macOS shortcut action is overridden.</key>
+	<string>The original macOS shortcut action is overridden.</string>
 	<key>Windows key</key>
 	<string>Windows key</string>
 	<key>Behavior</key>

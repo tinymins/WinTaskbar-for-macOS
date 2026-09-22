@@ -480,6 +480,16 @@
 	<string>需要安装 Karabiner-Elements</string>
 	<key>macOS logical key</key>
 	<string>macOS 逻辑键</string>
+	<key>Logical modifier used as Windows key</key>
+	<string>用作 Windows 键的逻辑修饰键</string>
+	<key>Windows keyboard role</key>
+	<string>Windows 键盘角色</string>
+	<key>The selected logical modifier acts as the Windows key in local apps.</key>
+	<string>所选逻辑修饰键将在本机应用中充当 Windows 键。</string>
+	<key>Shortcut conflicts are not resolved automatically.</key>
+	<string>快捷键冲突不会自动处理，需要你自行调整。</string>
+	<key>The original macOS shortcut action is overridden.</key>
+	<string>原有的 macOS 快捷键功能将被覆盖。</string>
 	<key>Windows key</key>
 	<string>Windows 按键</string>
 	<key>Behavior</key>
