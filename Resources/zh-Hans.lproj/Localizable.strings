@@ -152,6 +152,8 @@
 	<string>高亮样式</string>
 	<key>Hotkeys</key>
 	<string>快捷键</string>
+	<key>Input Adaptation</key>
+	<string>输入适配</string>
 	<key>Icon padding</key>
 	<string>图标内边距</string>
 	<key>Icon size</key>

@@ -669,6 +669,7 @@ func runSelfTest() async -> Int32 {
         "Start Menu",
         "Taskbar & Tray",
         "Date & time",
+        "Input Adaptation",
         "Hotkeys",
         "Shortcut Mappings",
         "About"

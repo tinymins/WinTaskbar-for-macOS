@@ -140,6 +140,8 @@
 	<string>Highlight style</string>
 	<key>Hotkeys</key>
 	<string>Hotkeys</string>
+	<key>Input Adaptation</key>
+	<string>Input Adaptation</string>
 	<key>Icon padding</key>
 	<string>Icon padding</string>
 	<key>Icon size</key>

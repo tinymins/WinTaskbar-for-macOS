@@ -9,6 +9,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case startMenu = "Start Menu"
     case taskbar = "Taskbar & Tray"
     case dateTime = "Date & time"
+    case inputAdaptation = "Input Adaptation"
     case hotkeys = "Hotkeys"
     case shortcutMappings = "Shortcut Mappings"
     case about = "About"
@@ -22,6 +23,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .startMenu: "square.grid.2x2"
         case .taskbar: "dock.rectangle"
         case .dateTime: "clock"
+        case .inputAdaptation: "keyboard.badge.ellipsis"
         case .hotkeys: "keyboard"
         case .shortcutMappings: "command"
         case .about: "info.circle"
@@ -125,6 +127,7 @@ struct SettingsView: View {
             } else {
                 settingsPage(taskbarFeatureContent(dateTime))
             }
+        case .inputAdaptation: settingsPage(inputAdaptationSettings)
         case .hotkeys: settingsPage(hotkeySettings)
         case .shortcutMappings: settingsPage(taskbarFeatureContent(shortcutMappings))
         case .about: settingsPage(about)
@@ -581,7 +584,7 @@ struct SettingsView: View {
         NSWorkspace.shared.open(url)
     }
 
-    private var hotkeySettings: some View {
+    private var inputAdaptationSettings: some View {
         VStack(alignment: .leading, spacing: 22) {
             SettingsSection("Windows keyboard mode") {
                 HStack(spacing: 8) {
@@ -696,7 +699,11 @@ struct SettingsView: View {
                 Button("Refresh mice") { mouseScrollIntegration.refresh() }
                     .controlSize(.small)
             }
+        }
+    }
 
+    private var hotkeySettings: some View {
+        VStack(alignment: .leading, spacing: 22) {
             if !preferences.taskbarEnabled {
                 featureDisabledNotice("Turn on Taskbar in General to configure Taskbar shortcuts.")
             }
