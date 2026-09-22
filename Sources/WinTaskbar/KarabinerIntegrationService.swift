@@ -137,6 +137,31 @@ struct KeyboardMappingProfile: Codable, Hashable, Identifiable {
             $0.role.localOutput(for: $0.side, windowsKeyMapping: windowsKeyMapping) == logicalKey
         }?.physicalKey
     }
+
+    func preservingLogicalOutputs(
+        from previousWindowsKeyMapping: WindowsKeyMapping,
+        to updatedWindowsKeyMapping: WindowsKeyMapping
+    ) -> KeyboardMappingProfile {
+        guard previousWindowsKeyMapping != updatedWindowsKeyMapping else { return self }
+        let updatedAssignments = assignments.map { assignment in
+            let previousOutput = assignment.role.localOutput(
+                for: assignment.side,
+                windowsKeyMapping: previousWindowsKeyMapping
+            )
+            let updatedRole = KeyboardModifierRole.allCases.first {
+                $0.localOutput(
+                    for: assignment.side,
+                    windowsKeyMapping: updatedWindowsKeyMapping
+                ) == previousOutput
+            } ?? assignment.role
+            return KeyboardModifierAssignment(
+                side: assignment.side,
+                role: updatedRole,
+                physicalKey: assignment.physicalKey
+            )
+        }
+        return KeyboardMappingProfile(device: device, assignments: updatedAssignments)
+    }
 }
 
 @MainActor
@@ -352,15 +377,39 @@ final class KarabinerIntegrationService: ObservableObject {
         }
     }
 
-    func updateWindowsKeyMapping(_ mapping: WindowsKeyMapping) -> Bool {
+    func updateWindowsKeyMapping(
+        from previousMapping: WindowsKeyMapping,
+        to updatedMapping: WindowsKeyMapping
+    ) -> Bool {
         lastError = nil
-        guard isEnabled else { return true }
+        guard previousMapping != updatedMapping else { return true }
+        let previousKeyboardMappings = keyboardMappings
+        let updatedKeyboardMappings = keyboardMappings.map {
+            $0.preservingLogicalOutputs(from: previousMapping, to: updatedMapping)
+        }
         do {
-            try replaceManagedRule(mappings: keyboardMappings, windowsKeyMapping: mapping)
+            if isEnabled {
+                try replaceManagedRule(
+                    mappings: updatedKeyboardMappings,
+                    windowsKeyMapping: updatedMapping
+                )
+            }
+            try writeKeyboardMappings(updatedKeyboardMappings)
+            keyboardMappings = updatedKeyboardMappings
             refresh()
             return true
         } catch {
-            lastError = error.localizedDescription
+            let updateError = error
+            if isEnabled {
+                try? replaceManagedRule(
+                    mappings: previousKeyboardMappings,
+                    windowsKeyMapping: previousMapping
+                )
+            }
+            try? writeKeyboardMappings(previousKeyboardMappings)
+            keyboardMappings = previousKeyboardMappings
+            refresh()
+            lastError = updateError.localizedDescription
             return false
         }
     }

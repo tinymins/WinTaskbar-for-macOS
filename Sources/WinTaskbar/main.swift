@@ -910,6 +910,55 @@ func runSelfTest() async -> Int32 {
         fputs("SELF-TEST FAILED: Windows shortcut mapping mismatch\n", stderr)
         return 1
     }
+    let keyboardMappingDevice = KarabinerKeyboardDevice(
+        id: "self-test-keyboard",
+        name: "Self-test keyboard",
+        manufacturer: nil,
+        vendorID: nil,
+        productID: nil,
+        locationID: nil,
+        deviceAddress: nil,
+        isBuiltIn: false
+    )
+    let keyboardMapping = KeyboardMappingProfile(
+        device: keyboardMappingDevice,
+        assignments: [
+            KeyboardModifierAssignment(side: .left, role: .control, physicalKey: "fn"),
+            KeyboardModifierAssignment(side: .left, role: .function, physicalKey: "left_control"),
+            KeyboardModifierAssignment(side: .left, role: .windows, physicalKey: "left_option"),
+            KeyboardModifierAssignment(side: .left, role: .alt, physicalKey: "left_command")
+        ]
+    )
+    for previousMapping in WindowsKeyMapping.selectableCases {
+        for updatedMapping in WindowsKeyMapping.selectableCases {
+            let migratedMapping = keyboardMapping.preservingLogicalOutputs(
+                from: previousMapping,
+                to: updatedMapping
+            )
+            let preservesLogicalOutputs = keyboardMapping.assignments.allSatisfy { previousAssignment in
+                guard let updatedAssignment = migratedMapping.assignments.first(where: {
+                    $0.side == previousAssignment.side && $0.physicalKey == previousAssignment.physicalKey
+                }) else { return false }
+                return previousAssignment.role.localOutput(
+                    for: previousAssignment.side,
+                    windowsKeyMapping: previousMapping
+                ) == updatedAssignment.role.localOutput(
+                    for: updatedAssignment.side,
+                    windowsKeyMapping: updatedMapping
+                )
+            }
+            guard preservesLogicalOutputs else {
+                fputs("SELF-TEST FAILED: keyboard mapping migration changed a physical key's logical output\n", stderr)
+                return 1
+            }
+        }
+    }
+    let controlToOptionMapping = keyboardMapping.preservingLogicalOutputs(from: .control, to: .option)
+    guard controlToOptionMapping.assignment(side: .left, role: .windows)?.physicalKey == "left_command",
+          controlToOptionMapping.assignment(side: .left, role: .alt)?.physicalKey == "left_option" else {
+        fputs("SELF-TEST FAILED: Control-to-Option Windows key migration did not preserve the recorded layout\n", stderr)
+        return 1
+    }
     var duplicateShortcuts = preferences.globalShortcutConfigurations
     duplicateShortcuts[1].shortcut = duplicateShortcuts[0].shortcut
     duplicateShortcuts[1].usesWindowsKey = duplicateShortcuts[0].usesWindowsKey

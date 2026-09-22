@@ -959,7 +959,10 @@ struct SettingsView: View {
         Binding(
             get: { preferences.windowsKeyMapping },
             set: { mapping in
-                guard karabinerIntegration.updateWindowsKeyMapping(mapping) else { return }
+                guard karabinerIntegration.updateWindowsKeyMapping(
+                    from: preferences.windowsKeyMapping,
+                    to: mapping
+                ) else { return }
                 preferences.windowsKeyMapping = mapping
             }
         )
