@@ -623,6 +623,12 @@ struct SettingsView: View {
                     }
                 }
 
+                Picker("macOS logical key", selection: windowsKeyMappingBinding) {
+                    ForEach(WindowsKeyMapping.selectableCases) { mapping in
+                        Text(mapping.rawValue).tag(mapping)
+                    }
+                }
+
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 5) {
                     GridRow {
                         Text("Windows key").foregroundStyle(.secondary)
@@ -641,6 +647,10 @@ struct SettingsView: View {
                 .font(.caption)
 
                 Text("The four logical modifier keys stay consistent in every local app. Terminal and iTerm keep native Command shortcuts and shell Control shortcuts; Ctrl+Shift+T/N/W/C/V/F are also available as Windows Terminal-style aliases.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text("Default Windows shortcuts follow this setting. Shortcuts you record yourself keep their exact modifiers.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -840,12 +850,6 @@ struct SettingsView: View {
     private var shortcutMappings: some View {
         VStack(alignment: .leading, spacing: 22) {
             SettingsSection("Windows key") {
-                Picker("macOS logical key", selection: windowsKeyMappingBinding) {
-                    ForEach(WindowsKeyMapping.selectableCases) { mapping in
-                        Text(mapping.rawValue).tag(mapping)
-                    }
-                }
-                .disabled(!preferences.globalHotkeysEnabled)
                 Toggle("Press Windows key alone to open Start", isOn: $preferences.windowsKeyOpensStart)
                     .disabled(!preferences.globalHotkeysEnabled)
                 if let issue = globalHotkeys.windowsKeyIssue,
@@ -855,9 +859,6 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
-                Text("Default Windows shortcuts follow this setting. Shortcuts you record yourself keep their exact modifiers.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             SettingsSection("Built-in Windows shortcuts") {
