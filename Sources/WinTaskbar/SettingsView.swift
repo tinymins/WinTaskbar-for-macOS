@@ -623,15 +623,18 @@ struct SettingsView: View {
                     }
                 }
 
-                Picker("macOS logical key", selection: windowsKeyMappingBinding) {
+                Picker(selection: windowsKeyMappingBinding) {
                     ForEach(WindowsKeyMapping.selectableCases) { mapping in
                         Text(mapping.rawValue).tag(mapping)
                     }
+                } label: {
+                    Label("Windows key", systemImage: "square.grid.2x2")
                 }
 
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 5) {
                     GridRow {
-                        Text("Windows key").foregroundStyle(.secondary)
+                        Label("Windows key", systemImage: "square.grid.2x2")
+                            .foregroundStyle(.secondary)
                         Text("macOS logical key").foregroundStyle(.secondary)
                     }
                     ForEach(KeyboardModifierRole.allCases) { role in
