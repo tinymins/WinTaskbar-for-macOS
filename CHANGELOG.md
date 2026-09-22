@@ -2,6 +2,22 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.29] - 2026-09-22
+
+### Added
+
+- Add a Karabiner-Elements-backed Windows keyboard mode that maps the built-in keyboard's modifier keys to Windows-style Ctrl, Win, and Alt roles while preserving Terminal shortcuts.
+- Back up conflicting Karabiner mappings before enabling Windows keyboard mode and restore the previous configuration when the mode is disabled.
+
+### Performance
+
+- Reuse cached Alt-Tab thumbnails and window capabilities, refreshing only missing data and newly created windows.
+
+### Fixed
+
+- Exclude macOS system dialogs, floating utility windows, and other non-switchable surfaces from Alt-Tab while retaining standard application windows and dialogs.
+- Keep Alt-Tab open while a Karabiner-remapped physical modifier remains held, preventing the switcher from immediately closing in Windows keyboard mode and Windows App sessions.
+
 ## [0.0.28] - 2026-09-20
 
 ### Added
