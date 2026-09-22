@@ -770,13 +770,13 @@ final class ExternalStatusItemService: NSObject, ObservableObject {
         )
         suppressionSource?.localEventsSuppressionInterval = 0
 
-        CGWarpMouseCursorPosition(point)
-        try? await Task.sleep(for: .milliseconds(10))
         CGDisplayHideCursor(CGMainDisplayID())
         defer {
             CGWarpMouseCursorPosition(originalPointerLocation)
             CGDisplayShowCursor(CGMainDisplayID())
         }
+        CGWarpMouseCursorPosition(point)
+        try? await Task.sleep(for: .milliseconds(10))
 
         for type in [CGEventType.leftMouseDown, .leftMouseUp, .leftMouseUp] {
             guard let event = CGEvent(
