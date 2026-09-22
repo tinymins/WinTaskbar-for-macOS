@@ -290,7 +290,7 @@ final class KarabinerIntegrationService: ObservableObject {
 
             preferences.globalHotkeysEnabled = true
             preferences.altTabSwitcherEnabled = true
-            preferences.altTabModifier = .option
+            preferences.altTabModifier = .followingWindowsKeyboardLayout(preferences.windowsKeyMapping)
             preferences.windowsKeyOpensStart = true
             conflictCount = removal.count
             refresh()

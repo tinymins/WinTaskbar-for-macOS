@@ -819,10 +819,12 @@ struct SettingsView: View {
             SettingsSection("AllTab window switcher") {
                 Picker("AllTab modifier", selection: $preferences.altTabModifier) {
                     ForEach(AltTabModifier.allCases) { modifier in
-                        Text(modifier.title).tag(modifier)
+                        Text("\(modifier.shortcutGlyph) \(modifier.title)").tag(modifier)
                     }
                 }
-                .disabled(karabinerIntegration.isEnabled)
+                Text("Windows keyboard mode updates this modifier when the recorded Alt key moves. You can override it here.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 if let issue = globalHotkeys.altTabIssue,
                    preferences.altTabSwitcherEnabled {
                     Text(issue)
@@ -964,6 +966,7 @@ struct SettingsView: View {
                     to: mapping
                 ) else { return }
                 preferences.windowsKeyMapping = mapping
+                preferences.altTabModifier = .followingWindowsKeyboardLayout(mapping)
             }
         )
     }

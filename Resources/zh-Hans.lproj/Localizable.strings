@@ -572,6 +572,8 @@
 	<string>获取 Karabiner-Elements</string>
 	<key>Default Windows shortcuts follow this setting. Shortcuts you record yourself keep their exact modifiers.</key>
 	<string>未单独修改的 Windows 默认快捷键会跟随此设置；你自行录制过的快捷键会保留原来的组合。</string>
+	<key>Windows keyboard mode updates this modifier when the recorded Alt key moves. You can override it here.</key>
+	<string>录入的 Alt 键位置变化时，Windows 键盘模式会自动更新此修饰键；你也可以在这里手动覆盖。</string>
 	<key>Karabiner-Elements is not installed or has not created a configuration yet.</key>
 	<string>Karabiner-Elements 尚未安装，或还没有创建配置。</string>
 	<key>Karabiner-Elements configuration was not found.</key>

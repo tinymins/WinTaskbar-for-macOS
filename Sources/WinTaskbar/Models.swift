@@ -179,6 +179,10 @@ enum AltTabModifier: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    static func followingWindowsKeyboardLayout(_ windowsKeyMapping: WindowsKeyMapping) -> AltTabModifier {
+        windowsKeyMapping == .option ? .control : .option
+    }
+
     var title: String {
         switch self {
         case .control: "Control"
@@ -200,6 +204,14 @@ enum AltTabModifier: String, Codable, CaseIterable, Identifiable {
         case .control: .control
         case .option: .option
         case .command: .command
+        }
+    }
+
+    var shortcutGlyph: String {
+        switch self {
+        case .control: "⌃"
+        case .option: "⌥"
+        case .command: "⌘"
         }
     }
 

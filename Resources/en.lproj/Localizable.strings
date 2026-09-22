@@ -566,6 +566,8 @@
 	<string>Get Karabiner-Elements</string>
 	<key>Default Windows shortcuts follow this setting. Shortcuts you record yourself keep their exact modifiers.</key>
 	<string>Default Windows shortcuts follow this setting. Shortcuts you record yourself keep their exact modifiers.</string>
+	<key>Windows keyboard mode updates this modifier when the recorded Alt key moves. You can override it here.</key>
+	<string>Windows keyboard mode updates this modifier when the recorded Alt key moves. You can override it here.</string>
 	<key>Karabiner-Elements is not installed or has not created a configuration yet.</key>
 	<string>Karabiner-Elements is not installed or has not created a configuration yet.</string>
 	<key>Karabiner-Elements configuration was not found.</key>

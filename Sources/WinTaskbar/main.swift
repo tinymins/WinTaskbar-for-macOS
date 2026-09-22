@@ -959,6 +959,12 @@ func runSelfTest() async -> Int32 {
         fputs("SELF-TEST FAILED: Control-to-Option Windows key migration did not preserve the recorded layout\n", stderr)
         return 1
     }
+    guard AltTabModifier.followingWindowsKeyboardLayout(.control) == .option,
+          AltTabModifier.followingWindowsKeyboardLayout(.command) == .option,
+          AltTabModifier.followingWindowsKeyboardLayout(.option) == .control else {
+        fputs("SELF-TEST FAILED: AllTab modifier did not follow the Windows keyboard layout\n", stderr)
+        return 1
+    }
     var duplicateShortcuts = preferences.globalShortcutConfigurations
     duplicateShortcuts[1].shortcut = duplicateShortcuts[0].shortcut
     duplicateShortcuts[1].usesWindowsKey = duplicateShortcuts[0].usesWindowsKey
