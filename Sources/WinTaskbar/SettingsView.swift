@@ -967,6 +967,7 @@ struct SettingsView: View {
                 ) else { return }
                 preferences.windowsKeyMapping = mapping
                 preferences.altTabModifier = .followingWindowsKeyboardLayout(mapping)
+                preferences.markAllTabModifierAsFollowingWindowsKeyboardLayout()
             }
         )
     }

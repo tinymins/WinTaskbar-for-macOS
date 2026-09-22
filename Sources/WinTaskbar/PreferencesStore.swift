@@ -5,6 +5,8 @@ import Foundation
 @MainActor
 final class PreferencesStore: ObservableObject {
     static let shared = PreferencesStore()
+    private static let allTabKeyboardLayoutMigrationKey =
+        "wintaskbar.migrations.allTabFollowsWindowsKeyboardLayout"
 
     private let defaults: UserDefaults
 
@@ -325,6 +327,16 @@ final class PreferencesStore: ObservableObject {
         appFolders = []
         pinnedShortcuts = [:]
         hasCompletedOnboarding = false
+    }
+
+    func migrateAllTabModifierForWindowsKeyboardLayoutIfNeeded() {
+        guard defaults.object(forKey: Self.allTabKeyboardLayoutMigrationKey) == nil else { return }
+        altTabModifier = .followingWindowsKeyboardLayout(windowsKeyMapping)
+        markAllTabModifierAsFollowingWindowsKeyboardLayout()
+    }
+
+    func markAllTabModifierAsFollowingWindowsKeyboardLayout() {
+        defaults.set(true, forKey: Self.allTabKeyboardLayoutMigrationKey)
     }
 
     func pin(_ bundleID: String) {

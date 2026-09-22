@@ -965,6 +965,21 @@ func runSelfTest() async -> Int32 {
         fputs("SELF-TEST FAILED: AllTab modifier did not follow the Windows keyboard layout\n", stderr)
         return 1
     }
+    preferences.windowsKeyMapping = .option
+    preferences.altTabModifier = .option
+    preferences.migrateAllTabModifierForWindowsKeyboardLayoutIfNeeded()
+    guard preferences.altTabModifier == .control else {
+        fputs("SELF-TEST FAILED: legacy AllTab modifier was not migrated to the recorded Alt key\n", stderr)
+        return 1
+    }
+    preferences.altTabModifier = .command
+    preferences.migrateAllTabModifierForWindowsKeyboardLayoutIfNeeded()
+    guard preferences.altTabModifier == .command else {
+        fputs("SELF-TEST FAILED: AllTab layout migration overwrote a manual modifier\n", stderr)
+        return 1
+    }
+    preferences.windowsKeyMapping = .control
+    preferences.altTabModifier = .option
     var duplicateShortcuts = preferences.globalShortcutConfigurations
     duplicateShortcuts[1].shortcut = duplicateShortcuts[0].shortcut
     duplicateShortcuts[1].usesWindowsKey = duplicateShortcuts[0].usesWindowsKey

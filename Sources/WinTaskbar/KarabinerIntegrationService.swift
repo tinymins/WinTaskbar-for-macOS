@@ -291,6 +291,7 @@ final class KarabinerIntegrationService: ObservableObject {
             preferences.globalHotkeysEnabled = true
             preferences.altTabSwitcherEnabled = true
             preferences.altTabModifier = .followingWindowsKeyboardLayout(preferences.windowsKeyMapping)
+            preferences.markAllTabModifierAsFollowingWindowsKeyboardLayout()
             preferences.windowsKeyOpensStart = true
             conflictCount = removal.count
             refresh()
@@ -306,12 +307,13 @@ final class KarabinerIntegrationService: ObservableObject {
             var root = try readConfiguration()
             guard var profiles = root["profiles"] as? [[String: Any]],
                   let selectedIndex = profiles.firstIndex(where: { ($0["selected"] as? Bool) == true }),
-                  Self.containsManagedRule(profiles[selectedIndex]),
-                  !Self.containsCurrentManagedRule(
-                      profiles[selectedIndex],
-                      mappings: keyboardMappings,
-                      windowsKeyMapping: preferences.windowsKeyMapping
-                  ) else { return }
+                  Self.containsManagedRule(profiles[selectedIndex]) else { return }
+            preferences.migrateAllTabModifierForWindowsKeyboardLayoutIfNeeded()
+            guard !Self.containsCurrentManagedRule(
+                profiles[selectedIndex],
+                mappings: keyboardMappings,
+                windowsKeyMapping: preferences.windowsKeyMapping
+            ) else { return }
 
             let state = try readState()
             let currentData = try canonicalData(root)
