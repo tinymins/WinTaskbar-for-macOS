@@ -92,6 +92,45 @@ struct KarabinerKeyboardDevice: Codable, Hashable, Identifiable {
     var deviceAddress: String?
     var isBuiltIn: Bool
 
+    static func stableIdentifier(
+        isBuiltIn: Bool,
+        vendorID: Int?,
+        productID: Int?,
+        locationID: Int?,
+        deviceAddress: String?
+    ) -> String {
+        if isBuiltIn { return "built-in-keyboard" }
+        if let address = deviceAddress, !address.isEmpty {
+            return "\(vendorID ?? 0):\(productID ?? 0):\(address)"
+        }
+        if let vendorID, let productID {
+            return "\(vendorID):\(productID)"
+        }
+        return "location:\(locationID ?? 0)"
+    }
+
+    var stableIdentifier: String {
+        Self.stableIdentifier(
+            isBuiltIn: isBuiltIn,
+            vendorID: vendorID,
+            productID: productID,
+            locationID: locationID,
+            deviceAddress: deviceAddress
+        )
+    }
+
+    func withStableIdentity() -> KarabinerKeyboardDevice {
+        var device = self
+        device.id = stableIdentifier
+        if !isBuiltIn,
+           (deviceAddress == nil || deviceAddress?.isEmpty == true),
+           vendorID != nil,
+           productID != nil {
+            device.locationID = nil
+        }
+        return device
+    }
+
     var subtitle: String {
         if isBuiltIn {
             return NSLocalizedString("Built-in keyboard", comment: "Keyboard device type")
@@ -112,7 +151,7 @@ struct KarabinerKeyboardDevice: Codable, Hashable, Identifiable {
         if let productID { identifier["product_id"] = productID }
         if let deviceAddress, !deviceAddress.isEmpty {
             identifier["device_address"] = deviceAddress
-        } else if let locationID {
+        } else if (vendorID == nil || productID == nil), let locationID {
             identifier["location_id"] = locationID
         }
         return identifier
@@ -124,6 +163,26 @@ struct KeyboardMappingProfile: Codable, Hashable, Identifiable {
     var assignments: [KeyboardModifierAssignment]
 
     var id: String { device.id }
+
+    static func coalescingLegacyDeviceIdentities(
+        _ mappings: [KeyboardMappingProfile]
+    ) -> [KeyboardMappingProfile] {
+        var result: [KeyboardMappingProfile] = []
+        var indexByDeviceID: [String: Int] = [:]
+        for mapping in mappings {
+            let normalized = KeyboardMappingProfile(
+                device: mapping.device.withStableIdentity(),
+                assignments: mapping.assignments
+            )
+            if let existingIndex = indexByDeviceID[normalized.device.id] {
+                result[existingIndex] = normalized
+            } else {
+                indexByDeviceID[normalized.device.id] = result.count
+                result.append(normalized)
+            }
+        }
+        return result
+    }
 
     func assignment(side: KeyboardModifierSide, role: KeyboardModifierRole) -> KeyboardModifierAssignment? {
         assignments.first { $0.side == side && $0.role == role }
@@ -193,7 +252,7 @@ final class KarabinerIntegrationService: ObservableObject {
     static let shared = KarabinerIntegrationService()
 
     private static let managedRulePrefix = "WinTaskbar managed: Windows keyboard mode"
-    private static let managedRuleDescription = "WinTaskbar managed: Windows keyboard mode v1"
+    private static let managedRuleDescription = "WinTaskbar managed: Windows keyboard mode v2"
     private static let karabinerCLIPath = "/Library/Application Support/org.pqrs/Karabiner-Elements/bin/karabiner_cli"
     private static let managedModifierKeys: Set<String> = [
         "fn", "left_command", "right_command", "left_control", "right_control", "left_option", "right_option"
@@ -243,7 +302,11 @@ final class KarabinerIntegrationService: ObservableObject {
 
         do {
             keyboards = isAvailable ? try Self.readConnectedKeyboards() : []
-            keyboardMappings = try readKeyboardMappings()
+            let storedMappings = try readKeyboardMappings()
+            keyboardMappings = KeyboardMappingProfile.coalescingLegacyDeviceIdentities(storedMappings)
+            if keyboardMappings != storedMappings {
+                try writeKeyboardMappings(keyboardMappings)
+            }
             if keyboardMappings.isEmpty,
                let builtInKeyboard = keyboards.first(where: \.isBuiltIn) {
                 keyboardMappings = [Self.defaultBuiltInMapping(for: builtInKeyboard)]
@@ -375,7 +438,7 @@ final class KarabinerIntegrationService: ObservableObject {
     }
 
     func mapping(for device: KarabinerKeyboardDevice) -> KeyboardMappingProfile? {
-        keyboardMappings.first { $0.device.id == device.id }
+        keyboardMappings.first { $0.device.stableIdentifier == device.stableIdentifier }
     }
 
     func saveKeyboardMapping(
@@ -385,8 +448,11 @@ final class KarabinerIntegrationService: ObservableObject {
     ) {
         lastError = nil
         do {
-            var updatedMappings = keyboardMappings.filter { $0.device.id != device.id }
-            updatedMappings.append(KeyboardMappingProfile(device: device, assignments: assignments))
+            let stableDevice = device.withStableIdentity()
+            var updatedMappings = keyboardMappings.filter {
+                $0.device.stableIdentifier != stableDevice.stableIdentifier
+            }
+            updatedMappings.append(KeyboardMappingProfile(device: stableDevice, assignments: assignments))
             updatedMappings.sort { $0.device.name.localizedCaseInsensitiveCompare($1.device.name) == .orderedAscending }
             try writeKeyboardMappings(updatedMappings)
 
@@ -646,14 +712,13 @@ final class KarabinerIntegrationService: ObservableObject {
             .map { device in
                 let identifiers = device.deviceIdentifiers
                 let isBuiltIn = device.isBuiltInKeyboard == true
-                let identity: String
-                if isBuiltIn {
-                    identity = "built-in-keyboard"
-                } else if let address = identifiers.deviceAddress, !address.isEmpty {
-                    identity = "\(identifiers.vendorID ?? 0):\(identifiers.productID ?? 0):\(address)"
-                } else {
-                    identity = "\(identifiers.vendorID ?? 0):\(identifiers.productID ?? 0):\(device.locationID ?? 0)"
-                }
+                let identity = KarabinerKeyboardDevice.stableIdentifier(
+                    isBuiltIn: isBuiltIn,
+                    vendorID: identifiers.vendorID,
+                    productID: identifiers.productID,
+                    locationID: device.locationID,
+                    deviceAddress: identifiers.deviceAddress
+                )
                 return KarabinerKeyboardDevice(
                     id: identity,
                     name: device.product.isEmpty ? "Keyboard" : device.product,
@@ -663,7 +728,7 @@ final class KarabinerIntegrationService: ObservableObject {
                     locationID: device.locationID,
                     deviceAddress: identifiers.deviceAddress,
                     isBuiltIn: isBuiltIn
-                )
+                ).withStableIdentity()
             }
             .sorted {
                 if $0.isBuiltIn != $1.isBuiltIn { return $0.isBuiltIn }

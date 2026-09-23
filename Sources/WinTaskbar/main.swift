@@ -931,6 +931,55 @@ func runSelfTest() async -> Int32 {
             KeyboardModifierAssignment(side: .right, role: .alt, physicalKey: "right_command")
         ]
     )
+    let legacyKeyboardDevice = KarabinerKeyboardDevice(
+        id: "1452:591:34672640",
+        name: "F108Pro Dongle",
+        manufacturer: nil,
+        vendorID: 1452,
+        productID: 591,
+        locationID: 34672640,
+        deviceAddress: nil,
+        isBuiltIn: false
+    )
+    let reconnectedKeyboardDevice = KarabinerKeyboardDevice(
+        id: "1452:591:1118208",
+        name: "F108Pro Dongle",
+        manufacturer: nil,
+        vendorID: 1452,
+        productID: 591,
+        locationID: 1118208,
+        deviceAddress: nil,
+        isBuiltIn: false
+    )
+    let legacyMapping = KeyboardMappingProfile(
+        device: legacyKeyboardDevice,
+        assignments: [
+            KeyboardModifierAssignment(side: .left, role: .windows, physicalKey: "left_option")
+        ]
+    )
+    let latestMapping = KeyboardMappingProfile(
+        device: reconnectedKeyboardDevice,
+        assignments: [
+            KeyboardModifierAssignment(side: .left, role: .windows, physicalKey: "left_command")
+        ]
+    )
+    let coalescedMappings = KeyboardMappingProfile.coalescingLegacyDeviceIdentities([
+        legacyMapping,
+        latestMapping
+    ])
+    let stableCondition = reconnectedKeyboardDevice.withStableIdentity().conditionIdentifier
+    guard legacyKeyboardDevice.stableIdentifier == "1452:591",
+          reconnectedKeyboardDevice.stableIdentifier == "1452:591",
+          coalescedMappings.count == 1,
+          coalescedMappings[0].device.id == "1452:591",
+          coalescedMappings[0].device.locationID == nil,
+          coalescedMappings[0].assignments == latestMapping.assignments,
+          stableCondition["vendor_id"] as? Int == 1452,
+          stableCondition["product_id"] as? Int == 591,
+          stableCondition["location_id"] == nil else {
+        fputs("SELF-TEST FAILED: reconnecting a keyboard changed its persistent identity\n", stderr)
+        return 1
+    }
     for previousMapping in WindowsKeyMapping.selectableCases {
         for updatedMapping in WindowsKeyMapping.selectableCases {
             let migratedMapping = keyboardMapping.preservingLogicalOutputs(
