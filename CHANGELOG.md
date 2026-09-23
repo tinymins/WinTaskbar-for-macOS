@@ -2,6 +2,21 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.30] - 2026-09-23
+
+### Added
+
+- Add a dedicated Input Adaptation settings page for Windows keyboard behavior, connected-keyboard identification, and external mouse scrolling.
+- Add a per-device external mouse option that keeps trackpads using macOS Natural scrolling while applying standard vertical-wheel direction through Karabiner-Elements.
+- Allow the logical Windows key to use Control, Command, or Option, and show the physical keys that produce the selected Alt-Tab modifier on each connected keyboard.
+
+### Fixed
+
+- Remember external keyboard mappings across USB disconnects, reconnects, and port changes by migrating legacy location-based profiles to stable device identities.
+- Preserve each keyboard's effective modifier layout when changing the logical Windows key, and migrate Alt-Tab to follow the recorded Alt key without overwriting later manual choices.
+- Keep cold-start taskbar window previews in appearance order instead of reversing newly discovered windows.
+- Improve activation of mirrored macOS status items by resolving their live native windows, delivering a native click, and restoring the pointer after event delivery.
+
 ## [0.0.29] - 2026-09-22
 
 ### Added
