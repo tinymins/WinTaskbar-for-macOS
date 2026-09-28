@@ -710,5 +710,11 @@
 	<string>关闭通知</string>
 	<key>%ld more notifications waiting</key>
 	<string>还有 %ld 条通知等待显示</string>
+	<key>Expand notification</key>
+	<string>展开通知</string>
+	<key>Collapse notification</key>
+	<string>收起通知</string>
+	<key>Notification options</key>
+	<string>通知选项</string>
 </dict>
 </plist>

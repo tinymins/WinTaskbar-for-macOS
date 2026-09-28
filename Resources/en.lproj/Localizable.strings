@@ -704,5 +704,11 @@
 	<string>Dismiss notification</string>
 	<key>%ld more notifications waiting</key>
 	<string>%ld more notifications waiting</string>
+	<key>Expand notification</key>
+	<string>Expand notification</string>
+	<key>Collapse notification</key>
+	<string>Collapse notification</string>
+	<key>Notification options</key>
+	<string>Notification options</string>
 </dict>
 </plist>

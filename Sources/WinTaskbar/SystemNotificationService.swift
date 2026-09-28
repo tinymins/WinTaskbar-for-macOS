@@ -29,6 +29,7 @@ final class SystemNotificationService: ObservableObject {
     private var cards: [Card] = []
     private var panels: [UUID: NSPanel] = [:]
     private var hovered: Set<UUID> = []
+    private var expanded: Set<UUID> = []
 
     init(preferences: PreferencesStore) { self.preferences = preferences }
 
@@ -157,6 +158,7 @@ final class SystemNotificationService: ObservableObject {
         panels.values.forEach { $0.close() }
         panels.removeAll()
         hovered.removeAll()
+        expanded.removeAll()
         expiryTimer?.invalidate()
         expiryTimer = nil
     }
@@ -192,16 +194,31 @@ final class SystemNotificationService: ObservableObject {
             }
         }
         let gap: CGFloat = 12
-        let height = min(220, max(100, area.height - gap * 2))
-        let width = min(410, max(240, area.width - gap * 2))
-        let capacity = max(1, Int((area.height - gap) / (height + gap)))
-        let visible = Array(cards.suffix(capacity).reversed())
-        let visibleIDs = Set(visible.map(\.id))
+        let width = min(400, max(240, area.width - gap * 2))
+        let maxHeight = min(420, area.height - gap * 2)
+        expanded.formIntersection(cards.map(\.id))
+        var visible: [(card: Card, metrics: NotificationCardMetrics)] = []
+        var usedHeight: CGFloat = gap
+        for card in cards.reversed() {
+            let availableHeight = area.height - usedHeight - gap
+            let compact = NotificationCardMetrics.measure(card.content, width: width, maxHeight: maxHeight, expanded: false)
+            guard compact.height <= availableHeight else { break }
+            // Expanding the top card must keep it visible; scroll within the remaining screen space.
+            let metrics = expanded.contains(card.id)
+                ? NotificationCardMetrics.measure(card.content, width: width, maxHeight: min(maxHeight, availableHeight), expanded: true)
+                : compact
+            visible.append((card, metrics))
+            usedHeight += metrics.height + gap
+        }
+        let visibleIDs = Set(visible.map { $0.card.id })
         for id in Array(panels.keys) where !visibleIDs.contains(id) {
             panels.removeValue(forKey: id)?.close()
             hovered.remove(id)
         }
-        for (slot, card) in visible.enumerated() {
+        let runningApps = NSWorkspace.shared.runningApplications
+        var bottom = area.minY + gap
+        for (slot, entry) in visible.enumerated() {
+            let card = entry.card
             let panel: NSPanel
             if let existing = panels[card.id] {
                 panel = existing
@@ -224,8 +241,17 @@ final class SystemNotificationService: ObservableObject {
             panel.appearance = preferences.theme == .dark ? NSAppearance(named: .darkAqua)
                 : preferences.theme == .light ? NSAppearance(named: .aqua) : nil
             let view = NotificationCardView(
-                content: card.content, queued: slot == visible.count - 1 ? max(0, cards.count - visible.count) : 0,
+                content: card.content,
+                icon: runningApps.first { $0.localizedName?.localizedCaseInsensitiveCompare(card.content.appName) == .orderedSame }?.icon,
+                width: width, metrics: entry.metrics, expanded: expanded.contains(card.id),
+                queued: slot == visible.count - 1 ? max(0, cards.count - visible.count) : 0,
+                toggleExpanded: { [weak self] in
+                    guard let self else { return }
+                    if !self.expanded.insert(card.id).inserted { self.expanded.remove(card.id) }
+                    self.layout()
+                },
                 dismiss: { [weak self] in self?.dismiss(card.id) },
+                clearAll: { [weak self] in self?.clearCards() },
                 hover: { [weak self] inside in
                     if inside { self?.hovered.insert(card.id) } else { self?.hovered.remove(card.id) }
                 }
@@ -235,7 +261,8 @@ final class SystemNotificationService: ObservableObject {
             } else {
                 panel.contentView = NSHostingView(rootView: view)
             }
-            panel.setFrame(NSRect(x: area.maxX - width - gap, y: area.minY + gap + CGFloat(slot) * (height + gap), width: width, height: height), display: true)
+            panel.setFrame(NSRect(x: area.maxX - width - gap, y: bottom, width: width, height: entry.metrics.height), display: true)
+            bottom += entry.metrics.height + gap
             panel.orderFrontRegardless()
         }
         if cards.isEmpty {
@@ -249,38 +276,5 @@ final class SystemNotificationService: ObservableObject {
             expiryTimer = timer
             RunLoop.main.add(timer, forMode: .common)
         }
-    }
-}
-
-private struct NotificationCardView: View {
-    let content: SystemNotificationContent
-    let queued: Int
-    let dismiss: () -> Void
-    let hover: (Bool) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                Image(systemName: "bell.badge.fill").foregroundStyle(Color.accentColor)
-                Text(content.appName).font(.system(size: 14, weight: .semibold)).lineLimit(1)
-                Spacer()
-                Button(action: dismiss) { Image(systemName: "xmark").padding(5) }
-                    .buttonStyle(.plain).help("Dismiss notification")
-            }
-            ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
-                    if !content.title.isEmpty { Text(content.title).font(.system(size: 18, weight: .semibold)) }
-                    if !content.body.isEmpty { Text(content.body).font(.system(size: 17)) }
-                }.frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
-            }
-            if queued > 0 {
-                Text(String(format: NSLocalizedString("%ld more notifications waiting", comment: "Queued notifications"), queued))
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-        }
-        .padding(16).frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.12)))
-        .padding(1).onHover(perform: hover)
     }
 }
