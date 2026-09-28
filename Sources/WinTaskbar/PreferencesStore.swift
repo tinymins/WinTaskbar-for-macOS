@@ -2,6 +2,24 @@ import Combine
 import Carbon
 import Foundation
 
+struct FullscreenAppRule: Codable, Equatable, Identifiable {
+    let bundleID: String
+    var name: String
+    var hideTaskbarWhenFullscreen: Bool
+    var disableShortcutsWhenFullscreen: Bool
+    var disableShortcutsWhenWindowed: Bool
+
+    var id: String { bundleID }
+
+    static let windowsApp = FullscreenAppRule(
+        bundleID: "com.microsoft.rdc.macos",
+        name: "Windows App",
+        hideTaskbarWhenFullscreen: true,
+        disableShortcutsWhenFullscreen: true,
+        disableShortcutsWhenWindowed: false
+    )
+}
+
 @MainActor
 final class PreferencesStore: ObservableObject {
     static let shared = PreferencesStore()
@@ -13,6 +31,12 @@ final class PreferencesStore: ObservableObject {
     @Published var position: TaskbarPosition { didSet { defaults.set(position.rawValue, forKey: "wintaskbar.position") } }
     @Published var displayMode: DisplayMode { didSet { defaults.set(displayMode.rawValue, forKey: "wintaskbar.displayMode") } }
     @Published var autoHideTaskbar: Bool { didSet { defaults.set(autoHideTaskbar, forKey: "wintaskbar.autoHideTaskbar") } }
+    @Published var autoHideTaskbarInFullscreen: Bool {
+        didSet { defaults.set(autoHideTaskbarInFullscreen, forKey: "wintaskbar.autoHideTaskbarInFullscreen") }
+    }
+    @Published var fullscreenAppRules: [FullscreenAppRule] {
+        didSet { Self.store(fullscreenAppRules, key: "wintaskbar.fullscreenAppRules", defaults: defaults) }
+    }
     @Published var showBadgesOnTaskbarApps: Bool { didSet { defaults.set(showBadgesOnTaskbarApps, forKey: "wintaskbar.showBadgesOnTaskbarApps") } }
     @Published var showFlashingOnTaskbarApps: Bool { didSet { defaults.set(showFlashingOnTaskbarApps, forKey: "wintaskbar.showFlashingOnTaskbarApps") } }
     @Published var barHeight: Double { didSet { defaults.set(barHeight, forKey: "wintaskbar.barHeight") } }
@@ -97,6 +121,12 @@ final class PreferencesStore: ObservableObject {
         position = TaskbarPosition(rawValue: defaults.string(forKey: "wintaskbar.position") ?? "") ?? .bottom
         displayMode = DisplayMode(rawValue: defaults.string(forKey: "wintaskbar.displayMode") ?? "") ?? .all
         autoHideTaskbar = defaults.object(forKey: "wintaskbar.autoHideTaskbar") as? Bool ?? false
+        autoHideTaskbarInFullscreen = defaults.object(forKey: "wintaskbar.autoHideTaskbarInFullscreen") as? Bool ?? true
+        fullscreenAppRules = Self.load(
+            [FullscreenAppRule].self,
+            key: "wintaskbar.fullscreenAppRules",
+            defaults: defaults
+        ) ?? [.windowsApp]
         showBadgesOnTaskbarApps = defaults.object(forKey: "wintaskbar.showBadgesOnTaskbarApps") as? Bool ?? true
         showFlashingOnTaskbarApps = defaults.object(forKey: "wintaskbar.showFlashingOnTaskbarApps") as? Bool ?? true
         let storedBarHeight = defaults.object(forKey: "wintaskbar.barHeight") as? Double
@@ -264,6 +294,8 @@ final class PreferencesStore: ObservableObject {
         position = .bottom
         displayMode = .all
         autoHideTaskbar = false
+        autoHideTaskbarInFullscreen = true
+        fullscreenAppRules = [.windowsApp]
         showBadgesOnTaskbarApps = true
         showFlashingOnTaskbarApps = true
         barHeight = 48

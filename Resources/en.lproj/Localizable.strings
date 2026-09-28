@@ -594,5 +594,23 @@
 	<string>Physical keys after Karabiner mapping</string>
 	<key>Not mapped</key>
 	<string>Not mapped</string>
+	<key>Automatically hide in fullscreen</key>
+	<string>Automatically hide in fullscreen</string>
+	<key>App fullscreen rules</key>
+	<string>App fullscreen rules</string>
+	<key>Choose apps whose taskbar and shortcuts need special behavior.</key>
+	<string>Choose apps whose taskbar and shortcuts need special behavior.</string>
+	<key>Application</key>
+	<string>Application</string>
+	<key>Completely hide in fullscreen</key>
+	<string>Completely hide in fullscreen</string>
+	<key>Shortcuts off in fullscreen</key>
+	<string>Shortcuts off in fullscreen</string>
+	<key>Shortcuts off in window</key>
+	<string>Shortcuts off in window</string>
+	<key>Remove application</key>
+	<string>Remove application</string>
+	<key>Add Application…</key>
+	<string>Add Application…</string>
 </dict>
 </plist>

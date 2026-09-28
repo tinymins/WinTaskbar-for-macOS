@@ -273,6 +273,7 @@ final class GlobalHotkeysService: ObservableObject {
     private var altTabHotKeyIDs: Set<Int> = []
     private var windowsKeyMapping: WindowsKeyMapping = .option
     private var windowsKeyOpensStart = true
+    private var suspendedForApplication = false
     private var windowsKeyGesture = WindowsKeyGestureState()
     private var windowsSpaceGesture = WindowsSpaceGestureState()
     private var windowsSpacePresentationWorkItem: DispatchWorkItem?
@@ -332,6 +333,12 @@ final class GlobalHotkeysService: ObservableObject {
         self.windowsKeyOpensStart = windowsKeyOpensStart
         self.altTabSwitcherEnabled = altTabSwitcherEnabled
         self.altTabModifier = altTabModifier
+        applyConfiguration()
+    }
+
+    func setSuspendedForApplication(_ suspended: Bool) {
+        guard suspendedForApplication != suspended else { return }
+        suspendedForApplication = suspended
         applyConfiguration()
     }
 
@@ -414,8 +421,8 @@ final class GlobalHotkeysService: ObservableObject {
         windowsKeyIssue = nil
         altTabIssue = nil
         let isInputCaptureActive = isCapturingShortcut || !keyboardIdentificationOwners.isEmpty
-        let taskbarShortcutsActive = requestedEnabled && !isInputCaptureActive
-        let allTabActive = altTabSwitcherEnabled && !isInputCaptureActive
+        let taskbarShortcutsActive = requestedEnabled && !isInputCaptureActive && !suspendedForApplication
+        let allTabActive = altTabSwitcherEnabled && !isInputCaptureActive && !suspendedForApplication
         if taskbarShortcutsActive {
             for (index, configuration) in configurations.enumerated() where configuration.isEnabled {
                 guard issues[configuration.id] == nil else { continue }
@@ -456,7 +463,7 @@ final class GlobalHotkeysService: ObservableObject {
             altTabTrackingEnabled = altTabIssue == nil
         }
         registrationIssues = issues
-        isEnabled = (requestedEnabled || altTabSwitcherEnabled) && !isInputCaptureActive
+        isEnabled = (requestedEnabled || altTabSwitcherEnabled) && !isInputCaptureActive && !suspendedForApplication
     }
 
     static func duplicateIssues(

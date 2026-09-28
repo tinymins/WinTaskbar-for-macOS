@@ -320,6 +320,7 @@ struct SettingsView: View {
                     ForEach(TaskbarPosition.allCases) { Text($0.rawValue).tag($0) }
                 }
                 Toggle("Automatically hide the taskbar", isOn: $preferences.autoHideTaskbar)
+                Toggle("Automatically hide in fullscreen", isOn: $preferences.autoHideTaskbarInFullscreen)
                 Toggle("Show badges on taskbar apps", isOn: $preferences.showBadgesOnTaskbarApps)
                 Toggle("Show flashing on taskbar apps", isOn: $preferences.showFlashingOnTaskbarApps)
                 Picker("Show taskbar on", selection: $preferences.displayMode) {
@@ -340,6 +341,51 @@ struct SettingsView: View {
                 Text("Pinned apps are always shown.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            SettingsSection("App fullscreen rules") {
+                Text("Choose apps whose taskbar and shortcuts need special behavior.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
+                    GridRow {
+                        Text("Application").frame(width: 120, alignment: .leading)
+                        Text("Completely hide in fullscreen").frame(width: 95)
+                        Text("Shortcuts off in fullscreen").frame(width: 95)
+                        Text("Shortcuts off in window").frame(width: 95)
+                        Color.clear.frame(width: 22)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    ForEach(preferences.fullscreenAppRules) { rule in
+                        GridRow {
+                            Text(rule.name)
+                                .lineLimit(2)
+                                .frame(width: 120, alignment: .leading)
+                            Toggle("Completely hide in fullscreen", isOn: fullscreenRuleBinding(
+                                id: rule.id, keyPath: \.hideTaskbarWhenFullscreen
+                            ))
+                            .frame(width: 95)
+                            Toggle("Shortcuts off in fullscreen", isOn: fullscreenRuleBinding(
+                                id: rule.id, keyPath: \.disableShortcutsWhenFullscreen
+                            ))
+                            .frame(width: 95)
+                            Toggle("Shortcuts off in window", isOn: fullscreenRuleBinding(
+                                id: rule.id, keyPath: \.disableShortcutsWhenWindowed
+                            ))
+                            .frame(width: 95)
+                            Button {
+                                preferences.fullscreenAppRules.removeAll { $0.id == rule.id }
+                            } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Remove application")
+                        }
+                        .toggleStyle(.checkbox)
+                        .labelsHidden()
+                    }
+                }
+                Button("Add Application…") { addFullscreenRule() }
             }
             SettingsSection("Taskbar layout") {
                 Slider(
@@ -385,6 +431,41 @@ struct SettingsView: View {
                 Toggle("Wi-Fi", isOn: $preferences.trayWifiEnabled)
             }
         }
+    }
+
+    private func fullscreenRuleBinding(
+        id: String,
+        keyPath: WritableKeyPath<FullscreenAppRule, Bool>
+    ) -> Binding<Bool> {
+        Binding(
+            get: { preferences.fullscreenAppRules.first { $0.id == id }?[keyPath: keyPath] ?? false },
+            set: { value in
+                guard let index = preferences.fullscreenAppRules.firstIndex(where: { $0.id == id }) else { return }
+                preferences.fullscreenAppRules[index][keyPath: keyPath] = value
+            }
+        )
+    }
+
+    private func addFullscreenRule() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Application"
+        panel.prompt = "Choose"
+        panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+        panel.allowedContentTypes = [.application]
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK,
+              let url = panel.url,
+              let bundleID = Bundle(url: url)?.bundleIdentifier,
+              !preferences.fullscreenAppRules.contains(where: { $0.bundleID == bundleID }) else { return }
+        preferences.fullscreenAppRules.append(FullscreenAppRule(
+            bundleID: bundleID,
+            name: FileManager.default.displayName(atPath: url.path),
+            hideTaskbarWhenFullscreen: false,
+            disableShortcutsWhenFullscreen: false,
+            disableShortcutsWhenWindowed: false
+        ))
     }
 
     private var dateTime: some View {

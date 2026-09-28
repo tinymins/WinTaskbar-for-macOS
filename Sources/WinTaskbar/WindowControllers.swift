@@ -641,9 +641,11 @@ final class TaskbarWindowController {
     private let activeWindowShortcuts: ActiveWindowShortcutService
     private let clipboardHistory: ClipboardHistoryService
     private let systemShortcuts: SystemShortcutService
+    private let fullscreenAvoidance: FullscreenAvoidanceService
     private var panels: [TaskbarPanel] = []
     private var cancellable: AnyCancellable?
     private var attentionCancellable: AnyCancellable?
+    private var fullscreenCancellable: AnyCancellable?
     private var taskbarCycleIndex: Int?
     private var keepsTransientSurfacesVisibleForSettings = false
     private var isStartMenuPresented = false
@@ -677,7 +679,8 @@ final class TaskbarWindowController {
         dockBadges: DockBadgeService,
         activeWindowShortcuts: ActiveWindowShortcutService,
         clipboardHistory: ClipboardHistoryService,
-        systemShortcuts: SystemShortcutService
+        systemShortcuts: SystemShortcutService,
+        fullscreenAvoidance: FullscreenAvoidanceService
     ) {
         self.preferences = preferences
         self.apps = apps
@@ -693,6 +696,7 @@ final class TaskbarWindowController {
         self.activeWindowShortcuts = activeWindowShortcuts
         self.clipboardHistory = clipboardHistory
         self.systemShortcuts = systemShortcuts
+        self.fullscreenAvoidance = fullscreenAvoidance
         cancellable = preferences.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async {
                 self?.applyLayout()
@@ -704,6 +708,20 @@ final class TaskbarWindowController {
             .sink { [weak self] _ in
                 DispatchQueue.main.async {
                     self?.updateAutoHideState()
+                }
+            }
+        fullscreenCancellable = fullscreenAvoidance.$modesByDisplay
+            .dropFirst()
+            .sink { [weak self] modes in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    if modes.values.contains(.hidden) { self.actions.closeStartMenu() }
+                    for (panel, screen) in zip(self.panels, self.selectedScreens)
+                    where self.fullscreenAvoidance.mode(for: screen) == .autoHide {
+                        panel.isAutoHidden = true
+                    }
+                    self.dismissTransientSurfaces()
+                    self.applyLayout()
                 }
             }
         actions.toggleQuickLinkMenuHandler = { [weak self] screen in
@@ -786,6 +804,7 @@ final class TaskbarWindowController {
     }
 
     func toggleQuickSettings() {
+        guard !isCompletelyHidden(on: activeScreen) else { return }
         revealTaskbar(on: activeScreen)
         quickSettingsPanelController.toggle(
             service: status,
@@ -803,6 +822,7 @@ final class TaskbarWindowController {
         }
 
         let screen = taskbarWindow.screen ?? activeScreen
+        guard !isCompletelyHidden(on: screen) else { return }
         actions.closeStartMenu()
         dismissTransientSurfaces()
         taskbarContextScreen = screen
@@ -854,6 +874,7 @@ final class TaskbarWindowController {
         startButtonPowerMenuController.dismiss()
 
         let screen = requestedScreen ?? activeScreen
+        guard !isCompletelyHidden(on: screen) else { return }
         revealTaskbar(on: screen)
         let frame = StartMenuGeometry.anchoredFrame(
             screenFrame: screen.frame,
@@ -880,6 +901,7 @@ final class TaskbarWindowController {
     }
 
     func toggleInputSources() {
+        guard !isCompletelyHidden(on: activeScreen) else { return }
         revealTaskbar(on: activeScreen)
         inputSourcePanelController.toggle(
             service: status,
@@ -893,6 +915,7 @@ final class TaskbarWindowController {
     func handleWindowsSpaceGesture(_ action: WindowsSpaceGestureAction) {
         switch action {
         case .present:
+            guard !isCompletelyHidden(on: activeScreen) else { return }
             revealTaskbar(on: activeScreen)
             inputSourcePanelController.show(
                 service: status,
@@ -911,6 +934,7 @@ final class TaskbarWindowController {
     }
 
     func toggleCalendar() {
+        guard !isCompletelyHidden(on: activeScreen) else { return }
         revealTaskbar(on: activeScreen)
         clockCalendarPanelController.toggle(
             screen: activeScreen,
@@ -921,6 +945,7 @@ final class TaskbarWindowController {
     }
 
     func toggleSnapLayouts() {
+        guard !isCompletelyHidden(on: activeScreen) else { return }
         if snapLayoutsPanelController.isVisible {
             snapLayoutsPanelController.dismiss()
             return
@@ -938,6 +963,7 @@ final class TaskbarWindowController {
     }
 
     func toggleClipboardHistory() {
+        guard !isCompletelyHidden(on: activeScreen) else { return }
         if clipboardHistoryPanelController.isVisible {
             clipboardHistoryPanelController.dismiss()
             return
@@ -993,7 +1019,11 @@ final class TaskbarWindowController {
         for screen in screens {
             let panel = makePanel(for: screen)
             panels.append(panel)
-            panel.orderFrontRegardless()
+            if fullscreenAvoidance.mode(for: screen) == .normal {
+                panel.orderFrontRegardless()
+            } else {
+                panel.isAutoHidden = true
+            }
         }
         updateAutoHideState()
     }
@@ -1018,7 +1048,12 @@ final class TaskbarWindowController {
             return
         }
         for (panel, screen) in zip(panels, NSScreen.screens) {
-            let remainsHidden = preferences.autoHideTaskbar && panel.isAutoHidden
+            let fullscreenMode = fullscreenAvoidance.mode(for: screen)
+            panel.collectionBehavior = fullscreenMode == .normal
+                ? TaskbarPanel.desktopCollectionBehavior
+                : TaskbarPanel.desktopCollectionBehavior.union(.fullScreenAuxiliary)
+            let remainsHidden = fullscreenMode == .hidden
+                || ((preferences.autoHideTaskbar || fullscreenMode == .autoHide) && panel.isAutoHidden)
             panel.autoHideTask?.cancel()
             panel.autoHideTask = nil
             let targetFrame = frame(for: screen)
@@ -1059,7 +1094,9 @@ final class TaskbarWindowController {
             screen: screen
         )
         panel.level = .statusBar
-        panel.collectionBehavior = TaskbarPanel.desktopCollectionBehavior
+        panel.collectionBehavior = fullscreenAvoidance.mode(for: screen) == .normal
+            ? TaskbarPanel.desktopCollectionBehavior
+            : TaskbarPanel.desktopCollectionBehavior.union(.fullScreenAuxiliary)
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
@@ -1096,7 +1133,8 @@ final class TaskbarWindowController {
 
     private func updatePointerMonitors() {
         let needsMonitoring = preferences.taskbarEnabled
-            && (preferences.autoHideTaskbar || taskbarContextScreen != nil)
+            && (preferences.autoHideTaskbar || fullscreenAvoidance.modesByDisplay.values.contains(.autoHide)
+                || taskbarContextScreen != nil)
         guard needsMonitoring != (localPointerMonitor != nil) else { return }
         if !needsMonitoring {
             if let localPointerMonitor { NSEvent.removeMonitor(localPointerMonitor) }
@@ -1132,7 +1170,9 @@ final class TaskbarWindowController {
 
     private func handlePointerEvent() {
         if taskbarContextScreen != nil { recordPointerLocation() }
-        if preferences.autoHideTaskbar { updateAutoHideState() }
+        if preferences.autoHideTaskbar || fullscreenAvoidance.modesByDisplay.values.contains(.autoHide) {
+            updateAutoHideState()
+        }
     }
 
     private func recordPointerLocation() {
@@ -1171,18 +1211,23 @@ final class TaskbarWindowController {
     }
 
     private func updateAutoHideState() {
-        guard preferences.autoHideTaskbar else {
-            for (panel, screen) in zip(panels, selectedScreens) {
-                show(panel, on: screen, animated: panel.isAutoHidden)
-            }
-            return
-        }
-
         let pointer = NSEvent.mouseLocation
         let isMouseButtonPressed = NSEvent.pressedMouseButtons != 0
         let hasPendingAttention = !dockBadges.attentionStates.isEmpty
         for (panel, screen) in zip(panels, selectedScreens) {
-            if hasPendingAttention {
+            let fullscreenMode = fullscreenAvoidance.mode(for: screen)
+            if fullscreenMode == .hidden {
+                panel.autoHideTask?.cancel()
+                panel.autoHideTask = nil
+                panel.isAutoHidden = true
+                panel.orderOut(nil)
+                continue
+            }
+            guard preferences.autoHideTaskbar || fullscreenMode == .autoHide else {
+                show(panel, on: screen, animated: panel.isAutoHidden)
+                continue
+            }
+            if hasPendingAttention && fullscreenMode == .normal {
                 show(panel, on: screen, animated: true)
                 continue
             }
@@ -1202,7 +1247,7 @@ final class TaskbarWindowController {
                 isEnabled: true,
                 pointerIsInsideTaskbar: pointerIsInsideTaskbar,
                 hasVisibleSurface: hasVisibleTransientSurface,
-                hasPendingAttention: hasPendingAttention,
+                hasPendingAttention: hasPendingAttention && fullscreenMode == .normal,
                 isMouseButtonPressed: isMouseButtonPressed
             ) {
                 scheduleHide(panel, on: screen)
@@ -1221,10 +1266,12 @@ final class TaskbarWindowController {
             panel.autoHideTask = nil
             let pointer = NSEvent.mouseLocation
             guard TaskbarAutoHidePolicy.shouldHide(
-                isEnabled: self.preferences.autoHideTaskbar,
+                isEnabled: self.preferences.autoHideTaskbar
+                    || self.fullscreenAvoidance.mode(for: screen) == .autoHide,
                 pointerIsInsideTaskbar: panel.frame.contains(pointer),
                 hasVisibleSurface: self.hasVisibleTransientSurface,
-                hasPendingAttention: !self.dockBadges.attentionStates.isEmpty,
+                hasPendingAttention: !self.dockBadges.attentionStates.isEmpty
+                    && self.fullscreenAvoidance.mode(for: screen) == .normal,
                 isMouseButtonPressed: NSEvent.pressedMouseButtons != 0
             ) else { return }
             self.hide(panel, on: screen)
@@ -1232,6 +1279,7 @@ final class TaskbarWindowController {
     }
 
     private func show(_ panel: TaskbarPanel, on screen: NSScreen, animated: Bool) {
+        guard fullscreenAvoidance.mode(for: screen) != .hidden else { return }
         panel.autoHideTask?.cancel()
         panel.autoHideTask = nil
         let targetFrame = frame(for: screen)
@@ -1248,7 +1296,8 @@ final class TaskbarWindowController {
     }
 
     private func hide(_ panel: TaskbarPanel, on screen: NSScreen) {
-        guard preferences.autoHideTaskbar, !panel.isAutoHidden else { return }
+        guard preferences.autoHideTaskbar || fullscreenAvoidance.mode(for: screen) == .autoHide,
+              !panel.isAutoHidden else { return }
         panel.isAutoHidden = true
         let hiddenFrame = TaskbarAutoHideGeometry.hiddenFrame(
             from: frame(for: screen),
@@ -1269,6 +1318,7 @@ final class TaskbarWindowController {
     }
 
     private func revealTaskbar(on screen: NSScreen) {
+        guard fullscreenAvoidance.mode(for: screen) != .hidden else { return }
         guard let index = selectedScreens.firstIndex(of: screen), panels.indices.contains(index) else { return }
         show(panels[index], on: screen, animated: true)
     }
@@ -1532,6 +1582,10 @@ final class TaskbarWindowController {
     }
 
     var activeScreen: NSScreen { panels.first?.screen ?? NSScreen.main ?? NSScreen.screens[0] }
+
+    func isCompletelyHidden(on screen: NSScreen) -> Bool {
+        fullscreenAvoidance.mode(for: screen) == .hidden
+    }
 }
 
 @MainActor
@@ -1588,6 +1642,7 @@ final class StartMenuController: NSObject, NSWindowDelegate {
     }
 
     private func show(on screen: NSScreen) {
+        guard !taskbar.isCompletelyHidden(on: screen) else { return }
         orderOutTask?.cancel()
         orderOutTask = nil
         isPresented = true

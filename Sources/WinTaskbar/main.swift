@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let loginItemService = LoginItemService.shared
     private let permissionsService = PermissionsService.shared
     private let globalHotkeysService = GlobalHotkeysService.shared
+    private lazy var fullscreenAvoidance = FullscreenAvoidanceService(preferences: preferences)
     private var cancellables = Set<AnyCancellable>()
 
     private var taskbarController: TaskbarWindowController?
@@ -60,7 +61,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             dockBadges: dockBadges,
             activeWindowShortcuts: activeWindowShortcutService,
             clipboardHistory: clipboardHistoryService,
-            systemShortcuts: systemShortcutService
+            systemShortcuts: systemShortcutService,
+            fullscreenAvoidance: fullscreenAvoidance
         )
         let startMenu = StartMenuController(
             preferences: preferences,
@@ -149,6 +151,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
             .store(in: &cancellables)
+        fullscreenAvoidance.$shortcutsSuspended
+            .removeDuplicates()
+            .sink { [weak self] suspended in
+                self?.globalHotkeysService.setSuspendedForApplication(suspended)
+            }
+            .store(in: &cancellables)
+        fullscreenAvoidance.start()
         preferences.$externalStatusItemsEnabled
             .combineLatest(preferences.$taskbarEnabled)
             .map { $0 && $1 }

@@ -600,5 +600,23 @@
 	<string>Karabiner 映射后的实体按键</string>
 	<key>Not mapped</key>
 	<string>未映射</string>
+	<key>Automatically hide in fullscreen</key>
+	<string>全屏时自动隐藏任务栏</string>
+	<key>App fullscreen rules</key>
+	<string>应用全屏规则</string>
+	<key>Choose apps whose taskbar and shortcuts need special behavior.</key>
+	<string>为指定应用设置任务栏和快捷键行为。</string>
+	<key>Application</key>
+	<string>应用</string>
+	<key>Completely hide in fullscreen</key>
+	<string>全屏后完全隐藏</string>
+	<key>Shortcuts off in fullscreen</key>
+	<string>全屏禁用快捷键</string>
+	<key>Shortcuts off in window</key>
+	<string>非全屏禁用快捷键</string>
+	<key>Remove application</key>
+	<string>移除应用</string>
+	<key>Add Application…</key>
+	<string>添加应用…</string>
 </dict>
 </plist>
