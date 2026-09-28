@@ -1,10 +1,38 @@
 import Foundation
 
+struct NotificationDisplayBehavior: Codable, Equatable {
+    enum Mode: String, Codable, CaseIterable {
+        case hidden, timed, persistent
+
+        var label: String {
+            switch self {
+            case .hidden: return "Do not show"
+            case .timed: return "Hide after a delay"
+            case .persistent: return "Keep until dismissed"
+            }
+        }
+    }
+
+    var mode: Mode = .timed
+    var seconds = 15
+
+    var duration: TimeInterval? {
+        mode == .timed ? TimeInterval(min(3600, max(1, seconds))) : nil
+    }
+
+    var summary: String {
+        mode == .timed
+            ? String(format: NSLocalizedString("Hide after %ld seconds", comment: "Notification rule behavior"), Int(duration ?? 15))
+            : NSLocalizedString(mode.label, comment: "Notification rule behavior")
+    }
+}
+
 struct NotificationCaptureRule: Codable, Equatable, Identifiable {
     var id = UUID()
     var enabled = true
     var appName = ""
     var messagePattern = ""
+    var behavior = NotificationDisplayBehavior()
 
     var isEmpty: Bool {
         appName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && messagePattern.isEmpty
@@ -32,11 +60,10 @@ struct NotificationCaptureRule: Codable, Equatable, Identifiable {
 
 struct NotificationPreferences: Codable, Equatable {
     var enabled = false
-    // Zero means retain until manually dismissed.
-    var displaySeconds = 15
     var rules: [NotificationCaptureRule] = []
+    var fallback = NotificationDisplayBehavior()
 
-    func accepts(app: String, title: String, body: String) -> Bool {
-        rules.isEmpty || rules.contains { $0.matches(app: app, message: title + "\n" + body) }
+    func behavior(app: String, title: String, body: String) -> NotificationDisplayBehavior {
+        rules.first { $0.matches(app: app, message: title + "\n" + body) }?.behavior ?? fallback
     }
 }

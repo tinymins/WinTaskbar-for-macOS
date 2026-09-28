@@ -11,6 +11,8 @@ final class SystemNotificationService: ObservableObject {
     private struct Card {
         let id: UUID
         var content: SystemNotificationContent
+        var behavior: NotificationDisplayBehavior
+        var isPreview = false
         var remaining: TimeInterval?
     }
 
@@ -80,12 +82,17 @@ final class SystemNotificationService: ObservableObject {
 
     private func configure(_ value: NotificationPreferences) {
         let changedEnabled = configuration.enabled != value.enabled
-        let changedDuration = configuration.displaySeconds != value.displaySeconds
         configuration = value
-        if changedDuration {
-            for index in cards.indices {
-                cards[index].remaining = value.displaySeconds == 0 ? nil : TimeInterval(max(1, value.displaySeconds))
+        cards = cards.compactMap { card in
+            var updated = card
+            let behavior = card.isPreview ? value.fallback
+                : value.behavior(app: card.content.appName, title: card.content.title, body: card.content.body)
+            guard behavior.mode != .hidden else { return nil }
+            if behavior != card.behavior {
+                updated.behavior = behavior
+                updated.remaining = nil
             }
+            return updated
         }
         if !value.enabled {
             captureTimer?.invalidate()
@@ -115,28 +122,34 @@ final class SystemNotificationService: ObservableObject {
         let rules = configuration
         scanTask = Task { [weak self] in
             let result = await Task.detached(priority: .utility) {
-                let scan = SystemNotificationCapture.scan()
-                return (scan, scan.notifications.filter { rules.accepts(app: $0.appName, title: $0.title, body: $0.body) })
+                SystemNotificationCapture.scan()
             }.value
             guard let self else { return }
             self.scanTask = nil
             guard self.configuration == rules, self.generation == currentGeneration, !self.suspended else { return }
-            self.statusKey = result.0.unreadable ? "Some notification content could not be read. Check Accessibility access."
-                : result.0.unrecognized ? "A notification layout was not recognized."
+            self.statusKey = result.unreadable ? "Some notification content could not be read. Check Accessibility access."
+                : result.unrecognized ? "A notification layout was not recognized."
                 : "Listening for system notification banners."
             let now = ProcessInfo.processInfo.systemUptime
             self.seen = self.seen.filter { now - $0.value.time < 600 }
             var changed = false
-            let acceptedIDs = Set(result.1.map(\.sourceID))
-            for content in result.0.notifications {
+            for content in result.notifications {
                 let previous = self.seen[content.sourceID]?.content
                 self.seen[content.sourceID] = (content, now)
-                guard previous != content, acceptedIDs.contains(content.sourceID) else { continue }
+                guard previous != content else { continue }
+                let behavior = rules.behavior(app: content.appName, title: content.title, body: content.body)
+                if behavior.mode == .hidden {
+                    let count = self.cards.count
+                    self.cards.removeAll { $0.content.sourceID == content.sourceID }
+                    changed = changed || self.cards.count != count
+                    continue
+                }
                 if let index = self.cards.firstIndex(where: { $0.content.sourceID == content.sourceID }) {
                     self.cards[index].content = content
-                    self.cards[index].remaining = rules.displaySeconds == 0 ? nil : TimeInterval(max(1, rules.displaySeconds))
+                    self.cards[index].behavior = behavior
+                    self.cards[index].remaining = nil
                 } else {
-                    self.cards.append(Card(id: UUID(), content: content, remaining: nil))
+                    self.cards.append(Card(id: UUID(), content: content, behavior: behavior, remaining: nil))
                 }
                 changed = true
             }
@@ -145,11 +158,15 @@ final class SystemNotificationService: ObservableObject {
     }
 
     func showPreview() {
+        guard configuration.fallback.mode != .hidden else {
+            statusKey = "The fallback is set to Do not show. Change its display behavior to preview a notification."
+            return
+        }
         cards.append(Card(id: UUID(), content: SystemNotificationContent(
             sourceID: UUID().uuidString, appName: "WinTaskbar",
             title: NSLocalizedString("Notification preview", comment: "Notification sample"),
-            body: NSLocalizedString("New notifications stack upward. This preview uses your display time and does not read system notifications.", comment: "Notification sample")
-        ), remaining: nil))
+            body: NSLocalizedString("New notifications stack upward. This preview uses the fallback display behavior and does not read system notifications.", comment: "Notification sample")
+        ), behavior: configuration.fallback, isPreview: true, remaining: nil))
         layout()
     }
 
@@ -233,10 +250,9 @@ final class SystemNotificationService: ObservableObject {
                 panel.level = .floating
                 panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
                 panels[card.id] = panel
-                if let index = cards.firstIndex(where: { $0.id == card.id }), cards[index].remaining == nil,
-                   configuration.displaySeconds != 0 {
-                    cards[index].remaining = TimeInterval(max(1, configuration.displaySeconds))
-                }
+            }
+            if let index = cards.firstIndex(where: { $0.id == card.id }), cards[index].remaining == nil {
+                cards[index].remaining = card.behavior.duration
             }
             panel.appearance = preferences.theme == .dark ? NSAppearance(named: .darkAqua)
                 : preferences.theme == .light ? NSAppearance(named: .aqua) : nil

@@ -642,14 +642,10 @@
 	<string>Seconds</string>
 	<key>Timing starts when a card is shown and pauses while you hover over it. Overflow cards wait in the queue. Closing WinTaskbar clears the cards.</key>
 	<string>Timing starts when a card is shown and pauses while you hover over it. Overflow cards wait in the queue. Closing WinTaskbar clears the cards.</string>
-	<key>Preview notification</key>
-	<string>Preview notification</string>
 	<key>Clear notification cards</key>
 	<string>Clear notification cards</string>
 	<key>Capture rules</key>
 	<string>Capture rules</string>
-	<key>With no rules, capture all notifications. Otherwise, any enabled rule may match; app name and message pattern within a rule must both match. Disabling every rule captures nothing.</key>
-	<string>With no rules, capture all notifications. Otherwise, any enabled rule may match; app name and message pattern within a rule must both match. Disabling every rule captures nothing.</string>
 	<key>Enabled</key>
 	<string>Enabled</string>
 	<key>Any app</key>
@@ -698,8 +694,6 @@
 	<string>Listening for system notification banners.</string>
 	<key>Notification preview</key>
 	<string>Notification preview</string>
-	<key>New notifications stack upward. This preview uses your display time and does not read system notifications.</key>
-	<string>New notifications stack upward. This preview uses your display time and does not read system notifications.</string>
 	<key>Dismiss notification</key>
 	<string>Dismiss notification</string>
 	<key>%ld more notifications waiting</key>
@@ -710,5 +704,29 @@
 	<string>Collapse notification</string>
 	<key>Notification options</key>
 	<string>Notification options</string>
+	<key>Preview fallback</key>
+	<string>Preview fallback</string>
+	<key>Rules are checked from top to bottom. The first enabled match decides how to show the notification. Unmatched notifications use the fallback below.</key>
+	<string>Rules are checked from top to bottom. The first enabled match decides how to show the notification. Unmatched notifications use the fallback below.</string>
+	<key>Move rule up</key>
+	<string>Move rule up</string>
+	<key>Move rule down</key>
+	<string>Move rule down</string>
+	<key>Default rule (fallback)</key>
+	<string>Default rule (fallback)</string>
+	<key>Always applies when no rule matches. This rule stays last and cannot be disabled or deleted.</key>
+	<string>Always applies when no rule matches. This rule stays last and cannot be disabled or deleted.</string>
+	<key>Display behavior</key>
+	<string>Display behavior</string>
+	<key>Do not show</key>
+	<string>Do not show</string>
+	<key>Hide after a delay</key>
+	<string>Hide after a delay</string>
+	<key>Hide after %ld seconds</key>
+	<string>Hide after %ld seconds</string>
+	<key>The fallback is set to Do not show. Change its display behavior to preview a notification.</key>
+	<string>The fallback is set to Do not show. Change its display behavior to preview a notification.</string>
+	<key>New notifications stack upward. This preview uses the fallback display behavior and does not read system notifications.</key>
+	<string>New notifications stack upward. This preview uses the fallback display behavior and does not read system notifications.</string>
 </dict>
 </plist>

@@ -121,8 +121,10 @@ final class PreferencesStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        notifications = Self.load(NotificationPreferences.self, key: "wintaskbar.notifications", defaults: defaults)
+        let notificationSettings = Self.load(NotificationPreferences.self, key: "wintaskbar.notifications", defaults: defaults)
             ?? NotificationPreferences()
+        notifications = notificationSettings
+        Self.store(notificationSettings, key: "wintaskbar.notifications", defaults: defaults)
         let hasCompletedCurrentOnboarding = defaults.bool(forKey: "wintaskbar.hasCompletedFeatureOnboarding")
         position = TaskbarPosition(rawValue: defaults.string(forKey: "wintaskbar.position") ?? "") ?? .bottom
         displayMode = DisplayMode(rawValue: defaults.string(forKey: "wintaskbar.displayMode") ?? "") ?? .all

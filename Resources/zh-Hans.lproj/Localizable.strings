@@ -648,14 +648,10 @@
 	<string>秒</string>
 	<key>Timing starts when a card is shown and pauses while you hover over it. Overflow cards wait in the queue. Closing WinTaskbar clears the cards.</key>
 	<string>卡片显示后开始计时，鼠标悬停时暂停。超出屏幕的卡片排队等待。退出 WinTaskbar 后卡片清空。</string>
-	<key>Preview notification</key>
-	<string>预览通知</string>
 	<key>Clear notification cards</key>
 	<string>清空通知卡片</string>
 	<key>Capture rules</key>
 	<string>捕获规则</string>
-	<key>With no rules, capture all notifications. Otherwise, any enabled rule may match; app name and message pattern within a rule must both match. Disabling every rule captures nothing.</key>
-	<string>没有规则时捕获全部通知；有规则时，匹配任意一条已启用的规则即可。同一条规则的应用名称与消息正则必须同时匹配。禁用全部规则后不再捕获通知。</string>
 	<key>Enabled</key>
 	<string>启用</string>
 	<key>Any app</key>
@@ -704,8 +700,6 @@
 	<string>正在监听系统通知横幅。</string>
 	<key>Notification preview</key>
 	<string>通知预览</string>
-	<key>New notifications stack upward. This preview uses your display time and does not read system notifications.</key>
-	<string>新通知会向上堆叠。此预览使用你设置的显示时间，不读取系统通知。</string>
 	<key>Dismiss notification</key>
 	<string>关闭通知</string>
 	<key>%ld more notifications waiting</key>
@@ -716,5 +710,29 @@
 	<string>收起通知</string>
 	<key>Notification options</key>
 	<string>通知选项</string>
+	<key>Preview fallback</key>
+	<string>预览默认规则</string>
+	<key>Rules are checked from top to bottom. The first enabled match decides how to show the notification. Unmatched notifications use the fallback below.</key>
+	<string>规则从上往下匹配，第一条命中的已启用规则决定显示方式；没有匹配时使用下方的默认规则。</string>
+	<key>Move rule up</key>
+	<string>上移规则</string>
+	<key>Move rule down</key>
+	<string>下移规则</string>
+	<key>Default rule (fallback)</key>
+	<string>默认规则（fallback）</string>
+	<key>Always applies when no rule matches. This rule stays last and cannot be disabled or deleted.</key>
+	<string>没有规则匹配时始终使用此规则。它固定在末尾，不可禁用或删除。</string>
+	<key>Display behavior</key>
+	<string>显示方式</string>
+	<key>Do not show</key>
+	<string>不显示</string>
+	<key>Hide after a delay</key>
+	<string>定时消失</string>
+	<key>Hide after %ld seconds</key>
+	<string>%ld 秒后隐藏</string>
+	<key>The fallback is set to Do not show. Change its display behavior to preview a notification.</key>
+	<string>默认规则当前为“不显示”，修改显示方式后即可预览通知。</string>
+	<key>New notifications stack upward. This preview uses the fallback display behavior and does not read system notifications.</key>
+	<string>新通知会向上堆叠。此预览使用默认规则的显示方式，不读取系统通知。</string>
 </dict>
 </plist>
