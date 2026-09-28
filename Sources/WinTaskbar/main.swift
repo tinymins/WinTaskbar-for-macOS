@@ -2609,6 +2609,42 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    guard WindowPreviewWindowPolicy.shouldInclude(
+              windowID: 303,
+              isOnScreen: false,
+              accessibilityWindows: [303: false],
+              fullScreenWindowIDs: [303]
+          ),
+          !WindowPreviewWindowPolicy.shouldInclude(
+              windowID: 404,
+              isOnScreen: false,
+              accessibilityWindows: [404: false],
+              fullScreenWindowIDs: [303]
+          ) else {
+        fputs("SELF-TEST FAILED: fullscreen window preview policy mismatch\n", stderr)
+        return 1
+    }
+
+    guard WindowPreviewWindowPolicy.shouldIncludeInSwitcher(
+              windowID: 303, isOnScreen: false,
+              accessibilityWindows: [303: false], classifiedWindowIDs: [303]
+          ),
+          WindowPreviewWindowPolicy.shouldIncludeInSwitcher(
+              windowID: 404, isOnScreen: true,
+              accessibilityWindows: nil, classifiedWindowIDs: []
+          ),
+          !WindowPreviewWindowPolicy.shouldIncludeInSwitcher(
+              windowID: 404, isOnScreen: false,
+              accessibilityWindows: nil, classifiedWindowIDs: []
+          ),
+          !WindowPreviewWindowPolicy.shouldIncludeInSwitcher(
+              windowID: 404, isOnScreen: true,
+              accessibilityWindows: [303: false], classifiedWindowIDs: [404]
+          ) else {
+        fputs("SELF-TEST FAILED: cross-Space Alt-Tab eligibility mismatch\n", stderr)
+        return 1
+    }
+
     guard WindowPreviewWindowPolicy.shouldIncludeAccessibilityWindow(
               role: kAXWindowRole,
               subrole: kAXStandardWindowSubrole

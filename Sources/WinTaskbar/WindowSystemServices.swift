@@ -53,6 +53,21 @@ enum AccessibilityWindowIdentity {
               windowID != kCGNullWindowID else { return nil }
         return windowID
     }
+
+    static func windows(of application: AXUIElement) -> [AXUIElement]? {
+        var rawWindows: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &rawWindows) == .success,
+              var windows = rawWindows as? [AXUIElement] else { return nil }
+        for attribute in [kAXFocusedWindowAttribute, kAXMainWindowAttribute] {
+            var rawWindow: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(application, attribute as CFString, &rawWindow) == .success,
+                  let rawWindow,
+                  CFGetTypeID(rawWindow) == AXUIElementGetTypeID() else { continue }
+            let window = rawWindow as! AXUIElement
+            if !windows.contains(where: { CFEqual($0, window) }) { windows.append(window) }
+        }
+        return windows
+    }
 }
 
 struct WindowIdentityCandidate {
@@ -256,7 +271,7 @@ final class WindowActivationService {
     }
 
     nonisolated private func windows(of application: AXUIElement) -> [AXUIElement] {
-        attribute(application, kAXWindowsAttribute) ?? []
+        AccessibilityWindowIdentity.windows(of: application) ?? []
     }
 
     nonisolated private func matchingWindow(for window: WindowInfo) -> AXUIElement? {
@@ -405,6 +420,7 @@ private struct WindowSnapshotCandidate: Sendable {
 struct AccessibilityWindowSnapshot: Sendable {
     let states: [CGWindowID: Bool]
     let classifiedWindowIDs: Set<CGWindowID>
+    let fullScreenWindowIDs: Set<CGWindowID>
 }
 
 struct DetailedWindowSnapshot: Sendable {
@@ -435,33 +451,34 @@ final class WindowsService {
         windowSnapshot(forPIDs: pids).frontToBackWindows
     }
 
-    nonisolated static func visibleWindowsInFrontToBackOrder(forPIDs pids: [pid_t]) -> [WindowInfo] {
-        windowCandidates(
+    func switcherWindowSnapshot(forPIDs pids: [pid_t]) -> CachedWindowFilterResult {
+        let candidates = Self.windowCandidates(
             forPIDs: pids,
-            options: [.optionOnScreenOnly, .excludeDesktopElements]
-        ).map { candidate in
-            WindowInfo(
+            options: WindowPreviewWindowPolicy.listOptions
+        )
+        var hasUnclassifiedWindows = false
+        let windows: [WindowInfo] = candidates.compactMap { candidate in
+            let snapshot = accessibilitySnapshotsByPID[candidate.pid]
+            if candidate.isOnScreen,
+               snapshot?.classifiedWindowIDs.contains(candidate.windowID) != true {
+                hasUnclassifiedWindows = true
+            }
+            guard WindowPreviewWindowPolicy.shouldIncludeInSwitcher(
+                windowID: candidate.windowID,
+                isOnScreen: candidate.isOnScreen,
+                accessibilityWindows: snapshot?.states,
+                classifiedWindowIDs: snapshot?.classifiedWindowIDs ?? []
+            ) else { return nil }
+            return WindowInfo(
                 windowID: candidate.windowID,
                 title: candidate.title,
                 ownerPID: candidate.pid,
                 frame: candidate.frame,
-                isMinimized: false
+                isMinimized: snapshot?.states[candidate.windowID] ?? false
             )
         }
-    }
-
-    func filterUsingCachedAccessibility(_ windows: [WindowInfo]) -> CachedWindowFilterResult {
-        var hasUnclassifiedWindows = false
-        let filteredWindows = windows.filter { window in
-            guard let snapshot = accessibilitySnapshotsByPID[window.ownerPID],
-                  snapshot.classifiedWindowIDs.contains(window.windowID) else {
-                hasUnclassifiedWindows = true
-                return true
-            }
-            return snapshot.states[window.windowID] != nil
-        }
         return CachedWindowFilterResult(
-            windows: filteredWindows,
+            windows: windows,
             hasUnclassifiedWindows: hasUnclassifiedWindows
         )
     }
@@ -475,11 +492,13 @@ final class WindowsService {
             forPIDs: Array(Set(candidates.map(\.pid)))
         )
         let windows: [WindowInfo] = candidates.compactMap { candidate in
-            let states = snapshotsByPID[candidate.pid]?.states
+            let snapshot = snapshotsByPID[candidate.pid]
+            let states = snapshot?.states
             guard WindowPreviewWindowPolicy.shouldInclude(
                 windowID: candidate.windowID,
                 isOnScreen: candidate.isOnScreen,
-                accessibilityWindows: states
+                accessibilityWindows: states,
+                fullScreenWindowIDs: snapshot?.fullScreenWindowIDs ?? []
             ) else { return nil }
             return WindowInfo(
                 windowID: candidate.windowID,
@@ -519,11 +538,13 @@ final class WindowsService {
         var windowsByPID: [pid_t: [WindowInfo]] = [:]
         var frontToBackWindows: [WindowInfo] = []
         for candidate in candidates {
-            let states = refreshedSnapshots[candidate.pid]?.states
+            let snapshot = refreshedSnapshots[candidate.pid]
+            let states = snapshot?.states
             guard WindowPreviewWindowPolicy.shouldInclude(
                 windowID: candidate.windowID,
                 isOnScreen: candidate.isOnScreen,
-                accessibilityWindows: states
+                accessibilityWindows: states,
+                fullScreenWindowIDs: snapshot?.fullScreenWindowIDs ?? []
             ) else { continue }
             let window = WindowInfo(
                 windowID: candidate.windowID,
@@ -629,12 +650,11 @@ final class WindowsService {
         guard AccessibilityWindowIdentity.isAvailable else { return nil }
         let application = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(application, 0.1)
-        var rawWindows: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &rawWindows) == .success,
-              let windows = rawWindows as? [AXUIElement] else { return nil }
+        guard let windows = AccessibilityWindowIdentity.windows(of: application) else { return nil }
         let names = [kAXRoleAttribute, kAXSubroleAttribute, kAXMinimizedAttribute] as CFArray
         var states: [CGWindowID: Bool] = [:]
         var classifiedWindowIDs: Set<CGWindowID> = []
+        var fullScreenWindowIDs: Set<CGWindowID> = []
         for window in windows {
             AXUIElementSetMessagingTimeout(window, 0.1)
             var rawValues: CFArray?
@@ -650,10 +670,16 @@ final class WindowsService {
                 subrole: subrole
             ) else { continue }
             states[windowID] = values[2] as? Bool ?? false
+            var rawFullScreen: CFTypeRef?
+            if AXUIElementCopyAttributeValue(window, "AXFullScreen" as CFString, &rawFullScreen) == .success,
+               rawFullScreen as? Bool == true {
+                fullScreenWindowIDs.insert(windowID)
+            }
         }
         return AccessibilityWindowSnapshot(
             states: states,
-            classifiedWindowIDs: classifiedWindowIDs
+            classifiedWindowIDs: classifiedWindowIDs,
+            fullScreenWindowIDs: fullScreenWindowIDs
         )
     }
 
@@ -672,6 +698,16 @@ final class WindowsService {
 struct WindowPreviewWindowPolicy {
     static let listOptions: CGWindowListOption = [.excludeDesktopElements]
 
+    static func shouldIncludeInSwitcher(
+        windowID: CGWindowID,
+        isOnScreen: Bool,
+        accessibilityWindows: [CGWindowID: Bool]?,
+        classifiedWindowIDs: Set<CGWindowID>
+    ) -> Bool {
+        guard classifiedWindowIDs.contains(windowID) else { return isOnScreen }
+        return accessibilityWindows?[windowID] != nil
+    }
+
     static func shouldIncludeAccessibilityWindow(role: String?, subrole: String?) -> Bool {
         guard role == kAXWindowRole else { return false }
         return subrole != kAXFloatingWindowSubrole && subrole != kAXSystemDialogSubrole
@@ -680,12 +716,13 @@ struct WindowPreviewWindowPolicy {
     static func shouldInclude(
         windowID: CGWindowID,
         isOnScreen: Bool,
-        accessibilityWindows: [CGWindowID: Bool]?
+        accessibilityWindows: [CGWindowID: Bool]?,
+        fullScreenWindowIDs: Set<CGWindowID> = []
     ) -> Bool {
         // Unavailable AX data is different from a successfully read empty list.
         guard let accessibilityWindows else { return isOnScreen }
         guard let isMinimized = accessibilityWindows[windowID] else { return false }
-        return isOnScreen || isMinimized
+        return isOnScreen || isMinimized || fullScreenWindowIDs.contains(windowID)
     }
 }
 

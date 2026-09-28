@@ -612,6 +612,7 @@ final class WindowSwitcherPanelController {
     private var controlCapabilitiesCache: [CGWindowID: WindowControlCapabilities] = [:]
     private var needsWindowCacheRefresh = false
     private var windowClassificationTasks: [pid_t: Task<Void, Never>] = [:]
+    private var activeSpaceObserver: NSObjectProtocol?
 
     init(
         windowsService: WindowsService,
@@ -668,6 +669,15 @@ final class WindowSwitcherPanelController {
     }
 
     func prewarm() {
+        if activeSpaceObserver == nil {
+            activeSpaceObserver = workspace.notificationCenter.addObserver(
+                forName: NSWorkspace.activeSpaceDidChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.prewarm() }
+            }
+        }
         let applications = workspace.runningApplications.filter {
             WindowSwitcherApplicationPolicy.shouldInclude(
                 activationPolicy: $0.activationPolicy,
@@ -678,6 +688,10 @@ final class WindowSwitcherPanelController {
     }
 
     func deactivate() {
+        if let activeSpaceObserver {
+            workspace.notificationCenter.removeObserver(activeSpaceObserver)
+            self.activeSpaceObserver = nil
+        }
         activationTask?.cancel()
         activationTask = nil
         refreshTask?.cancel()
@@ -730,10 +744,9 @@ final class WindowSwitcherPanelController {
             )
         }
         let applicationPIDs = applications.map(\.processIdentifier)
-        let visibleWindows = WindowsService.visibleWindowsInFrontToBackOrder(
+        let cachedFilter = windowsService.switcherWindowSnapshot(
             forPIDs: applicationPIDs
         )
-        let cachedFilter = windowsService.filterUsingCachedAccessibility(visibleWindows)
         needsWindowCacheRefresh = cachedFilter.hasUnclassifiedWindows
         let cacheIsFresh = Date().timeIntervalSince(detailedWindowsCacheDate)
             <= WindowSwitcherWindowList.detailedCacheLifetime
