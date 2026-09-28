@@ -632,5 +632,83 @@
 	<string>全屏行为</string>
 	<key>The taskbar can still appear when you move the pointer to its edge.</key>
 	<string>将指针移到屏幕边缘时，任务栏仍可显示。</string>
+	<key>Notifications</key>
+	<string>通知</string>
+	<key>Windows-style notifications</key>
+	<string>Windows 风格通知</string>
+	<key>Show notifications at the bottom right</key>
+	<string>在右下角显示通知</string>
+	<key>Enlarge captured system notifications and stack them above the taskbar. Original macOS notifications remain enabled.</key>
+	<string>放大捕获到的系统通知，并在任务栏上方向上堆叠。macOS 原生通知仍会显示。</string>
+	<key>Keep until dismissed</key>
+	<string>常驻，直到手动关闭</string>
+	<key>Display time (seconds)</key>
+	<string>显示时间（秒）</string>
+	<key>Seconds</key>
+	<string>秒</string>
+	<key>Timing starts when a card is shown and pauses while you hover over it. Overflow cards wait in the queue. Closing WinTaskbar clears the cards.</key>
+	<string>卡片显示后开始计时，鼠标悬停时暂停。超出屏幕的卡片排队等待。退出 WinTaskbar 后卡片清空。</string>
+	<key>Preview notification</key>
+	<string>预览通知</string>
+	<key>Clear notification cards</key>
+	<string>清空通知卡片</string>
+	<key>Capture rules</key>
+	<string>捕获规则</string>
+	<key>With no rules, capture all notifications. Otherwise, any enabled rule may match; app name and message pattern within a rule must both match. Disabling every rule captures nothing.</key>
+	<string>没有规则时捕获全部通知；有规则时，匹配任意一条已启用的规则即可。同一条规则的应用名称与消息正则必须同时匹配。禁用全部规则后不再捕获通知。</string>
+	<key>Enabled</key>
+	<string>启用</string>
+	<key>Any app</key>
+	<string>任意应用</string>
+	<key>Edit</key>
+	<string>编辑</string>
+	<key>Delete rule</key>
+	<string>删除规则</string>
+	<key>Add capture rule</key>
+	<string>添加捕获规则</string>
+	<key>System setup</key>
+	<string>系统设置引导</string>
+	<key>Accessibility access granted</key>
+	<string>已获得辅助功能权限</string>
+	<key>Accessibility access required</key>
+	<string>需要辅助功能权限</string>
+	<key>Open Accessibility settings</key>
+	<string>打开辅助功能设置</string>
+	<key>In System Settings &gt; Notifications, set “when mirroring or sharing the display” to “Allow Notifications”. Also enable Desktop notifications for the apps you want to capture.</key>
+	<string>在“系统设置 → 通知”中，将“镜像或共享显示器时”设为“允许通知”，并为需要捕获的应用开启“桌面”通知。</string>
+	<key>This allows notification content to appear in shared screens. Focus modes can still suppress banners; notifications without a visible system banner may not be captured.</key>
+	<string>这会允许通知内容出现在共享画面中。专注模式仍可能阻止横幅；没有显示系统横幅的通知可能无法捕获。</string>
+	<key>Open system notification settings</key>
+	<string>打开系统通知设置</string>
+	<key>Open System Settings manually and choose Notifications.</key>
+	<string>请手动打开“系统设置”，选择“通知”。</string>
+	<key>Capture rule</key>
+	<string>捕获规则</string>
+	<key>App name contains</key>
+	<string>应用名称包含</string>
+	<key>Matches the notification's app name, ignoring case. Leave empty to match any app.</key>
+	<string>匹配通知中的应用名称，不区分大小写。留空表示任意应用。</string>
+	<key>Message regular expression</key>
+	<string>消息正则表达式</string>
+	<key>Matches title and body together. Example: meeting|urgent. Use (?i) to ignore case. Leave empty to match any message.</key>
+	<string>同时匹配标题和正文。例如：会议|紧急。使用 (?i) 可忽略大小写；留空表示任意消息。</string>
+	<key>Notification capture is off.</key>
+	<string>通知捕获已关闭。</string>
+	<key>Accessibility access is required to capture notifications.</key>
+	<string>需要辅助功能权限才能捕获通知。</string>
+	<key>Some notification content could not be read. Check Accessibility access.</key>
+	<string>部分通知内容读取失败，请检查辅助功能权限。</string>
+	<key>A notification layout was not recognized.</key>
+	<string>检测到未能识别的通知布局。</string>
+	<key>Listening for system notification banners.</key>
+	<string>正在监听系统通知横幅。</string>
+	<key>Notification preview</key>
+	<string>通知预览</string>
+	<key>New notifications stack upward. This preview uses your display time and does not read system notifications.</key>
+	<string>新通知会向上堆叠。此预览使用你设置的显示时间，不读取系统通知。</string>
+	<key>Dismiss notification</key>
+	<string>关闭通知</string>
+	<key>%ld more notifications waiting</key>
+	<string>还有 %ld 条通知等待显示</string>
 </dict>
 </plist>

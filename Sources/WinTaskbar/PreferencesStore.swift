@@ -28,6 +28,10 @@ final class PreferencesStore: ObservableObject {
 
     private let defaults: UserDefaults
 
+    @Published var notifications: NotificationPreferences {
+        didSet { Self.store(notifications, key: "wintaskbar.notifications", defaults: defaults) }
+    }
+
     @Published var position: TaskbarPosition { didSet { defaults.set(position.rawValue, forKey: "wintaskbar.position") } }
     @Published var displayMode: DisplayMode { didSet { defaults.set(displayMode.rawValue, forKey: "wintaskbar.displayMode") } }
     @Published var autoHideTaskbar: Bool { didSet { defaults.set(autoHideTaskbar, forKey: "wintaskbar.autoHideTaskbar") } }
@@ -117,6 +121,8 @@ final class PreferencesStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        notifications = Self.load(NotificationPreferences.self, key: "wintaskbar.notifications", defaults: defaults)
+            ?? NotificationPreferences()
         let hasCompletedCurrentOnboarding = defaults.bool(forKey: "wintaskbar.hasCompletedFeatureOnboarding")
         position = TaskbarPosition(rawValue: defaults.string(forKey: "wintaskbar.position") ?? "") ?? .bottom
         displayMode = DisplayMode(rawValue: defaults.string(forKey: "wintaskbar.displayMode") ?? "") ?? .all
@@ -291,6 +297,7 @@ final class PreferencesStore: ObservableObject {
     }
 
     func reset() {
+        notifications = NotificationPreferences()
         position = .bottom
         displayMode = .all
         autoHideTaskbar = false

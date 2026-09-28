@@ -626,5 +626,83 @@
 	<string>Fullscreen behavior</string>
 	<key>The taskbar can still appear when you move the pointer to its edge.</key>
 	<string>The taskbar can still appear when you move the pointer to its edge.</string>
+	<key>Notifications</key>
+	<string>Notifications</string>
+	<key>Windows-style notifications</key>
+	<string>Windows-style notifications</string>
+	<key>Show notifications at the bottom right</key>
+	<string>Show notifications at the bottom right</string>
+	<key>Enlarge captured system notifications and stack them above the taskbar. Original macOS notifications remain enabled.</key>
+	<string>Enlarge captured system notifications and stack them above the taskbar. Original macOS notifications remain enabled.</string>
+	<key>Keep until dismissed</key>
+	<string>Keep until dismissed</string>
+	<key>Display time (seconds)</key>
+	<string>Display time (seconds)</string>
+	<key>Seconds</key>
+	<string>Seconds</string>
+	<key>Timing starts when a card is shown and pauses while you hover over it. Overflow cards wait in the queue. Closing WinTaskbar clears the cards.</key>
+	<string>Timing starts when a card is shown and pauses while you hover over it. Overflow cards wait in the queue. Closing WinTaskbar clears the cards.</string>
+	<key>Preview notification</key>
+	<string>Preview notification</string>
+	<key>Clear notification cards</key>
+	<string>Clear notification cards</string>
+	<key>Capture rules</key>
+	<string>Capture rules</string>
+	<key>With no rules, capture all notifications. Otherwise, any enabled rule may match; app name and message pattern within a rule must both match. Disabling every rule captures nothing.</key>
+	<string>With no rules, capture all notifications. Otherwise, any enabled rule may match; app name and message pattern within a rule must both match. Disabling every rule captures nothing.</string>
+	<key>Enabled</key>
+	<string>Enabled</string>
+	<key>Any app</key>
+	<string>Any app</string>
+	<key>Edit</key>
+	<string>Edit</string>
+	<key>Delete rule</key>
+	<string>Delete rule</string>
+	<key>Add capture rule</key>
+	<string>Add capture rule</string>
+	<key>System setup</key>
+	<string>System setup</string>
+	<key>Accessibility access granted</key>
+	<string>Accessibility access granted</string>
+	<key>Accessibility access required</key>
+	<string>Accessibility access required</string>
+	<key>Open Accessibility settings</key>
+	<string>Open Accessibility settings</string>
+	<key>In System Settings &gt; Notifications, set “when mirroring or sharing the display” to “Allow Notifications”. Also enable Desktop notifications for the apps you want to capture.</key>
+	<string>In System Settings &gt; Notifications, set “when mirroring or sharing the display” to “Allow Notifications”. Also enable Desktop notifications for the apps you want to capture.</string>
+	<key>This allows notification content to appear in shared screens. Focus modes can still suppress banners; notifications without a visible system banner may not be captured.</key>
+	<string>This allows notification content to appear in shared screens. Focus modes can still suppress banners; notifications without a visible system banner may not be captured.</string>
+	<key>Open system notification settings</key>
+	<string>Open system notification settings</string>
+	<key>Open System Settings manually and choose Notifications.</key>
+	<string>Open System Settings manually and choose Notifications.</string>
+	<key>Capture rule</key>
+	<string>Capture rule</string>
+	<key>App name contains</key>
+	<string>App name contains</string>
+	<key>Matches the notification's app name, ignoring case. Leave empty to match any app.</key>
+	<string>Matches the notification's app name, ignoring case. Leave empty to match any app.</string>
+	<key>Message regular expression</key>
+	<string>Message regular expression</string>
+	<key>Matches title and body together. Example: meeting|urgent. Use (?i) to ignore case. Leave empty to match any message.</key>
+	<string>Matches title and body together. Example: meeting|urgent. Use (?i) to ignore case. Leave empty to match any message.</string>
+	<key>Notification capture is off.</key>
+	<string>Notification capture is off.</string>
+	<key>Accessibility access is required to capture notifications.</key>
+	<string>Accessibility access is required to capture notifications.</string>
+	<key>Some notification content could not be read. Check Accessibility access.</key>
+	<string>Some notification content could not be read. Check Accessibility access.</string>
+	<key>A notification layout was not recognized.</key>
+	<string>A notification layout was not recognized.</string>
+	<key>Listening for system notification banners.</key>
+	<string>Listening for system notification banners.</string>
+	<key>Notification preview</key>
+	<string>Notification preview</string>
+	<key>New notifications stack upward. This preview uses your display time and does not read system notifications.</key>
+	<string>New notifications stack upward. This preview uses your display time and does not read system notifications.</string>
+	<key>Dismiss notification</key>
+	<string>Dismiss notification</string>
+	<key>%ld more notifications waiting</key>
+	<string>%ld more notifications waiting</string>
 </dict>
 </plist>

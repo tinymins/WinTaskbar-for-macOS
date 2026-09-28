@@ -47,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         buildApplicationMenu()
+        SystemNotificationService.shared.start()
         KarabinerIntegrationService.shared.migrateManagedConfigurationIfNeeded(preferences: preferences)
 
         let taskbar = TaskbarWindowController(
@@ -391,6 +392,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        SystemNotificationService.shared.stop()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         dockToggleService.restoreDockOnExit()
     }
@@ -675,6 +677,7 @@ func runSelfTest() async -> Int32 {
         "Start Menu",
         "Taskbar",
         "System Tray",
+        "Notifications",
         "Date & time",
         "Fullscreen & Apps",
         "Input Adaptation",

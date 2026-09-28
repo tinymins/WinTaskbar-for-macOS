@@ -9,6 +9,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case startMenu = "Start Menu"
     case taskbar = "Taskbar"
     case systemTray = "System Tray"
+    case notifications = "Notifications"
     case dateTime = "Date & time"
     case fullscreenApps = "Fullscreen & Apps"
     case inputAdaptation = "Input Adaptation"
@@ -25,6 +26,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .startMenu: "square.grid.2x2"
         case .taskbar: "dock.rectangle"
         case .systemTray: "menubar.rectangle"
+        case .notifications: "bell.badge"
         case .fullscreenApps: "arrow.up.left.and.arrow.down.right"
         case .dateTime: "clock"
         case .inputAdaptation: "keyboard.badge.ellipsis"
@@ -145,6 +147,7 @@ struct SettingsView: View {
         case .startMenu: settingsPage(taskbarFeatureContent(startMenu))
         case .taskbar: settingsPage(taskbarFeatureContent(taskbarSettings))
         case .systemTray: settingsPage(taskbarFeatureContent(systemTraySettings))
+        case .notifications: settingsPage(NotificationSettingsView(preferences: preferences))
         case .fullscreenApps: settingsPage(taskbarFeatureContent(fullscreenAppSettings))
         case .dateTime:
             if preferences.taskbarEnabled {
@@ -1556,7 +1559,7 @@ private struct ShortcutKeycap<Content: View>: View {
     }
 }
 
-private struct SettingsSection<Content: View>: View {
+struct SettingsSection<Content: View>: View {
     let title: LocalizedStringKey
     @ViewBuilder let content: Content
 
