@@ -728,5 +728,7 @@
 	<string>The fallback is set to Do not show. Change its display behavior to preview a notification.</string>
 	<key>New notifications stack upward. This preview uses the fallback display behavior and does not read system notifications.</key>
 	<string>New notifications stack upward. This preview uses the fallback display behavior and does not read system notifications.</string>
+	<key>Choose application…</key>
+	<string>Choose application…</string>
 </dict>
 </plist>

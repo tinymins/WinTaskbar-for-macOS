@@ -56,6 +56,7 @@ struct SettingsPreviewTimelineSchedule: TimelineSchedule {
 struct SettingsView: View {
     @ObservedObject var preferences: PreferencesStore
     @ObservedObject var navigation: SettingsNavigationState
+    @ObservedObject var apps: AppDiscoveryService
     @ObservedObject private var dockToggle = DockToggleService.shared
     @ObservedObject private var loginItem = LoginItemService.shared
     @ObservedObject private var globalHotkeys = GlobalHotkeysService.shared
@@ -147,7 +148,7 @@ struct SettingsView: View {
         case .startMenu: settingsPage(taskbarFeatureContent(startMenu))
         case .taskbar: settingsPage(taskbarFeatureContent(taskbarSettings))
         case .systemTray: settingsPage(taskbarFeatureContent(systemTraySettings))
-        case .notifications: settingsPage(NotificationSettingsView(preferences: preferences))
+        case .notifications: settingsPage(NotificationSettingsView(preferences: preferences, apps: apps))
         case .fullscreenApps: settingsPage(taskbarFeatureContent(fullscreenAppSettings))
         case .dateTime:
             if preferences.taskbarEnabled {

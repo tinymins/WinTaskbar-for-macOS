@@ -1,8 +1,10 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct NotificationSettingsView: View {
     @ObservedObject var preferences: PreferencesStore
+    @ObservedObject var apps: AppDiscoveryService
     @ObservedObject private var service = SystemNotificationService.shared
     @ObservedObject private var permissions = PermissionsService.shared
     @State private var editingRule: NotificationCaptureRule?
@@ -89,7 +91,7 @@ struct NotificationSettingsView: View {
             permissions.refresh()
         }
         .sheet(item: $editingRule) { rule in
-            NotificationRuleEditor(rule: rule) { updated in
+            NotificationRuleEditor(rule: rule, apps: apps) { updated in
                 if let index = preferences.notifications.rules.firstIndex(where: { $0.id == updated.id }) {
                     preferences.notifications.rules[index] = updated
                 } else {
@@ -109,13 +111,18 @@ struct NotificationSettingsView: View {
 
 private struct NotificationRuleEditor: View {
     @State var rule: NotificationCaptureRule
+    @ObservedObject var apps: AppDiscoveryService
     let onSave: (NotificationCaptureRule) -> Void
     let onCancel: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Capture rule").font(.title2.weight(.semibold))
-            TextField("App name contains", text: $rule.appName).textFieldStyle(.roundedBorder)
+            HStack {
+                NotificationAppNameField(text: $rule.appName, names: applicationNames)
+                    .frame(height: 24)
+                Button("Choose application…", action: chooseApplication)
+            }
             Text("Matches the notification's app name, ignoring case. Leave empty to match any app.")
                 .font(.caption).foregroundStyle(.secondary)
             TextField("Message regular expression", text: $rule.messagePattern).textFieldStyle(.roundedBorder)
@@ -134,6 +141,26 @@ private struct NotificationRuleEditor: View {
                     .disabled(rule.isEmpty || rule.patternError != nil)
             }
         }.padding(24).frame(width: 480)
+            .onAppear { apps.reloadInstalledApps() }
+    }
+
+    private var applicationNames: [String] {
+        Array(Set((apps.installedApps + apps.runningApps).map(\.name)))
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private func chooseApplication() {
+        let panel = NSOpenPanel()
+        panel.title = NSLocalizedString("Choose application…", comment: "Notification rule application picker")
+        panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+        panel.allowedContentTypes = [.application]
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let bundle = Bundle(url: url)
+        rule.appName = (bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? url.deletingPathExtension().lastPathComponent
     }
 }
 

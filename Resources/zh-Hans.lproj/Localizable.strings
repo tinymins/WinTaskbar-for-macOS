@@ -734,5 +734,7 @@
 	<string>默认规则当前为“不显示”，修改显示方式后即可预览通知。</string>
 	<key>New notifications stack upward. This preview uses the fallback display behavior and does not read system notifications.</key>
 	<string>新通知会向上堆叠。此预览使用默认规则的显示方式，不读取系统通知。</string>
+	<key>Choose application…</key>
+	<string>选择应用…</string>
 </dict>
 </plist>

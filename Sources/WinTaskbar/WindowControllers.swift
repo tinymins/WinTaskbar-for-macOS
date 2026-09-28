@@ -1923,7 +1923,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private(set) var isOpen = false
     private let navigation = SettingsNavigationState()
 
-    init(preferences: PreferencesStore) {
+    init(preferences: PreferencesStore, apps: AppDiscoveryService) {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 820, height: 650),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -1935,7 +1935,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.minSize = NSSize(width: 720, height: 540)
         window.contentView = NSHostingView(rootView: SettingsView(
             preferences: preferences,
-            navigation: navigation
+            navigation: navigation,
+            apps: apps
         ))
         super.init(window: window)
         window.delegate = self

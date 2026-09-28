@@ -71,7 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             actions: actions,
             taskbar: taskbar
         )
-        let settings = SettingsWindowController(preferences: preferences)
+        let settings = SettingsWindowController(preferences: preferences, apps: apps)
 
         actions.toggleStartMenuHandler = { [weak startMenu] screen in startMenu?.toggle(on: screen) }
         actions.closeStartMenuHandler = { [weak startMenu] in startMenu?.hide() }
