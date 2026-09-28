@@ -2634,6 +2634,10 @@ func runSelfTest() async -> Int32 {
               accessibilityWindows: nil, classifiedWindowIDs: []
           ),
           !WindowPreviewWindowPolicy.shouldIncludeInSwitcher(
+              windowID: 405, isOnScreen: true, hasWindowTitle: false,
+              accessibilityWindows: nil, classifiedWindowIDs: []
+          ),
+          !WindowPreviewWindowPolicy.shouldIncludeInSwitcher(
               windowID: 404, isOnScreen: false,
               accessibilityWindows: nil, classifiedWindowIDs: []
           ),
@@ -2642,6 +2646,33 @@ func runSelfTest() async -> Int32 {
               accessibilityWindows: [303: false], classifiedWindowIDs: [404]
           ) else {
         fputs("SELF-TEST FAILED: cross-Space Alt-Tab eligibility mismatch\n", stderr)
+        return 1
+    }
+
+    var crossSpaceEligibility = WindowSwitcherEligibilityCache()
+    crossSpaceEligibility.record(AccessibilityWindowSnapshot(
+        states: [303: false, 404: false],
+        classifiedWindowIDs: [303, 404, 505],
+        fullScreenWindowIDs: []
+    ), forPID: 1)
+    crossSpaceEligibility.record(AccessibilityWindowSnapshot(
+        states: [303: false],
+        classifiedWindowIDs: [303],
+        fullScreenWindowIDs: []
+    ), forPID: 1)
+    guard crossSpaceEligibility.contains(404, forPID: 1),
+          !crossSpaceEligibility.contains(505, forPID: 1),
+          WindowPreviewWindowPolicy.shouldIncludeInSwitcher(
+              windowID: 404, isOnScreen: false,
+              accessibilityWindows: [303: false], classifiedWindowIDs: [303],
+              wasPreviouslyEligible: crossSpaceEligibility.contains(404, forPID: 1)
+          ) else {
+        fputs("SELF-TEST FAILED: cross-Space eligible window history mismatch\n", stderr)
+        return 1
+    }
+    crossSpaceEligibility.reconcile(observedWindowIDsByPID: [1: [303, 505]])
+    guard !crossSpaceEligibility.contains(404, forPID: 1) else {
+        fputs("SELF-TEST FAILED: closed cross-Space window retained\n", stderr)
         return 1
     }
 

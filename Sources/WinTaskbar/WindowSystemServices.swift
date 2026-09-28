@@ -413,6 +413,7 @@ private struct WindowSnapshotCandidate: Sendable {
     let pid: pid_t
     let windowID: CGWindowID
     let title: String
+    let hasWindowTitle: Bool
     let frame: CGRect
     let isOnScreen: Bool
 }
@@ -433,11 +434,36 @@ struct CachedWindowFilterResult {
     let hasUnclassifiedWindows: Bool
 }
 
+struct WindowSwitcherEligibilityCache {
+    private var eligibleWindowIDsByPID: [pid_t: Set<CGWindowID>] = [:]
+
+    mutating func record(_ snapshot: AccessibilityWindowSnapshot, forPID pid: pid_t) {
+        var eligibleIDs = eligibleWindowIDsByPID[pid] ?? []
+        eligibleIDs.subtract(snapshot.classifiedWindowIDs)
+        eligibleIDs.formUnion(snapshot.states.keys)
+        eligibleWindowIDsByPID[pid] = eligibleIDs
+    }
+
+    mutating func reconcile(observedWindowIDsByPID: [pid_t: Set<CGWindowID>]) {
+        for pid in eligibleWindowIDsByPID.keys {
+            eligibleWindowIDsByPID[pid]?.formIntersection(observedWindowIDsByPID[pid] ?? [])
+            if eligibleWindowIDsByPID[pid]?.isEmpty == true {
+                eligibleWindowIDsByPID.removeValue(forKey: pid)
+            }
+        }
+    }
+
+    func contains(_ windowID: CGWindowID, forPID pid: pid_t) -> Bool {
+        eligibleWindowIDsByPID[pid]?.contains(windowID) == true
+    }
+}
+
 @MainActor
 final class WindowsService {
     private let thumbnailCache = WindowThumbnailCache()
     private var appearanceOrder = WindowAppearanceOrder()
     private var accessibilitySnapshotsByPID: [pid_t: AccessibilityWindowSnapshot] = [:]
+    private var switcherEligibilityCache = WindowSwitcherEligibilityCache()
 
     func windows(forPID pid: pid_t) -> [WindowInfo] {
         windows(forPIDs: [pid])[pid] ?? []
@@ -456,6 +482,11 @@ final class WindowsService {
             forPIDs: pids,
             options: WindowPreviewWindowPolicy.listOptions
         )
+        switcherEligibilityCache.reconcile(
+            observedWindowIDsByPID: Dictionary(grouping: candidates, by: \.pid).mapValues {
+                Set($0.map(\.windowID))
+            }
+        )
         var hasUnclassifiedWindows = false
         let windows: [WindowInfo] = candidates.compactMap { candidate in
             let snapshot = accessibilitySnapshotsByPID[candidate.pid]
@@ -466,8 +497,12 @@ final class WindowsService {
             guard WindowPreviewWindowPolicy.shouldIncludeInSwitcher(
                 windowID: candidate.windowID,
                 isOnScreen: candidate.isOnScreen,
+                hasWindowTitle: candidate.hasWindowTitle,
                 accessibilityWindows: snapshot?.states,
-                classifiedWindowIDs: snapshot?.classifiedWindowIDs ?? []
+                classifiedWindowIDs: snapshot?.classifiedWindowIDs ?? [],
+                wasPreviouslyEligible: switcherEligibilityCache.contains(
+                    candidate.windowID, forPID: candidate.pid
+                )
             ) else { return nil }
             return WindowInfo(
                 windowID: candidate.windowID,
@@ -515,6 +550,9 @@ final class WindowsService {
     }
 
     func storeAccessibilityWindowSnapshots(_ snapshots: [pid_t: AccessibilityWindowSnapshot]) {
+        for (pid, snapshot) in snapshots {
+            switcherEligibilityCache.record(snapshot, forPID: pid)
+        }
         accessibilitySnapshotsByPID.merge(snapshots) { _, refreshed in refreshed }
     }
 
@@ -534,7 +572,7 @@ final class WindowsService {
         let refreshedSnapshots = Self.accessibilityWindowSnapshots(
             forPIDs: Array(Set(candidates.map(\.pid)))
         )
-        accessibilitySnapshotsByPID.merge(refreshedSnapshots) { _, refreshed in refreshed }
+        storeAccessibilityWindowSnapshots(refreshedSnapshots)
         var windowsByPID: [pid_t: [WindowInfo]] = [:]
         var frontToBackWindows: [WindowInfo] = []
         for candidate in candidates {
@@ -624,9 +662,9 @@ final class WindowsService {
                   let windowID = info[kCGWindowNumber as String] as? CGWindowID,
                   let bounds = info[kCGWindowBounds as String] as? [String: CGFloat],
                   (info[kCGWindowLayer as String] as? Int ?? 0) == 0 else { return nil }
-            let title = (info[kCGWindowName as String] as? String).flatMap {
+            let windowTitle = (info[kCGWindowName as String] as? String).flatMap {
                 $0.isEmpty ? nil : $0
-            } ?? "Window"
+            }
             let frame = CGRect(
                 x: bounds["X"] ?? 0,
                 y: bounds["Y"] ?? 0,
@@ -637,7 +675,8 @@ final class WindowsService {
             return WindowSnapshotCandidate(
                 pid: ownerPID,
                 windowID: windowID,
-                title: title,
+                title: windowTitle ?? "Window",
+                hasWindowTitle: windowTitle != nil,
                 frame: frame,
                 isOnScreen: info[kCGWindowIsOnscreen as String] as? Bool ?? false
             )
@@ -701,10 +740,14 @@ struct WindowPreviewWindowPolicy {
     static func shouldIncludeInSwitcher(
         windowID: CGWindowID,
         isOnScreen: Bool,
+        hasWindowTitle: Bool = true,
         accessibilityWindows: [CGWindowID: Bool]?,
-        classifiedWindowIDs: Set<CGWindowID>
+        classifiedWindowIDs: Set<CGWindowID>,
+        wasPreviouslyEligible: Bool = false
     ) -> Bool {
-        guard classifiedWindowIDs.contains(windowID) else { return isOnScreen }
+        guard classifiedWindowIDs.contains(windowID) else {
+            return (isOnScreen && hasWindowTitle) || wasPreviouslyEligible
+        }
         return accessibilityWindows?[windowID] != nil
     }
 
