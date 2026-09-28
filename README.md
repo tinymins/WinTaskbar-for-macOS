@@ -82,6 +82,12 @@ bun run tsc
 
 `bun run tsc` performs a full Swift build and runs the built-in defaults and persistence self-test without requiring a full Xcode installation.
 
+The self-test also includes notification parsing and display-rule regressions using synthetic AX snapshots. To run only those checks without starting the app or reading system notifications:
+
+```bash
+swift run WinTaskbar --notification-self-test
+```
+
 See [FEATURES.md](FEATURES.md) for the item-by-item feature matrix.
 
 ## Automated releases

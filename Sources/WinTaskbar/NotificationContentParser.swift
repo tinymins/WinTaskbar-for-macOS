@@ -57,11 +57,21 @@ struct NotificationAXNode: Sendable {
         return children.flatMap(\.visibleTexts)
     }
 
+    private var containsDescribedCard: Bool {
+        guard !isControl else { return false }
+        return (role == "AXGroup" && !description.isEmpty && !visibleTexts.isEmpty
+                && !["header", "title", "body"].contains(identifier))
+            || children.contains { $0.containsDescribedCard }
+    }
+
     func notifications(processID: Int32) -> [SystemNotificationContent] {
         guard !isControl else { return [] }
         // Resolve individual cards before their containing stack. Never merge sibling cards.
         let nested = children.flatMap { $0.notifications(processID: processID) }
         if !nested.isEmpty { return nested }
+        // An unrecognized card still owns its fields. Ancestors must not combine those
+        // fields with another card's source or payload to fabricate a complete message.
+        guard !children.contains(where: { $0.containsDescribedCard }) else { return [] }
         guard role == "AXGroup" || role == "AXWindow" else { return [] }
 
         let payload = visibleTexts

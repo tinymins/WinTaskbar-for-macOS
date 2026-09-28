@@ -450,6 +450,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 @MainActor
 func runSelfTest() async -> Int32 {
+    guard NotificationParserSelfTest.run() else { return 1 }
     let tooltipPanel = NSPanel(
         contentRect: .zero,
         styleMask: .borderless,
@@ -3485,7 +3486,9 @@ func runSelfTest() async -> Int32 {
     return 0
 }
 
-if CommandLine.arguments.contains("--self-test") {
+if CommandLine.arguments.contains("--notification-self-test") {
+    exit(NotificationParserSelfTest.run() ? 0 : 1)
+} else if CommandLine.arguments.contains("--self-test") {
     let application = NSApplication.shared
     Task { @MainActor in exit(await runSelfTest()) }
     application.run()
