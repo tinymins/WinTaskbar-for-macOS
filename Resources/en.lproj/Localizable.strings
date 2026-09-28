@@ -612,5 +612,19 @@
 	<string>Remove application</string>
 	<key>Add Application…</key>
 	<string>Add Application…</string>
+	<key>Taskbar</key>
+	<string>Taskbar</string>
+	<key>Fullscreen &amp; Apps</key>
+	<string>Fullscreen &amp; Apps</string>
+	<key>Taskbar placement</key>
+	<string>Taskbar placement</string>
+	<key>Taskbar app icons</key>
+	<string>Taskbar app icons</string>
+	<key>Window interactions</key>
+	<string>Window interactions</string>
+	<key>Fullscreen behavior</key>
+	<string>Fullscreen behavior</string>
+	<key>The taskbar can still appear when you move the pointer to its edge.</key>
+	<string>The taskbar can still appear when you move the pointer to its edge.</string>
 </dict>
 </plist>
