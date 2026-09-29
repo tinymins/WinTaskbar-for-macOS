@@ -433,7 +433,9 @@ private struct NotificationImportantOverlay: View {
             if measuring {
                 messageList
             } else {
-                ScrollView { messageList }
+                ScrollView {
+                    messageList.background(NotificationImportantScrollStyle())
+                }
             }
             if editing {
                 HStack {
@@ -470,6 +472,32 @@ private struct NotificationImportantOverlay: View {
                 }
                 .padding(12)
                 if index < rows.count - 1 { Divider().padding(.leading, 50) }
+            }
+        }
+    }
+}
+
+private struct NotificationImportantScrollStyle: NSViewRepresentable {
+    func makeNSView(context: Context) -> Probe { Probe() }
+
+    func updateNSView(_ nsView: Probe, context: Context) { nsView.configure() }
+
+    final class Probe: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            configure()
+        }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        func configure() {
+            Task { @MainActor [weak self] in
+                await Task.yield()
+                guard let scrollView = self?.enclosingScrollView else { return }
+                scrollView.scrollerStyle = .overlay
+                scrollView.autohidesScrollers = true
+                scrollView.hasHorizontalScroller = false
+                scrollView.verticalScroller?.controlSize = .small
             }
         }
     }
