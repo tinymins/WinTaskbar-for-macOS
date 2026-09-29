@@ -36,7 +36,16 @@ The full-screen Alt+Tab switcher uses live window thumbnails, recent-use orderin
 - Searchable Start menu with custom folders, category grouping, drag-and-drop shortcuts, and power actions
 - Interactive clock/calendar, battery, volume, Wi-Fi, and input-source tray controls
 - Dock hiding and restoration, launch at login, configurable Windows-style global shortcuts, onboarding, and permission guidance
+- Rule-based desktop alerts: notification cards, central text, large text, colored screen-edge glow, countdowns, sound or speech, and an important-message list
 - Twelve bundled localizations, including Simplified Chinese
+
+## Desktop alerts
+
+In Settings > Notifications, enable capture and choose outputs for the fallback or add app-name/message-regex rules. Rules use the first enabled match; each rule can combine several outputs. Disabling the card still allows the other outputs. The fixed fallback handles unmatched notifications.
+
+Important messages show an app icon and content until removed. The frame disappears when the list is empty. Messages, active countdowns, and alert history stay in memory and are cleared when WinTaskbar quits. Only rules and appearance/layout settings are saved.
+
+Countdowns use a fixed duration or the seconds captured by group 1 of a regular expression. On expiry they can trigger another output combination. Templates accept `{app}`, `{title}`, `{body}`, and rule-regex groups such as `{1}`. Use the output preview buttons and layout editing to position sample overlays without reading system notifications.
 
 ## Requirements
 

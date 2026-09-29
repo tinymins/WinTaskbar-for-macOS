@@ -7,19 +7,27 @@ import SwiftUI
 @MainActor
 final class SystemNotificationService: ObservableObject {
     static let shared = SystemNotificationService(preferences: .shared)
+    @Published private(set) var isLayoutEditing = false
     @Published private(set) var statusKey = "Notification capture is off."
 
     private struct Card {
         let id: UUID
         var content: SystemNotificationContent
+        var renderedText: String?
         var behavior: NotificationDisplayBehavior
-        var isPreview = false
         var remaining: TimeInterval?
+
+        var displayContent: SystemNotificationContent {
+            SystemNotificationContent(sourceID: content.sourceID, appName: content.appName,
+                                      title: content.title, body: renderedText ?? content.body)
+        }
     }
 
     private let preferences: PreferencesStore
     private var configuration = NotificationPreferences()
     private var subscription: AnyCancellable?
+    private let presenter = NotificationAlertPresenter()
+    private var runtime = NotificationAlertRuntime()
     private var layoutSubscription: AnyCancellable?
     private var observers: [NSObjectProtocol] = []
     private var captureTimer: Timer?
@@ -38,6 +46,23 @@ final class SystemNotificationService: ObservableObject {
 
     func start() {
         guard subscription == nil else { return }
+        presenter.onImportantDismiss = { [weak self] id in
+            self?.runtime.removeImportant(id)
+            self?.syncAlertLists()
+        }
+        presenter.onImportantClear = { [weak self] in
+            guard let self else { return }
+            for item in self.runtime.important { self.runtime.removeImportant(item.id) }
+            self.syncAlertLists()
+        }
+        presenter.onCountdownDismiss = { [weak self] id in
+            self?.runtime.removeCountdown(id)
+            self?.syncAlertLists()
+            self?.updateExpiryTimer()
+        }
+        presenter.onLayoutChanged = { [weak self] value in
+            self?.preferences.notifications.presentation = value
+        }
         subscription = preferences.$notifications.sink { [weak self] in self?.configure($0) }
         layoutSubscription = Publishers.CombineLatest4(
             preferences.$taskbarEnabled, preferences.$position, preferences.$barHeight, preferences.$theme
@@ -46,11 +71,17 @@ final class SystemNotificationService: ObservableObject {
         }
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
-        ) { [weak self] _ in MainActor.assumeIsolated { self?.layout() } })
+        ) { [weak self] _ in MainActor.assumeIsolated {
+            guard let self else { return }
+            self.presenter.configure(self.configuration.presentation)
+            self.syncAlertLists()
+            self.layout()
+        } })
         for name in [NSWorkspace.willSleepNotification, NSWorkspace.sessionDidResignActiveNotification] {
             observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
                     self?.suspended = true
+                    self?.presenter.setSuspended(true)
                     self?.panels.values.forEach { $0.orderOut(nil) }
                 }
             })
@@ -60,6 +91,8 @@ final class SystemNotificationService: ObservableObject {
                 MainActor.assumeIsolated {
                     self?.suspended = false
                     self?.lastTick = ProcessInfo.processInfo.systemUptime
+                    self?.presenter.setSuspended(false)
+                    self?.tick()
                     self?.layout()
                 }
             })
@@ -72,7 +105,7 @@ final class SystemNotificationService: ObservableObject {
         captureTimer?.invalidate()
         captureTimer = nil
         generation = UUID()
-        clearCards()
+        clearAllAlerts()
         seen.removeAll()
         for observer in observers {
             NotificationCenter.default.removeObserver(observer)
@@ -83,24 +116,30 @@ final class SystemNotificationService: ObservableObject {
 
     private func configure(_ value: NotificationPreferences) {
         let changedEnabled = configuration.enabled != value.enabled
+        let changedRules = configuration.rules != value.rules || configuration.fallback != value.fallback
         configuration = value
-        cards = cards.compactMap { card in
-            var updated = card
-            let behavior = card.isPreview ? value.fallback
-                : value.behavior(app: card.content.appName, title: card.content.title, body: card.content.body)
-            guard behavior.mode != .hidden else { return nil }
-            if behavior != card.behavior {
-                updated.behavior = behavior
-                updated.remaining = nil
+        if changedRules {
+            cards = cards.compactMap { card in
+                guard !card.content.sourceID.hasPrefix("preview:") else { return card }
+                let plan = value.plan(for: card.content)
+                let outputs = plan.outputs
+                guard outputs.enabled.contains(.card), outputs.card.mode != .hidden else { return nil }
+                var updated = card
+                updated.renderedText = outputs.textTemplate.isEmpty ? nil : plan.text
+                if updated.behavior != outputs.card {
+                    updated.behavior = outputs.card
+                    updated.remaining = nil
+                }
+                return updated
             }
-            return updated
         }
+        if changedEnabled { clearAllAlerts() }
+        presenter.configure(value.presentation)
         if !value.enabled {
             captureTimer?.invalidate()
             captureTimer = nil
             generation = UUID()
             seen.removeAll()
-            if changedEnabled { clearCards() }
             statusKey = "Notification capture is off."
         } else if captureTimer == nil {
             let timer = Timer(timeInterval: 0.75, repeats: true) { [weak self] _ in
@@ -133,42 +172,104 @@ final class SystemNotificationService: ObservableObject {
                 : "Listening for system notification banners."
             let now = ProcessInfo.processInfo.systemUptime
             self.seen = self.seen.filter { now - $0.value.time < 600 }
-            var changed = false
             for content in result.notifications {
                 let previous = self.seen[content.sourceID]?.content
                 self.seen[content.sourceID] = (content, now)
                 guard previous != content else { continue }
-                let behavior = rules.behavior(app: content.appName, title: content.title, body: content.body)
-                if behavior.mode == .hidden {
-                    let count = self.cards.count
+                let plan = rules.plan(for: content)
+                if !plan.outputs.enabled.contains(.card) || plan.outputs.card.mode == .hidden {
                     self.cards.removeAll { $0.content.sourceID == content.sourceID }
-                    changed = changed || self.cards.count != count
-                    continue
+                    self.layout()
                 }
-                if let index = self.cards.firstIndex(where: { $0.content.sourceID == content.sourceID }) {
-                    self.cards[index].content = content
-                    self.cards[index].behavior = behavior
-                    self.cards[index].remaining = nil
-                } else {
-                    self.cards.append(Card(id: UUID(), content: content, behavior: behavior, remaining: nil))
-                }
-                changed = true
+                self.receive(plan, now: now)
             }
-            if changed { self.layout() }
+
         }
     }
 
-    func showPreview() {
-        guard configuration.fallback.mode != .hidden else {
-            statusKey = "The fallback is set to Do not show. Change its display behavior to preview a notification."
-            return
-        }
-        cards.append(Card(id: UUID(), content: SystemNotificationContent(
-            sourceID: UUID().uuidString, appName: "WinTaskbar",
+    func showPreview(outputs: NotificationOutputs? = nil) {
+        var value = outputs ?? configuration.fallback
+        value.cooldownSeconds = 0
+        let content = SystemNotificationContent(
+            sourceID: "preview:" + UUID().uuidString, appName: "WinTaskbar",
             title: NSLocalizedString("Notification preview", comment: "Notification sample"),
-            body: NSLocalizedString("New notifications stack upward. This preview uses the fallback display behavior and does not read system notifications.", comment: "Notification sample")
-        ), behavior: configuration.fallback, isPreview: true, remaining: nil))
+            body: NSLocalizedString("Preview message. Alerts stay in memory and disappear when WinTaskbar quits.", comment: "Notification sample")
+        )
+        receive(NotificationPreferences(fallback: value).plan(for: content), now: ProcessInfo.processInfo.systemUptime)
+    }
+
+    func showOutputPreview(_ kind: NotificationOutputKind) {
+        var outputs = configuration.fallback
+        outputs.enabled = [kind]
+        outputs.card = NotificationDisplayBehavior()
+        outputs.countdownPattern = ""
+        outputs.countdownSeconds = 5
+        showPreview(outputs: outputs)
+    }
+
+    func beginLayoutEditing() {
+        isLayoutEditing = true
+        presenter.setLayoutEditing(true)
+    }
+
+    func endLayoutEditing() {
+        isLayoutEditing = false
+        presenter.setLayoutEditing(false)
+    }
+
+    private func receive(_ plan: NotificationAlertPlan, now: TimeInterval) {
+        let accepted = runtime.ingest(plan, now: now)
+        if accepted { deliver(plan) }
+        syncAlertLists()
+        updateExpiryTimer()
+    }
+
+    private func deliver(_ plan: NotificationAlertPlan) {
+        let outputs = plan.outputs
+        let content = plan.content
+        if outputs.enabled.contains(.card), outputs.card.mode != .hidden {
+            if let index = cards.firstIndex(where: { $0.content.sourceID == content.sourceID }) {
+                cards[index].content = content
+                cards[index].renderedText = outputs.textTemplate.isEmpty ? nil : plan.text
+                cards[index].behavior = outputs.card
+                cards[index].remaining = nil
+            } else {
+                cards.append(Card(id: UUID(), content: content,
+                                  renderedText: outputs.textTemplate.isEmpty ? nil : plan.text,
+                                  behavior: outputs.card, remaining: nil))
+            }
+        }
+        let color = NSColor(hex: outputs.colorHex) ?? NotificationGlow.defaultColor
+        let duration = min(3600, max(0.5, outputs.durationSeconds))
+        if outputs.enabled.contains(.centerText) {
+            presenter.showText(plan.text, large: false, color: color, duration: duration)
+        }
+        if outputs.enabled.contains(.largeText) {
+            presenter.showText(plan.text, large: true, color: color, duration: duration)
+        }
+        if outputs.enabled.contains(.glow) { presenter.showGlow(color: color, duration: duration) }
+        if outputs.enabled.contains(.sound) {
+            presenter.playSound(named: outputs.soundName, speech: outputs.speechEnabled ? plan.text : nil)
+        }
         layout()
+    }
+
+    private func syncAlertLists() {
+        presenter.setImportant(runtime.important.map {
+            NotificationAlertPresenter.ImportantRow(id: $0.id, appName: $0.content.appName,
+                                                     title: $0.content.title, body: $0.text)
+        })
+        presenter.setCountdown(runtime.countdowns.map {
+            NotificationAlertPresenter.CountdownRow(id: $0.id, title: $0.text, deadline: $0.deadline, duration: $0.duration,
+                                                     color: NSColor(hex: $0.colorHex) ?? NotificationGlow.defaultColor)
+        })
+    }
+
+    func clearAllAlerts() {
+        endLayoutEditing()
+        runtime.clear()
+        presenter.stop()
+        clearCards()
     }
 
     func clearCards() {
@@ -177,8 +278,7 @@ final class SystemNotificationService: ObservableObject {
         panels.removeAll()
         hovered.removeAll()
         expanded.removeAll()
-        expiryTimer?.invalidate()
-        expiryTimer = nil
+        updateExpiryTimer()
     }
 
     private func dismiss(_ id: UUID) {
@@ -197,6 +297,10 @@ final class SystemNotificationService: ObservableObject {
         let count = cards.count
         cards.removeAll { $0.remaining.map { $0 <= 0 } ?? false }
         if cards.count != count { layout() }
+        let completed = runtime.tick(now: now)
+        for plan in completed { receive(plan, now: now) }
+        if !completed.isEmpty { syncAlertLists() }
+        updateExpiryTimer()
     }
 
     private func layout() {
@@ -219,11 +323,11 @@ final class SystemNotificationService: ObservableObject {
         var usedHeight: CGFloat = gap
         for card in cards.reversed() {
             let availableHeight = area.height - usedHeight - gap
-            let compact = NotificationCardMetrics.measure(card.content, width: width, maxHeight: maxHeight, expanded: false)
+            let compact = NotificationCardMetrics.measure(card.displayContent, width: width, maxHeight: maxHeight, expanded: false)
             guard compact.height <= availableHeight else { break }
             // Expanding the top card must keep it visible; scroll within the remaining screen space.
             let metrics = expanded.contains(card.id)
-                ? NotificationCardMetrics.measure(card.content, width: width, maxHeight: min(maxHeight, availableHeight), expanded: true)
+                ? NotificationCardMetrics.measure(card.displayContent, width: width, maxHeight: min(maxHeight, availableHeight), expanded: true)
                 : compact
             visible.append((card, metrics))
             usedHeight += metrics.height + gap
@@ -251,17 +355,18 @@ final class SystemNotificationService: ObservableObject {
                 panel.backgroundColor = .clear
                 panel.hasShadow = true
                 panel.animationBehavior = .none
-                panel.level = .floating
-                panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
                 panels[card.id] = panel
             }
             if let index = cards.firstIndex(where: { $0.id == card.id }), cards[index].remaining == nil {
                 cards[index].remaining = card.behavior.duration
             }
+            panel.level = configuration.presentation.alwaysOnTop ? .floating : .normal
+            panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+            if configuration.presentation.showInFullscreen { panel.collectionBehavior.insert(.fullScreenAuxiliary) }
             panel.appearance = preferences.theme == .dark ? NSAppearance(named: .darkAqua)
                 : preferences.theme == .light ? NSAppearance(named: .aqua) : nil
             let view = NotificationCardView(
-                content: card.content,
+                content: card.displayContent,
                 icon: runningApps.first { $0.localizedName?.localizedCaseInsensitiveCompare(card.content.appName) == .orderedSame }?.icon,
                 width: width, metrics: entry.metrics, expanded: expanded.contains(card.id),
                 queued: slot == visible.count - 1 ? max(0, cards.count - visible.count) : 0,
@@ -306,7 +411,11 @@ final class SystemNotificationService: ObservableObject {
             }
             bottom += entry.metrics.height + gap
         }
-        if cards.isEmpty {
+        updateExpiryTimer()
+    }
+
+    private func updateExpiryTimer() {
+        if cards.isEmpty && runtime.countdowns.isEmpty {
             expiryTimer?.invalidate()
             expiryTimer = nil
         } else if expiryTimer == nil {

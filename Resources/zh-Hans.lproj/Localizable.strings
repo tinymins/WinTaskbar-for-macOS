@@ -736,5 +736,129 @@
 	<string>新通知会向上堆叠。此预览使用默认规则的显示方式，不读取系统通知。</string>
 	<key>Choose application…</key>
 	<string>选择应用…</string>
+	<key>Fullscreen glow</key>
+	<string>全屏泛光</string>
+	<key>Screen-edge glow for new notifications</key>
+	<string>收到新通知时显示屏幕边缘泛光</string>
+	<key>When a notification passes the display rules, light pulses around its screen for 3 seconds. The center stays clear and clicks pass through. Hidden notifications do not trigger the glow.</key>
+	<string>通知通过显示规则后，在通知所在屏幕四周显示 3 秒呼吸泛光。中央透明，不影响鼠标操作。被规则隐藏的通知不会触发泛光。</string>
+	<key>Preview glow</key>
+	<string>预览泛光</string>
+	<key>Glow color</key>
+	<string>泛光颜色</string>
+	<key>Important messages</key>
+	<string>重要消息</string>
+	<key>Capture system notifications</key>
+	<string>捕获系统通知</string>
+	<key>Rules can trigger several outputs for one notification. Messages and countdowns are kept in memory only and disappear when WinTaskbar quits.</key>
+	<string>一条通知可由规则触发多种输出。消息和倒计时只保存在内存中，退出 WinTaskbar 后清空。</string>
+	<key>Clear current alerts</key>
+	<string>清空当前提醒</string>
+	<key>Trigger rules</key>
+	<string>触发规则</string>
+	<key>Rules are checked from top to bottom. The first enabled match decides which outputs run. Unmatched notifications use the fallback below.</key>
+	<string>规则从上到下匹配，首条命中的已启用规则决定执行哪些输出。未命中时使用下方的默认规则。</string>
+	<key>Ignore notification</key>
+	<string>忽略通知</string>
+	<key>Display styles</key>
+	<string>展示样式</string>
+	<key>Each rule chooses its outputs and their text, timing, glow, countdown, and sound. These display settings apply to every rule.</key>
+	<string>每条规则分别选择输出，并设置文字、时长、泛光、倒计时和声音。以下展示设置对所有规则生效。</string>
+	<key>Center text size</key>
+	<string>中央提醒字号</string>
+	<key>Large text size</key>
+	<string>特大文字字号</string>
+	<key>Show above other windows</key>
+	<string>覆盖其他窗口</string>
+	<key>Show over fullscreen apps</key>
+	<string>在全屏应用上显示</string>
+	<key>Preview one output</key>
+	<string>单独预览输出</string>
+	<key>Layout editing</key>
+	<string>布局编辑</string>
+	<key>Drag the sample overlays to place them. The important-message frame is visible in layout editing even when its list is empty.</key>
+	<string>拖动示例浮层来调整位置。即使列表为空，布局编辑时也会显示重要消息框架。</string>
+	<key>Finish layout editing</key>
+	<string>完成布局编辑</string>
+	<key>Edit layout</key>
+	<string>编辑布局</string>
+	<key>Center reminder</key>
+	<string>中央提醒</string>
+	<key>Large text</key>
+	<string>中央特大文字</string>
+	<key>Countdown bar</key>
+	<string>倒计时条</string>
+	<key>Important message list</key>
+	<string>重要消息列表</string>
+	<key>List width</key>
+	<string>列表宽度</string>
+	<key>List height</key>
+	<string>列表高度</string>
+	<key>Preview rule outputs</key>
+	<string>预览规则输出</string>
+	<key>Outputs</key>
+	<string>输出</string>
+	<key>Select any combination. Selecting none ignores the notification.</key>
+	<string>可组合选择；全部不选则忽略该通知。</string>
+	<key>Card lifetime</key>
+	<string>卡片显示方式</string>
+	<key>Card display time (seconds)</key>
+	<string>卡片显示时间（秒）</string>
+	<key>Output text template</key>
+	<string>输出文字模板</string>
+	<key>Leave empty to use the notification text. Use {app}, {title}, {body}, or regex captures such as {1}.</key>
+	<string>留空使用通知原文。可使用 {app}、{title}、{body} 或 {1} 等正则捕获组。</string>
+	<key>Effect duration</key>
+	<string>效果时长</string>
+	<key>Countdown duration</key>
+	<string>倒计时时长</string>
+	<key>Countdown regex</key>
+	<string>倒计时正则表达式</string>
+	<key>Optional regex: capture a number of seconds in group 1. If it does not match, no countdown starts.</key>
+	<string>可选正则：用第 1 组捕获秒数。未匹配时不启动倒计时。</string>
+	<key>When countdown ends</key>
+	<string>倒计时结束时</string>
+	<key>Alert sound</key>
+	<string>提示音</string>
+	<key>Speak the message</key>
+	<string>朗读消息</string>
+	<key>Repeat cooldown</key>
+	<string>重复触发冷却时间</string>
+	<key>Horizontal position</key>
+	<string>水平位置</string>
+	<key>Vertical position</key>
+	<string>垂直位置</string>
+	<key>Bottom-right card</key>
+	<string>右下角通知卡片</string>
+	<key>Center text</key>
+	<string>中央提醒／小字</string>
+	<key>Full-screen glow</key>
+	<string>全屏泛光</string>
+	<key>Sound and speech</key>
+	<string>声音／语音</string>
+	<key>Desktop alerts</key>
+	<string>桌面提醒</string>
+	<key>Alert color</key>
+	<string>提醒颜色</string>
+	<key>Invalid countdown regex.</key>
+	<string>倒计时正则表达式无效。</string>
+	<key>Countdown regex must capture seconds in group 1.</key>
+	<string>倒计时正则表达式必须在第 1 组捕获秒数。</string>
+	<key>Central reminder</key>
+	<string>中央提醒</string>
+	<key>Large reminder</key>
+	<string>特大文字提醒</string>
+	<key>Clear all</key>
+	<string>全部清空</string>
+	<key>Remove message</key>
+	<string>移除消息</string>
+	<key>Countdown</key>
+	<string>倒计时</string>
+	<key>Important message</key>
+	<string>重要消息</string>
+	<key>Messages appear here.</key>
+	<string>消息将在这里显示。</string>
+	<key>Value</key>
+	<string>数值</string>
 </dict>
 </plist>

@@ -27,12 +27,65 @@ struct NotificationDisplayBehavior: Codable, Equatable {
     }
 }
 
+enum NotificationOutputKind: String, Codable, CaseIterable, Identifiable {
+    case card, centerText, largeText, glow, countdown, sound, important
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .card: return NSLocalizedString("Bottom-right card", comment: "Notification output")
+        case .centerText: return NSLocalizedString("Center text", comment: "Notification output")
+        case .largeText: return NSLocalizedString("Large text", comment: "Notification output")
+        case .glow: return NSLocalizedString("Full-screen glow", comment: "Notification output")
+        case .countdown: return NSLocalizedString("Countdown bar", comment: "Notification output")
+        case .sound: return NSLocalizedString("Sound and speech", comment: "Notification output")
+        case .important: return NSLocalizedString("Important messages", comment: "Notification output")
+        }
+    }
+}
+
+struct NotificationOutputs: Codable, Equatable {
+    var enabled: Set<NotificationOutputKind> = [.card]
+    var card = NotificationDisplayBehavior()
+    var colorHex = "#FFCC05"
+    var textTemplate = ""
+    var durationSeconds: Double = 3
+    var countdownSeconds: Double = 60
+    var countdownPattern = ""
+    var completionOutputs: Set<NotificationOutputKind> = [.largeText, .glow]
+    var cooldownSeconds: Double = 0
+    var soundName = "Glass"
+    var speechEnabled = false
+
+    var summary: String {
+        let names = NotificationOutputKind.allCases.filter { enabled.contains($0) }.map(\.label)
+        return names.isEmpty ? NSLocalizedString("Do not show", comment: "Notification outputs")
+            : names.joined(separator: ", ")
+    }
+
+    func countdownDuration(message: String) -> TimeInterval? {
+        let seconds: Double
+        if countdownPattern.isEmpty {
+            seconds = countdownSeconds
+        } else {
+            guard let expression = try? NSRegularExpression(pattern: countdownPattern),
+                  let match = expression.firstMatch(in: message, range: NSRange(message.startIndex..., in: message)),
+                  match.numberOfRanges > 1,
+                  let range = Range(match.range(at: 1), in: message),
+                  let parsed = Double(message[range]) else { return nil }
+            seconds = parsed
+        }
+        return seconds.isFinite && seconds > 0 ? min(86_400, seconds) : nil
+    }
+}
+
 struct NotificationCaptureRule: Codable, Equatable, Identifiable {
     var id = UUID()
     var enabled = true
     var appName = ""
     var messagePattern = ""
-    var behavior = NotificationDisplayBehavior()
+    var outputs = NotificationOutputs()
 
     var isEmpty: Bool {
         appName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && messagePattern.isEmpty
@@ -56,14 +109,90 @@ struct NotificationCaptureRule: Codable, Equatable, Identifiable {
         guard let expression = try? NSRegularExpression(pattern: messagePattern) else { return false }
         return expression.firstMatch(in: message, range: NSRange(message.startIndex..., in: message)) != nil
     }
+
+    func captureGroups(in message: String) -> [String] {
+        guard !messagePattern.isEmpty,
+              let expression = try? NSRegularExpression(pattern: messagePattern),
+              let match = expression.firstMatch(in: message, range: NSRange(message.startIndex..., in: message)) else { return [] }
+        return (1..<match.numberOfRanges).map { index in
+            Range(match.range(at: index), in: message).map { String(message[$0]) } ?? ""
+        }
+    }
+}
+
+struct NotificationPresentationPreferences: Codable, Equatable {
+    var centerX: Double = 0.5
+    var centerY: Double = 0.7
+    var largeX: Double = 0.5
+    var largeY: Double = 0.5
+    var countdownX: Double = 0.8
+    var countdownY: Double = 0.7
+    var importantX: Double = 0.8
+    var importantY: Double = 0.35
+    var importantWidth: Double = 380
+    var importantHeight: Double = 360
+    var centerFontSize: Double = 22
+    var largeFontSize: Double = 44
+    var alwaysOnTop = true
+    var showInFullscreen = true
+}
+
+struct NotificationAlertPlan {
+    let content: SystemNotificationContent
+    let outputs: NotificationOutputs
+    let text: String
+    let countdownDuration: TimeInterval?
+    let ruleID: String
 }
 
 struct NotificationPreferences: Codable, Equatable {
     var enabled = false
     var rules: [NotificationCaptureRule] = []
-    var fallback = NotificationDisplayBehavior()
+    var fallback = NotificationOutputs()
+    var presentation = NotificationPresentationPreferences()
 
-    func behavior(app: String, title: String, body: String) -> NotificationDisplayBehavior {
-        rules.first { $0.matches(app: app, message: title + "\n" + body) }?.behavior ?? fallback
+    func outputs(app: String, title: String, body: String) -> NotificationOutputs {
+        rules.first { $0.matches(app: app, message: title + "\n" + body) }?.outputs ?? fallback
+    }
+
+    func plan(for content: SystemNotificationContent) -> NotificationAlertPlan {
+        let message = content.title + "\n" + content.body
+        let rule = rules.first { $0.matches(app: content.appName, message: message) }
+        let selected = rule?.outputs ?? fallback
+        let template = selected.textTemplate
+        let text: String
+        if template.isEmpty {
+            text = content.title.isEmpty ? content.body : content.title
+        } else {
+            let captures = rule?.captureGroups(in: message) ?? []
+            let expression = try? NSRegularExpression(pattern: #"\{(app|title|body|[1-9][0-9]*)\}"#)
+            var rendered = ""
+            var cursor = template.startIndex
+            for match in expression?.matches(in: template, range: NSRange(template.startIndex..., in: template)) ?? [] {
+                guard let fullRange = Range(match.range, in: template),
+                      let keyRange = Range(match.range(at: 1), in: template) else { continue }
+                rendered.append(contentsOf: template[cursor..<fullRange.lowerBound])
+                let key = String(template[keyRange])
+                switch key {
+                case "app": rendered += content.appName
+                case "title": rendered += content.title
+                case "body": rendered += content.body
+                default:
+                    if let number = Int(key), number <= captures.count {
+                        rendered += captures[number - 1]
+                    } else {
+                        rendered.append(contentsOf: template[fullRange])
+                    }
+                }
+                cursor = fullRange.upperBound
+            }
+            rendered.append(contentsOf: template[cursor...])
+            text = rendered
+        }
+        return NotificationAlertPlan(
+            content: content, outputs: selected, text: text,
+            countdownDuration: selected.enabled.contains(.countdown) ? selected.countdownDuration(message: message) : nil,
+            ruleID: rule?.id.uuidString ?? "fallback"
+        )
     }
 }

@@ -730,5 +730,129 @@
 	<string>New notifications stack upward. This preview uses the fallback display behavior and does not read system notifications.</string>
 	<key>Choose application…</key>
 	<string>Choose application…</string>
+	<key>Fullscreen glow</key>
+	<string>Fullscreen glow</string>
+	<key>Screen-edge glow for new notifications</key>
+	<string>Screen-edge glow for new notifications</string>
+	<key>When a notification passes the display rules, light pulses around its screen for 3 seconds. The center stays clear and clicks pass through. Hidden notifications do not trigger the glow.</key>
+	<string>When a notification passes the display rules, light pulses around its screen for 3 seconds. The center stays clear and clicks pass through. Hidden notifications do not trigger the glow.</string>
+	<key>Preview glow</key>
+	<string>Preview glow</string>
+	<key>Glow color</key>
+	<string>Glow color</string>
+	<key>Important messages</key>
+	<string>Important messages</string>
+	<key>Capture system notifications</key>
+	<string>Capture system notifications</string>
+	<key>Rules can trigger several outputs for one notification. Messages and countdowns are kept in memory only and disappear when WinTaskbar quits.</key>
+	<string>Rules can trigger several outputs for one notification. Messages and countdowns are kept in memory only and disappear when WinTaskbar quits.</string>
+	<key>Clear current alerts</key>
+	<string>Clear current alerts</string>
+	<key>Trigger rules</key>
+	<string>Trigger rules</string>
+	<key>Rules are checked from top to bottom. The first enabled match decides which outputs run. Unmatched notifications use the fallback below.</key>
+	<string>Rules are checked from top to bottom. The first enabled match decides which outputs run. Unmatched notifications use the fallback below.</string>
+	<key>Ignore notification</key>
+	<string>Ignore notification</string>
+	<key>Display styles</key>
+	<string>Display styles</string>
+	<key>Each rule chooses its outputs and their text, timing, glow, countdown, and sound. These display settings apply to every rule.</key>
+	<string>Each rule chooses its outputs and their text, timing, glow, countdown, and sound. These display settings apply to every rule.</string>
+	<key>Center text size</key>
+	<string>Center text size</string>
+	<key>Large text size</key>
+	<string>Large text size</string>
+	<key>Show above other windows</key>
+	<string>Show above other windows</string>
+	<key>Show over fullscreen apps</key>
+	<string>Show over fullscreen apps</string>
+	<key>Preview one output</key>
+	<string>Preview one output</string>
+	<key>Layout editing</key>
+	<string>Layout editing</string>
+	<key>Drag the sample overlays to place them. The important-message frame is visible in layout editing even when its list is empty.</key>
+	<string>Drag the sample overlays to place them. The important-message frame is visible in layout editing even when its list is empty.</string>
+	<key>Finish layout editing</key>
+	<string>Finish layout editing</string>
+	<key>Edit layout</key>
+	<string>Edit layout</string>
+	<key>Center reminder</key>
+	<string>Center reminder</string>
+	<key>Large text</key>
+	<string>Large text</string>
+	<key>Countdown bar</key>
+	<string>Countdown bar</string>
+	<key>Important message list</key>
+	<string>Important message list</string>
+	<key>List width</key>
+	<string>List width</string>
+	<key>List height</key>
+	<string>List height</string>
+	<key>Preview rule outputs</key>
+	<string>Preview rule outputs</string>
+	<key>Outputs</key>
+	<string>Outputs</string>
+	<key>Select any combination. Selecting none ignores the notification.</key>
+	<string>Select any combination. Selecting none ignores the notification.</string>
+	<key>Card lifetime</key>
+	<string>Card lifetime</string>
+	<key>Card display time (seconds)</key>
+	<string>Card display time (seconds)</string>
+	<key>Output text template</key>
+	<string>Output text template</string>
+	<key>Leave empty to use the notification text. Use {app}, {title}, {body}, or regex captures such as {1}.</key>
+	<string>Leave empty to use the notification text. Use {app}, {title}, {body}, or regex captures such as {1}.</string>
+	<key>Effect duration</key>
+	<string>Effect duration</string>
+	<key>Countdown duration</key>
+	<string>Countdown duration</string>
+	<key>Countdown regex</key>
+	<string>Countdown regex</string>
+	<key>Optional regex: capture a number of seconds in group 1. If it does not match, no countdown starts.</key>
+	<string>Optional regex: capture a number of seconds in group 1. If it does not match, no countdown starts.</string>
+	<key>When countdown ends</key>
+	<string>When countdown ends</string>
+	<key>Alert sound</key>
+	<string>Alert sound</string>
+	<key>Speak the message</key>
+	<string>Speak the message</string>
+	<key>Repeat cooldown</key>
+	<string>Repeat cooldown</string>
+	<key>Horizontal position</key>
+	<string>Horizontal position</string>
+	<key>Vertical position</key>
+	<string>Vertical position</string>
+	<key>Bottom-right card</key>
+	<string>Bottom-right card</string>
+	<key>Center text</key>
+	<string>Center text</string>
+	<key>Full-screen glow</key>
+	<string>Full-screen glow</string>
+	<key>Sound and speech</key>
+	<string>Sound and speech</string>
+	<key>Desktop alerts</key>
+	<string>Desktop alerts</string>
+	<key>Alert color</key>
+	<string>Alert color</string>
+	<key>Invalid countdown regex.</key>
+	<string>Invalid countdown regex.</string>
+	<key>Countdown regex must capture seconds in group 1.</key>
+	<string>Countdown regex must capture seconds in group 1.</string>
+	<key>Central reminder</key>
+	<string>Central reminder</string>
+	<key>Large reminder</key>
+	<string>Large reminder</string>
+	<key>Clear all</key>
+	<string>Clear all</string>
+	<key>Remove message</key>
+	<string>Remove message</string>
+	<key>Countdown</key>
+	<string>Countdown</string>
+	<key>Important message</key>
+	<string>Important message</string>
+	<key>Messages appear here.</key>
+	<string>Messages appear here.</string>
+	<key>Value</key>
+	<string>Value</string>
 </dict>
 </plist>
