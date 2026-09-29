@@ -36,8 +36,27 @@ final class NotificationAlertPresenter {
     private let speechSynthesizer = NSSpeechSynthesizer()
     private var layoutEditing = false
     private var suspended = false
-    private var dragOrigin: NSPoint?
-    private var resizeFrame: NSRect?
+    private var moveSession: LayoutPointerSession?
+    private var resizeSession: LayoutPointerSession?
+
+    @MainActor
+    private struct LayoutPointerSession {
+        let panel: NSPanel
+        let frame: NSRect
+        let mouseOrigin: NSPoint
+
+        init(panel: NSPanel, firstTranslation: CGSize, mouse: NSPoint) {
+            self.panel = panel
+            frame = panel.frame
+            // SwiftUI's local translation is safe only before the panel first moves.
+            mouseOrigin = NSPoint(x: mouse.x - firstTranslation.width,
+                                  y: mouse.y + firstTranslation.height)
+        }
+
+        func displacement(to mouse: NSPoint) -> NSPoint {
+            NSPoint(x: mouse.x - mouseOrigin.x, y: mouse.y - mouseOrigin.y)
+        }
+    }
 
     private enum TextKind: Hashable { case center, large }
     private enum PanelKind { case center, large, countdown, important }
@@ -127,6 +146,8 @@ final class NotificationAlertPresenter {
     func setLayoutEditing(_ enabled: Bool) {
         guard layoutEditing != enabled else { return }
         layoutEditing = enabled
+        moveSession = nil
+        resizeSession = nil
         renderImportant()
         renderCountdown()
         if enabled {
@@ -146,6 +167,8 @@ final class NotificationAlertPresenter {
     func setSuspended(_ value: Bool) {
         suspended = value
         if value {
+            moveSession = nil
+            resizeSession = nil
             glow.stop()
             speechSynthesizer.stopSpeaking()
             textPanels.values.forEach { $0.orderOut(nil) }
@@ -159,6 +182,8 @@ final class NotificationAlertPresenter {
     }
 
     func stop() {
+        moveSession = nil
+        resizeSession = nil
         glow.stop()
         speechSynthesizer.stopSpeaking()
         textTasks.values.forEach { $0.cancel() }
@@ -260,13 +285,17 @@ final class NotificationAlertPresenter {
 
     private func move(_ kind: PanelKind, delta: CGSize, ended: Bool) {
         guard layoutEditing, let panel = panel(for: kind), let screen = NSScreen.screens.first else { return }
-        if dragOrigin == nil { dragOrigin = panel.frame.origin }
-        guard let origin = dragOrigin else { return }
+        let mouse = NSEvent.mouseLocation
+        if moveSession?.panel !== panel {
+            moveSession = LayoutPointerSession(panel: panel, firstTranslation: delta, mouse: mouse)
+        }
+        guard let session = moveSession else { return }
+        let displacement = session.displacement(to: mouse)
         let frame = screen.visibleFrame
-        panel.setFrameOrigin(NSPoint(x: min(max(origin.x + delta.width, frame.minX), frame.maxX - panel.frame.width),
-                                     y: min(max(origin.y - delta.height, frame.minY), frame.maxY - panel.frame.height)))
+        panel.setFrameOrigin(NSPoint(x: min(max(session.frame.minX + displacement.x, frame.minX), frame.maxX - panel.frame.width),
+                                     y: min(max(session.frame.minY + displacement.y, frame.minY), frame.maxY - panel.frame.height)))
         guard ended else { return }
-        dragOrigin = nil
+        moveSession = nil
         let x = (panel.frame.midX - frame.minX) / frame.width
         let y = (panel.frame.midY - frame.minY) / frame.height
         switch kind {
@@ -280,14 +309,19 @@ final class NotificationAlertPresenter {
 
     private func resizeImportant(delta: CGSize, ended: Bool) {
         guard layoutEditing, let panel = importantPanel, let screen = NSScreen.screens.first else { return }
-        if resizeFrame == nil { resizeFrame = panel.frame }
-        guard let start = resizeFrame else { return }
-        let size = NSSize(width: min(800, max(240, start.width + delta.width)),
-                          height: min(700, max(150, start.height + delta.height)))
+        let mouse = NSEvent.mouseLocation
+        if resizeSession?.panel !== panel {
+            resizeSession = LayoutPointerSession(panel: panel, firstTranslation: delta, mouse: mouse)
+        }
+        guard let session = resizeSession else { return }
+        let start = session.frame
+        let displacement = session.displacement(to: mouse)
+        let size = NSSize(width: min(800, max(240, start.width + displacement.x)),
+                          height: min(700, max(150, start.height - displacement.y)))
         panel.setFrame(NSRect(x: start.minX, y: start.maxY - size.height,
                               width: size.width, height: size.height), display: true)
         guard ended else { return }
-        resizeFrame = nil
+        resizeSession = nil
         preferences.importantWidth = size.width
         preferences.importantHeight = size.height
         let frame = screen.visibleFrame
