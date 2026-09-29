@@ -56,6 +56,19 @@ automatically close the synthetic banner. Restore them immediately afterward.
 - After natural banner expiration, the request remained in this app's delivered
   list while the AX tree returned to 8 nodes. Identifier-only lookup found no
   target in either state.
-- The revised exact-description locator builds successfully, but its native
-  action checks are pending renewed Accessibility authorization after rebuilding.
-  No successful original-action callback has been observed yet.
+- On 2026-09-29, removing the stale Accessibility entry and adding the current
+  app bundle restored permission; toggling the old entry and restarting alone
+  had still left the app reporting `AXIsProcessTrusted() == false`.
+- With WinTaskbar temporarily paused, exact-description lookup uniquely matched
+  the visible banner in a complete 16-node scan. Its advertised actions included
+  `AXPress`, Show Details and Close; `AXCancel` was not advertised.
+- Invoking `AXPress` while that banner remained visible returned success and
+  produced `com.apple.UNNotificationDefaultActionIdentifier` in this app's
+  notification delegate. The callback request UUID equaled its payload target
+  UUID. This verifies original-message routing for a live synthetic banner.
+- For a separately captured banner, the cached target failed identity validation
+  after natural expiration, while the request remained in the app's delivered
+  list. No action was attempted against the invalid target.
+- WinTaskbar was resumed afterward without changing its configuration. Re-finding
+  historical notifications in Notification Center, routing after explicit closure,
+  and production integration remain unverified or unimplemented.
