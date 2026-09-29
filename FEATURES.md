@@ -24,7 +24,7 @@
 | Global hotkeys | Fixed-action Windows mappings, custom key/action/extra bindings, two-sided conflict detection, Run dialog, snap layouts, task view, clipboard history, Spaces, system panels, and pinned apps | Live settings + migration/conflict self-test + build |
 | Dock control | Hide/restore Dock and orientation sync | Code path + build |
 | Login item | ServiceManagement registration and status | Code path + build |
-| Desktop alerts | First-match rules and fixed fallback; optional per-rule single-notification dismissal; seven combinable outputs; editable layout; important messages and countdowns only in memory | Build + 25 notification/DBM/dismissal self-tests; native synthetic preview; real system dismissal needs live acceptance |
+| Desktop alerts | First-match rules and fixed fallback; optional per-rule single-notification dismissal; seven combinable outputs; editable layout; important messages and countdowns only in memory | Build + 27 notification/DBM/dismissal self-tests; native synthetic preview; real system dismissal needs live acceptance |
 | Permissions | Accessibility, Screen Recording, Automation status/actions | Onboarding + settings UI |
 | Preferences | Standalone paged window: General, Appearance, Start Menu, Taskbar & Tray, Hotkeys, Shortcut Mappings, About | Live settings with Start and transient panels retained for comparison |
 | Onboarding | Welcome, Accessibility, Dock choice | Live three-step flow |

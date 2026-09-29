@@ -914,5 +914,11 @@
 	<string>Warning: notifications may be missed</string>
 	<key>No bottom-right card will be shown, but the original macOS notification will be closed. You may miss this message.</key>
 	<string>No bottom-right card will be shown, but the original macOS notification will be closed. You may miss this message.</string>
+	<key>Open source app. This does not jump to the original message.</key>
+	<string>Open source app. This does not jump to the original message.</string>
+	<key>Could not open the source app</key>
+	<string>Could not open the source app</string>
+	<key>The source app is unavailable or its name matches more than one app. Open it manually.</key>
+	<string>The source app is unavailable or its name matches more than one app. Open it manually.</string>
 </dict>
 </plist>

@@ -152,6 +152,16 @@ struct NotificationPresentationPreferences: Codable, Equatable {
     var showInFullscreen = true
 }
 
+enum NotificationTextPresentation {
+    static let maximumCharacters = 240
+
+    static func displayText(_ text: String) -> String {
+        guard let end = text.index(text.startIndex, offsetBy: maximumCharacters, limitedBy: text.endIndex),
+              end < text.endIndex else { return text }
+        return String(text[..<text.index(before: end)]) + "…"
+    }
+}
+
 struct NotificationAlertPlan {
     let content: SystemNotificationContent
     let outputs: NotificationOutputs
@@ -161,7 +171,12 @@ struct NotificationAlertPlan {
 
     func text(for kind: NotificationOutputKind) -> String {
         let template = outputs.settings(for: kind).textTemplate
-        if template.isEmpty { return content.title.isEmpty ? content.body : content.title }
+        if template.isEmpty {
+            if kind == .centerText || kind == .largeText {
+                return [content.title, content.body].filter { !$0.isEmpty }.joined(separator: "\n")
+            }
+            return content.title.isEmpty ? content.body : content.title
+        }
         let expression = try? NSRegularExpression(pattern: #"\{(app|title|body|[1-9][0-9]*)\}"#)
         var rendered = ""
         var cursor = template.startIndex

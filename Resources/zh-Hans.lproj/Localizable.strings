@@ -920,5 +920,11 @@
 	<string>警告：可能错过消息</string>
 	<key>No bottom-right card will be shown, but the original macOS notification will be closed. You may miss this message.</key>
 	<string>此规则不显示右下角卡片，却会关闭 macOS 原始通知，可能导致你错过这条消息。</string>
+	<key>Open source app. This does not jump to the original message.</key>
+	<string>打开来源应用，不会跳转到原始消息。</string>
+	<key>Could not open the source app</key>
+	<string>无法打开来源应用</string>
+	<key>The source app is unavailable or its name matches more than one app. Open it manually.</key>
+	<string>来源应用不可用或名称匹配了多个应用，请手动打开。</string>
 </dict>
 </plist>

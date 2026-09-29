@@ -33,6 +33,7 @@ final class NotificationAlertPresenter {
     private var countdownPanel: NotificationAlertPanel?
     private var importantRows: [ImportantRow] = []
     private var countdownRows: [CountdownRow] = []
+    private lazy var sourceApps = AppDiscoveryService()
     private let speechSynthesizer = NSSpeechSynthesizer()
     private var layoutEditing = false
     private var suspended = false
@@ -213,11 +214,12 @@ final class NotificationAlertPresenter {
             ? [ImportantRow(id: "preview", appName: "WinTaskbar", title: NSLocalizedString("Important message", comment: "Layout preview"), body: NSLocalizedString("Messages appear here.", comment: "Layout preview"))]
             : importantRows
         let view = NotificationImportantOverlay(rows: rows, icons: rows.map { appIcon($0.appName) },
-            editing: layoutEditing, onDismiss: { [weak self] id in
+            editing: layoutEditing, onOpen: { [weak self] name in self?.openSourceApplication(name) },
+            onDismiss: { [weak self] id in
                 guard id != "preview" else { return }
                 self?.onImportantDismiss?(id)
             }, onClear: { [weak self] in self?.onImportantClear?() },
-            onMove: { [weak self] delta, ended in self?.move(.important, delta: delta, ended: ended) },
+            onMove: { [weak self] in self?.saveImportantPosition() },
             onResize: { [weak self] delta, ended in self?.resizeImportant(delta: delta, ended: ended) })
         let width = CGFloat(preferences.importantWidth)
         let visibleFrame = (panel.screen ?? NSScreen.screens.first)?.visibleFrame
@@ -343,6 +345,14 @@ final class NotificationAlertPresenter {
         onLayoutChanged?(preferences)
     }
 
+    private func saveImportantPosition() {
+        guard let panel = importantPanel, let screen = NSScreen.screens.first else { return }
+        let frame = screen.visibleFrame
+        preferences.importantX = (panel.frame.midX - frame.minX) / frame.width
+        preferences.importantY = (panel.frame.midY - frame.minY) / frame.height
+        onLayoutChanged?(preferences)
+    }
+
     private func resizeImportant(delta: CGSize, ended: Bool) {
         guard layoutEditing, let panel = importantPanel, let screen = NSScreen.screens.first else { return }
         let mouse = NSEvent.mouseLocation
@@ -376,11 +386,39 @@ final class NotificationAlertPresenter {
     }
 
     private func textOverlay(_ text: String, color: NSColor, kind: TextKind) -> NotificationTextOverlay {
-        NotificationTextOverlay(text: text, color: Color(nsColor: color),
+        NotificationTextOverlay(text: NotificationTextPresentation.displayText(text), color: Color(nsColor: color),
             fontSize: CGFloat(kind == .large ? preferences.largeFontSize : preferences.centerFontSize),
             large: kind == .large, editing: layoutEditing, onMove: { [weak self] delta, ended in
                 self?.move(kind == .large ? .large : .center, delta: delta, ended: ended)
             })
+    }
+
+    private func openSourceApplication(_ name: String) {
+        let candidates = (sourceApps.runningApps + sourceApps.installedApps).map { app in
+            let bundle = Bundle(url: app.url)
+            let aliases = [app.name, app.url.deletingPathExtension().lastPathComponent]
+                + ["CFBundleDisplayName", "CFBundleName"].flatMap { key in
+                    [bundle?.object(forInfoDictionaryKey: key) as? String, bundle?.infoDictionary?[key] as? String].compactMap { $0 }
+                }
+            return NotificationSourceApplicationPolicy.Candidate(url: app.url, names: aliases)
+        }
+        guard let url = NotificationSourceApplicationPolicy.applicationURL(named: name, candidates: candidates) else {
+            showSourceOpenError()
+            return
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { [weak self] _, error in
+            if error != nil { Task { @MainActor in self?.showSourceOpenError() } }
+        }
+    }
+
+    private func showSourceOpenError() {
+        guard let importantPanel else { return }
+        let alert = NSAlert()
+        alert.messageText = NSLocalizedString("Could not open the source app", comment: "Notification source")
+        alert.informativeText = NSLocalizedString("The source app is unavailable or its name matches more than one app. Open it manually.", comment: "Notification source")
+        alert.beginSheetModal(for: importantPanel)
     }
 
     private func appIcon(_ name: String) -> NSImage {
@@ -410,6 +448,7 @@ private struct NotificationTextOverlay: View {
             .foregroundStyle(color)
             .multilineTextAlignment(.center)
             .lineLimit(3)
+            .truncationMode(.tail)
             .minimumScaleFactor(0.6)
             .padding(.horizontal, 24)
             .padding(.vertical, 16)
@@ -432,27 +471,28 @@ private struct NotificationImportantOverlay: View {
     let editing: Bool
     var measuring = false
     var measuredRowCount: Int?
+    let onOpen: (String) -> Void
     let onDismiss: (String) -> Void
     let onClear: () -> Void
-    let onMove: (CGSize, Bool) -> Void
+    let onMove: () -> Void
     let onResize: (CGSize, Bool) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text(NSLocalizedString("Important messages", comment: "Notification list title"))
-                    .font(.headline)
-                Spacer()
+            HStack(spacing: 0) {
+                HStack {
+                    Text(NSLocalizedString("Important messages", comment: "Notification list title"))
+                        .font(.headline)
+                    Spacer()
+                }
+                .padding(12)
+                .overlay(NotificationImportantTitleDrag(onMoved: onMove))
                 if !editing {
                     Button(NSLocalizedString("Clear all", comment: "Clear important messages"), action: onClear)
                         .buttonStyle(.plain)
+                        .padding(.trailing, 12)
                 }
             }
-            .padding(12)
-            .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 1)
-                .onChanged { onMove($0.translation, false) }
-                .onEnded { onMove($0.translation, true) })
             Divider()
             if measuring {
                 messageList
@@ -482,12 +522,21 @@ private struct NotificationImportantOverlay: View {
         VStack(spacing: 0) {
             ForEach(Array(rows.prefix(measuredRowCount ?? rows.count).enumerated()), id: \.element.id) { index, row in
                 HStack(alignment: .top, spacing: 10) {
-                    Image(nsImage: icons[index]).resizable().frame(width: 28, height: 28)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(row.title.isEmpty ? row.appName : row.title).font(.system(size: 13, weight: .semibold)).lineLimit(2)
-                        if !row.body.isEmpty { Text(row.body).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) }
+                    Button { onOpen(row.appName) } label: {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(nsImage: icons[index]).resizable().frame(width: 28, height: 28)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(row.title.isEmpty ? row.appName : row.title).font(.system(size: 13, weight: .semibold)).lineLimit(2)
+                                if !row.body.isEmpty { Text(row.body).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
-                    Spacer(minLength: 0)
+                    .buttonStyle(.plain)
+                    .disabled(editing)
+                    .help("Open source app. This does not jump to the original message.")
                     if !editing {
                         Button { onDismiss(row.id) } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .bold)) }
                             .buttonStyle(.plain)
@@ -497,6 +546,50 @@ private struct NotificationImportantOverlay: View {
                 .padding(12)
                 if index < (measuredRowCount ?? rows.count) - 1 { Divider().padding(.leading, 50) }
             }
+        }
+    }
+}
+
+private struct NotificationImportantTitleDrag: NSViewRepresentable {
+    let onMoved: () -> Void
+
+    func makeNSView(context: Context) -> DragView {
+        let view = DragView()
+        view.onMoved = onMoved
+        return view
+    }
+
+    func updateNSView(_ nsView: DragView, context: Context) { nsView.onMoved = onMoved }
+
+    final class DragView: NSView {
+        var onMoved: (() -> Void)?
+        private var start: (frame: NSRect, mouse: NSPoint)?
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+        override func mouseDown(with event: NSEvent) {
+            guard let window else { return }
+            start = (window.frame, window.convertPoint(toScreen: event.locationInWindow))
+        }
+
+        override func mouseDragged(with event: NSEvent) { updateDrag(event) }
+
+        override func mouseUp(with event: NSEvent) {
+            guard start != nil else { return }
+            updateDrag(event)
+            start = nil
+            onMoved?()
+        }
+
+        private func updateDrag(_ event: NSEvent) {
+            guard let start, let window, let screen = window.screen else { return }
+            // Use the event's screen position, not the live pointer, which may belong to
+            // another input source or have advanced while the event was queued.
+            let mouse = window.convertPoint(toScreen: event.locationInWindow)
+            let area = screen.visibleFrame
+            let x = start.frame.minX + mouse.x - start.mouse.x
+            let y = start.frame.minY + mouse.y - start.mouse.y
+            window.setFrameOrigin(NSPoint(x: min(max(x, area.minX), area.maxX - window.frame.width),
+                                          y: min(max(y, area.minY), area.maxY - window.frame.height)))
         }
     }
 }

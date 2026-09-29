@@ -7,6 +7,8 @@ final class NotificationAlertSelfTest {
     static func run() -> Bool {
         let suite = NotificationAlertSelfTest()
         let cases: [(String, () -> Void)] = [
+            ("testTextIncludesBodyAndTruncatesWithoutSplittingCharacters", suite.testTextIncludesBodyAndTruncatesWithoutSplittingCharacters),
+            ("testSourceApplicationRequiresUniqueExactName", suite.testSourceApplicationRequiresUniqueExactName),
             ("testFirstRuleAndFallbackKeepIndependentOutputs", suite.testFirstRuleAndFallbackKeepIndependentOutputs),
             ("testImportantMessagesUpdateAndClearOnlyInMemory", suite.testImportantMessagesUpdateAndClearOnlyInMemory),
             ("testCooldownAppliesAcrossSourcesButUpdatesImportant", suite.testCooldownAppliesAcrossSourcesButUpdatesImportant),
@@ -44,6 +46,43 @@ final class NotificationAlertSelfTest {
 
     private func plan(_ id: String, outputs: NotificationOutputs) -> NotificationAlertPlan {
         NotificationPreferences(fallback: outputs).plan(for: content(id))
+    }
+
+    private func testTextIncludesBodyAndTruncatesWithoutSplittingCharacters() {
+        let settings = NotificationPreferences()
+        let full = settings.plan(for: content("text", title: "Sender", body: "Full message body"))
+        checkEqual(full.text(for: .centerText), "Sender\nFull message body")
+        checkEqual(full.text(for: .largeText), "Sender\nFull message body")
+        checkEqual(full.text(for: .countdown), "Sender")
+        checkEqual(settings.plan(for: content("body-only", title: "", body: "Body")).text(for: .largeText), "Body")
+        checkEqual(settings.plan(for: content("title-only", title: "Title", body: "")).text(for: .centerText), "Title")
+        checkEqual(NotificationTextPresentation.displayText("Title\nBody"), "Title\nBody")
+        let emoji = "👩🏽‍💻"
+        let limit = NotificationTextPresentation.maximumCharacters
+        let exact = String(repeating: emoji, count: limit)
+        checkEqual(NotificationTextPresentation.displayText(exact), exact)
+        let clipped = NotificationTextPresentation.displayText(exact + "extra")
+        checkEqual(clipped, String(repeating: emoji, count: limit - 1) + "…")
+        var custom = NotificationOutputs(enabled: [.largeText])
+        custom.overrides[.largeText] = NotificationOutputSettings(textTemplate: "{body}")
+        checkEqual(NotificationPreferences(fallback: custom).plan(for: content("template", title: "Title", body: "Body")).text(for: .largeText), "Body")
+    }
+
+    private func testSourceApplicationRequiresUniqueExactName() {
+        let first = URL(fileURLWithPath: "/Applications/Example.app")
+        let second = URL(fileURLWithPath: "/Applications/Other.app")
+        let candidates = [
+            NotificationSourceApplicationPolicy.Candidate(url: first, names: ["Example", "示例"]),
+            NotificationSourceApplicationPolicy.Candidate(url: first, names: ["Example"]),
+            NotificationSourceApplicationPolicy.Candidate(url: second, names: ["Other"])
+        ]
+        checkEqual(NotificationSourceApplicationPolicy.applicationURL(named: " example ", candidates: candidates), first)
+        checkEqual(NotificationSourceApplicationPolicy.applicationURL(named: "示例", candidates: candidates), first)
+        checkEqual(NotificationSourceApplicationPolicy.applicationURL(named: "Exam", candidates: candidates), nil)
+        checkEqual(NotificationSourceApplicationPolicy.applicationURL(named: "", candidates: candidates), nil)
+        checkEqual(NotificationSourceApplicationPolicy.applicationURL(named: "Unknown", candidates: candidates), nil)
+        let ambiguous = candidates + [.init(url: second, names: ["Example"])]
+        checkEqual(NotificationSourceApplicationPolicy.applicationURL(named: "Example", candidates: ambiguous), nil)
     }
 
     private func testFirstRuleAndFallbackKeepIndependentOutputs() {
