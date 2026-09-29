@@ -590,6 +590,8 @@ private struct NotificationImportantOverlay: View {
     let onMove: () -> Void
     let onResize: (CGSize, Bool) -> Void
     @State private var hoveredRowID: String?
+    @State private var hoverLocation: CGPoint?
+    @State private var rowFrames: [String: CGRect] = [:]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -614,6 +616,18 @@ private struct NotificationImportantOverlay: View {
             } else {
                 ScrollView {
                     messageList.background(NotificationImportantScrollStyle())
+                }
+                .coordinateSpace(name: "importantMessageList")
+                .onContinuousHover(coordinateSpace: .named("importantMessageList")) { phase in
+                    switch phase {
+                    case .active(let location): hoverLocation = location
+                    case .ended: hoverLocation = nil
+                    }
+                    updateHoveredRow()
+                }
+                .onPreferenceChange(NotificationImportantRowFrames.self) { frames in
+                    rowFrames = frames
+                    updateHoveredRow()
                 }
             }
             if editing {
@@ -689,9 +703,9 @@ private struct NotificationImportantOverlay: View {
                 }
                 .background {
                     if !measuring {
-                        NotificationImportantHoverTracking { inside in
-                            if inside { hoveredRowID = row.id }
-                            else if hoveredRowID == row.id { hoveredRowID = nil }
+                        GeometryReader { geometry in
+                            Color.clear.preference(key: NotificationImportantRowFrames.self,
+                                                   value: [row.id: geometry.frame(in: .named("importantMessageList"))])
                         }
                     }
                 }
@@ -699,71 +713,21 @@ private struct NotificationImportantOverlay: View {
             }
         }
     }
+
+    private func updateHoveredRow() {
+        // Both the pointer and row bounds use the stationary scroll viewport's coordinates.
+        // Re-evaluate after layout even when the pointer has not moved.
+        hoveredRowID = hoverLocation.flatMap { point in
+            rows.first { rowFrames[$0.id]?.contains(point) == true }?.id
+        }
+    }
 }
 
-private struct NotificationImportantHoverTracking: NSViewRepresentable {
-    let onHover: (Bool) -> Void
+private struct NotificationImportantRowFrames: PreferenceKey {
+    static let defaultValue: [String: CGRect] = [:]
 
-    func makeNSView(context: Context) -> TrackingView { TrackingView() }
-
-    func updateNSView(_ view: TrackingView, context: Context) {
-        view.onHover = onHover
-        view.refreshAfterLayout()
-    }
-
-    final class TrackingView: NSView {
-        var onHover: ((Bool) -> Void)?
-        private var lastInside = false
-        private var refreshPending = false
-
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-        override func updateTrackingAreas() {
-            super.updateTrackingAreas()
-            trackingAreas.forEach(removeTrackingArea)
-            addTrackingArea(NSTrackingArea(rect: .zero,
-                                          options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-                                          owner: self, userInfo: nil))
-            refreshAfterLayout()
-        }
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            refreshAfterLayout()
-        }
-
-        override func setFrameOrigin(_ newOrigin: NSPoint) {
-            super.setFrameOrigin(newOrigin)
-            refreshAfterLayout()
-        }
-
-        override func setFrameSize(_ newSize: NSSize) {
-            super.setFrameSize(newSize)
-            refreshAfterLayout()
-        }
-
-        override func mouseEntered(with event: NSEvent) { refreshHover() }
-        override func mouseExited(with event: NSEvent) { refreshHover() }
-
-        func refreshAfterLayout() {
-            guard !refreshPending else { return }
-            refreshPending = true
-            // Rows can move beneath a stationary pointer without a mouse-enter event.
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.refreshPending = false
-                self.refreshHover()
-            }
-        }
-
-        private func refreshHover() {
-            let inside = window.map {
-                $0.isVisible && visibleRect.contains(convert($0.mouseLocationOutsideOfEventStream, from: nil))
-            } ?? false
-            guard inside != lastInside else { return }
-            lastInside = inside
-            onHover?(inside)
-        }
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
     }
 }
 
