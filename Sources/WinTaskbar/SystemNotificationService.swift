@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Combine
+import QuartzCore
 import SwiftUI
 
 @MainActor
@@ -233,10 +234,12 @@ final class SystemNotificationService: ObservableObject {
             hovered.remove(id)
         }
         let runningApps = NSWorkspace.shared.runningApplications
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         var bottom = area.minY + gap
         for (slot, entry) in visible.enumerated() {
             let card = entry.card
             let panel: NSPanel
+            let isNew = panels[card.id] == nil
             if let existing = panels[card.id] {
                 panel = existing
             } else {
@@ -247,6 +250,7 @@ final class SystemNotificationService: ObservableObject {
                 panel.isOpaque = false
                 panel.backgroundColor = .clear
                 panel.hasShadow = true
+                panel.animationBehavior = .none
                 panel.level = .floating
                 panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
                 panels[card.id] = panel
@@ -277,9 +281,30 @@ final class SystemNotificationService: ObservableObject {
             } else {
                 panel.contentView = NSHostingView(rootView: view)
             }
-            panel.setFrame(NSRect(x: area.maxX - width - gap, y: bottom, width: width, height: entry.metrics.height), display: true)
+            let targetFrame = NSRect(x: area.maxX - width - gap, y: bottom, width: width, height: entry.metrics.height)
+            if reduceMotion || (!isNew && !panel.isVisible) {
+                panel.setFrame(targetFrame, display: true)
+                panel.alphaValue = 1
+                panel.orderFrontRegardless()
+            } else {
+                if isNew {
+                    panel.setFrame(targetFrame.offsetBy(dx: width + gap, dy: 0), display: true)
+                    panel.alphaValue = 0
+                    panel.orderFrontRegardless()
+                }
+                if isNew || panel.frame != targetFrame {
+                    NSAnimationContext.runAnimationGroup { context in
+                        // Fluent motion: direct entrance vs. point-to-point movement of existing cards.
+                        context.duration = isNew ? 0.333 : 0.250
+                        context.timingFunction = isNew
+                            ? CAMediaTimingFunction(controlPoints: 0, 0, 0, 1)
+                            : CAMediaTimingFunction(controlPoints: 0.55, 0.55, 0, 1)
+                        panel.animator().setFrame(targetFrame, display: true)
+                        if isNew { panel.animator().alphaValue = 1 }
+                    }
+                }
+            }
             bottom += entry.metrics.height + gap
-            panel.orderFrontRegardless()
         }
         if cards.isEmpty {
             expiryTimer?.invalidate()
