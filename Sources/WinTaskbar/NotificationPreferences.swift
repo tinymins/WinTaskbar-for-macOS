@@ -76,6 +76,7 @@ struct NotificationOutputs: Codable, Equatable {
     var enabled: Set<NotificationOutputKind> = [.card]
     var overrides: [NotificationOutputKind: NotificationOutputSettings] = [:]
     var cooldownSeconds: Double = 0
+    var dismissSystemNotification = false
 
     // Every key is present after NotificationPreferences resolves the rule against defaults.
     func settings(for kind: NotificationOutputKind) -> NotificationOutputSettings {

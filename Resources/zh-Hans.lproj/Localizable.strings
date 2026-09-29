@@ -894,8 +894,6 @@
 	<string>没有已启用规则匹配时应用此规则。</string>
 	<key>Output combination</key>
 	<string>输出组合</string>
-	<key>Each checkbox controls this rule only. Select none to ignore a matching notification.</key>
-	<string>每个勾选框只控制此规则。全部不选时忽略匹配的通知。</string>
 	<key>%@ after countdown</key>
 	<string>倒计时结束后：%@</string>
 	<key>Customize for this rule</key>
@@ -904,5 +902,17 @@
 	<string>使用通用输出设置</string>
 	<key>Enable desktop alerts</key>
 	<string>启用桌面提醒</string>
+	<key>Close original macOS notification</key>
+	<string>关闭 macOS 原始通知</string>
+	<key>Automatically close original macOS notification</key>
+	<string>自动关闭 macOS 原始通知</string>
+	<key>After reading it, close this system notification. It may also leave Notification Center, and its banner may appear briefly. If it cannot be closed safely, keep the system notification.</key>
+	<string>成功读取后关闭这一条系统通知；它也可能从通知中心移除，原横幅仍可能短暂出现。无法安全关闭时保留系统提示。</string>
+	<key>Each checkbox controls a WinTaskbar output for this rule.</key>
+	<string>每个勾选框只控制此规则的一种 WinTaskbar 输出。</string>
+	<key>Preview shows only WinTaskbar output and never closes a real system notification.</key>
+	<string>预览只显示 WinTaskbar 输出，不会关闭真实系统通知。</string>
+	<key>Some original macOS notifications could not be closed. They have been left visible.</key>
+	<string>部分 macOS 原始通知无法关闭，已保留系统提示。</string>
 </dict>
 </plist>

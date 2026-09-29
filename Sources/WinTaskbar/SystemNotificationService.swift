@@ -8,6 +8,7 @@ import SwiftUI
 final class SystemNotificationService: ObservableObject {
     static let shared = SystemNotificationService(preferences: .shared)
     @Published private(set) var isLayoutEditing = false
+    @Published private(set) var systemBannerStatusKey: String?
     @Published private(set) var statusKey = "Notification capture is off."
 
     private struct Card {
@@ -32,6 +33,8 @@ final class SystemNotificationService: ObservableObject {
     private var observers: [NSObjectProtocol] = []
     private var captureTimer: Timer?
     private var expiryTimer: Timer?
+    private let captureWorker = SystemNotificationCapture()
+    private var dismissalAttempts: [String: (content: SystemNotificationContent, count: Int)] = [:]
     private var scanTask: Task<Void, Never>?
     private var generation = UUID()
     private var lastTick = ProcessInfo.processInfo.systemUptime
@@ -81,6 +84,7 @@ final class SystemNotificationService: ObservableObject {
             observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
                     self?.suspended = true
+                    self?.scanTask?.cancel()
                     self?.presenter.setSuspended(true)
                     self?.panels.values.forEach { $0.orderOut(nil) }
                 }
@@ -105,6 +109,9 @@ final class SystemNotificationService: ObservableObject {
         captureTimer?.invalidate()
         captureTimer = nil
         generation = UUID()
+        scanTask?.cancel()
+        dismissalAttempts.removeAll()
+        systemBannerStatusKey = nil
         clearAllAlerts()
         seen.removeAll()
         for observer in observers {
@@ -119,6 +126,12 @@ final class SystemNotificationService: ObservableObject {
         let changedRules = configuration.rules != value.rules || configuration.fallback != value.fallback
             || configuration.outputDefaults != value.outputDefaults
         configuration = value
+        if changedEnabled || changedRules {
+            generation = UUID()
+            scanTask?.cancel()
+            dismissalAttempts.removeAll()
+            systemBannerStatusKey = nil
+        }
         if changedRules {
             cards = cards.compactMap { card in
                 guard !card.content.sourceID.hasPrefix("preview:") else { return card }
@@ -161,30 +174,59 @@ final class SystemNotificationService: ObservableObject {
         }
         let currentGeneration = generation
         let rules = configuration
+        let worker = captureWorker
         scanTask = Task { [weak self] in
-            let result = await Task.detached(priority: .utility) {
-                SystemNotificationCapture.scan()
-            }.value
+            let result = await worker.scan()
             guard let self else { return }
-            self.scanTask = nil
-            guard self.configuration == rules, self.generation == currentGeneration, !self.suspended else { return }
+            defer { self.scanTask = nil }
+            guard !Task.isCancelled, self.configuration == rules,
+                  self.generation == currentGeneration, !self.suspended else { return }
             self.statusKey = result.unreadable ? "Some notification content could not be read. Check Accessibility access."
                 : result.unrecognized ? "A notification layout was not recognized."
                 : "Listening for system notification banners."
             let now = ProcessInfo.processInfo.systemUptime
             self.seen = self.seen.filter { now - $0.value.time < 600 }
+            self.dismissalAttempts = self.dismissalAttempts.filter { self.seen[$0.key] != nil }
+            var dismissalFailed = false
+            var dismissalSucceeded = false
             for content in result.notifications {
+                guard !Task.isCancelled, self.configuration == rules,
+                      self.generation == currentGeneration, !self.suspended else { return }
                 let previous = self.seen[content.sourceID]?.content
                 self.seen[content.sourceID] = (content, now)
-                guard previous != content else { continue }
                 let plan = rules.plan(for: content)
-                if !plan.outputs.enabled.contains(.card) || plan.outputs.settings(for: .card).card.mode == .hidden {
-                    self.cards.removeAll { $0.content.sourceID == content.sourceID }
-                    self.layout()
+                if previous != content {
+                    if !plan.outputs.enabled.contains(.card) || plan.outputs.settings(for: .card).card.mode == .hidden {
+                        self.cards.removeAll { $0.content.sourceID == content.sourceID }
+                        self.layout()
+                    }
+                    self.receive(plan, now: now)
                 }
-                self.receive(plan, now: now)
+                guard plan.outputs.dismissSystemNotification else { continue }
+                let attempt = self.dismissalAttempts[content.sourceID]
+                let count = attempt?.content == content ? attempt?.count ?? 0 : 0
+                guard count < 3 else { continue }
+                guard let token = result.dismissalTokens[content.sourceID] else {
+                    dismissalFailed = true
+                    continue
+                }
+                self.dismissalAttempts[content.sourceID] = (content, count + 1)
+                let outcome = await worker.dismiss(token, expected: content)
+                guard !Task.isCancelled, self.configuration == rules,
+                      self.generation == currentGeneration, !self.suspended else { return }
+                switch outcome {
+                case .closed:
+                    self.dismissalAttempts[content.sourceID] = (content, 3)
+                    dismissalSucceeded = true
+                case .unsupported, .failed: dismissalFailed = true
+                case .changed, .cancelled: break
+                }
             }
-
+            if dismissalFailed {
+                self.systemBannerStatusKey = "Some original macOS notifications could not be closed. They have been left visible."
+            } else if dismissalSucceeded {
+                self.systemBannerStatusKey = nil
+            }
         }
     }
 

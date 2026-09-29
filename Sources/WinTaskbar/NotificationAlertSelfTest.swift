@@ -47,11 +47,13 @@ final class NotificationAlertSelfTest {
     }
 
     private func testFirstRuleAndFallbackKeepIndependentOutputs() {
-        let first = NotificationOutputs(enabled: [.glow, .important], overrides: [
+        var first = NotificationOutputs(enabled: [.glow, .important], overrides: [
             .important: NotificationOutputSettings(colorHex: "#AABBCC")
         ])
+        first.dismissSystemNotification = true
         let second = NotificationOutputs(enabled: [.card, .sound])
-        let fallback = NotificationOutputs(enabled: [.card])
+        var fallback = NotificationOutputs(enabled: [.card])
+        fallback.dismissSystemNotification = true
         var settings = NotificationPreferences(rules: [
             NotificationCaptureRule(appName: "mess", messagePattern: "(?i)urgent", outputs: first),
             NotificationCaptureRule(appName: "Messenger", outputs: second)
@@ -61,6 +63,7 @@ final class NotificationAlertSelfTest {
         let urgent = content("urgent", title: "URGENT release")
         let selected = settings.plan(for: urgent)
         checkEqual(selected.outputs.enabled, first.enabled)
+        check(selected.outputs.dismissSystemNotification)
         checkEqual(selected.outputs.settings(for: .glow).colorHex, "#112233")
         checkEqual(selected.outputs.settings(for: .important).colorHex, "#AABBCC")
         check(!selected.outputs.enabled.contains(.card), "Card disabled must not suppress glow")
@@ -69,11 +72,15 @@ final class NotificationAlertSelfTest {
         checkEqual(settings.plan(for: urgent).outputs.settings(for: .glow).colorHex, "#778899")
         checkEqual(settings.plan(for: urgent).outputs.settings(for: .important).colorHex, "#AABBCC")
         checkEqual(settings.plan(for: content("ordinary")).outputs.enabled, second.enabled)
+        check(!settings.plan(for: content("ordinary")).outputs.dismissSystemNotification)
         checkEqual(settings.plan(for: content("other", app: "Calendar")).outputs.enabled, fallback.enabled)
+        check(settings.plan(for: content("other", app: "Calendar")).outputs.dismissSystemNotification)
         settings.rules[0].enabled = false
         checkEqual(settings.plan(for: urgent).outputs.enabled, second.enabled)
+        check(!settings.plan(for: urgent).outputs.dismissSystemNotification)
         settings.rules[1].enabled = false
         checkEqual(settings.plan(for: urgent).outputs.enabled, fallback.enabled)
+        check(settings.plan(for: urgent).outputs.dismissSystemNotification)
     }
 
     private func testImportantMessagesUpdateAndClearOnlyInMemory() {
@@ -185,6 +192,7 @@ final class NotificationAlertSelfTest {
         let runtime = NotificationAlertRuntime()
         var settings = NotificationPreferences(enabled: true, fallback: NotificationOutputs(enabled: [.important]))
         settings.outputDefaults[.important] = NotificationOutputSettings(colorHex: "#123456")
+        settings.fallback.dismissSystemNotification = true
         let privateContent = content("secret-source-8472", title: "secret-title-8472", body: "secret-body-8472")
         check(runtime.ingest(settings.plan(for: privateContent), now: 1))
         guard let data = try? JSONEncoder().encode(settings),
@@ -197,15 +205,30 @@ final class NotificationAlertSelfTest {
         check(!encoded.contains("secret-body-8472"))
         let decoded = try? JSONDecoder().decode(NotificationPreferences.self, from: data)
         checkEqual(decoded?.fallback, settings.fallback)
+        checkEqual(decoded?.fallback.dismissSystemNotification, true)
         checkEqual(decoded?.outputDefaults, settings.outputDefaults)
         checkEqual(decoded?.plan(for: privateContent).outputs.settings(for: .important).colorHex, "#123456")
         if var oldFields = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+            let defaultsField = oldFields["outputDefaults"]
             oldFields.removeValue(forKey: "outputDefaults")
             if let oldData = try? JSONSerialization.data(withJSONObject: oldFields) {
                 check((try? JSONDecoder().decode(NotificationPreferences.self, from: oldData)) == nil,
                       "Old preferences without outputDefaults must reset")
             } else {
                 check(false, "Old preferences fixture must encode")
+            }
+            oldFields["outputDefaults"] = defaultsField
+            if var fallbackFields = oldFields["fallback"] as? [String: Any] {
+                fallbackFields.removeValue(forKey: "dismissSystemNotification")
+                oldFields["fallback"] = fallbackFields
+                if let oldData = try? JSONSerialization.data(withJSONObject: oldFields) {
+                    check((try? JSONDecoder().decode(NotificationPreferences.self, from: oldData)) == nil,
+                          "Preferences without the dismissal decision must reset")
+                } else {
+                    check(false, "Missing-dismissal fixture must encode")
+                }
+            } else {
+                check(false, "Fallback JSON must be an object")
             }
         } else {
             check(false, "Preferences JSON must be an object")

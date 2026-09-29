@@ -888,8 +888,6 @@
 	<string>This rule applies whenever no enabled rule matches.</string>
 	<key>Output combination</key>
 	<string>Output combination</string>
-	<key>Each checkbox controls this rule only. Select none to ignore a matching notification.</key>
-	<string>Each checkbox controls this rule only. Select none to ignore a matching notification.</string>
 	<key>%@ after countdown</key>
 	<string>%@ after countdown</string>
 	<key>Customize for this rule</key>
@@ -898,5 +896,17 @@
 	<string>Uses shared output settings</string>
 	<key>Enable desktop alerts</key>
 	<string>Enable desktop alerts</string>
+	<key>Close original macOS notification</key>
+	<string>Close original macOS notification</string>
+	<key>Automatically close original macOS notification</key>
+	<string>Automatically close original macOS notification</string>
+	<key>After reading it, close this system notification. It may also leave Notification Center, and its banner may appear briefly. If it cannot be closed safely, keep the system notification.</key>
+	<string>After reading it, close this system notification. It may also leave Notification Center, and its banner may appear briefly. If it cannot be closed safely, keep the system notification.</string>
+	<key>Each checkbox controls a WinTaskbar output for this rule.</key>
+	<string>Each checkbox controls a WinTaskbar output for this rule.</string>
+	<key>Preview shows only WinTaskbar output and never closes a real system notification.</key>
+	<string>Preview shows only WinTaskbar output and never closes a real system notification.</string>
+	<key>Some original macOS notifications could not be closed. They have been left visible.</key>
+	<string>Some original macOS notifications could not be closed. They have been left visible.</string>
 </dict>
 </plist>

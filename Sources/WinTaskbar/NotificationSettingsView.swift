@@ -26,6 +26,10 @@ struct NotificationSettingsView: View {
                     Text("Notification receiving is off.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+                if let systemBannerStatusKey = service.systemBannerStatusKey {
+                    Text(LocalizedStringKey(systemBannerStatusKey))
+                        .font(.caption).foregroundStyle(.orange)
+                }
                 Text("Current alerts are kept in memory and disappear when WinTaskbar quits.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Clear current alerts") { service.clearAllAlerts() }
@@ -77,6 +81,8 @@ struct NotificationSettingsView: View {
                         Button("Edit fallback") { editingFallback = true }
                         Button("Preview fallback") { service.showPreview() }
                     }
+                    Text("Preview shows only WinTaskbar output and never closes a real system notification.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
 
                 SettingsSection("Output settings") {
@@ -94,6 +100,8 @@ struct NotificationSettingsView: View {
                     )
                     outputPlacement
                     Button("Preview this output") { service.showOutputPreview(selectedOutput) }
+                    Text("Preview shows only WinTaskbar output and never closes a real system notification.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
 
                 SettingsSection("Window behavior and layout") {
@@ -209,7 +217,10 @@ struct NotificationSettingsView: View {
     }
 
     private func outputSummary(_ outputs: NotificationOutputs) -> String {
-        let labels = NotificationOutputKind.allCases.filter { outputs.enabled.contains($0) }.map(\.label)
+        var labels = NotificationOutputKind.allCases.filter { outputs.enabled.contains($0) }.map(\.label)
+        if outputs.dismissSystemNotification {
+            labels.append(NSLocalizedString("Close original macOS notification", comment: "Notification rule summary"))
+        }
         return labels.isEmpty
             ? NSLocalizedString("Ignore notification", comment: "Notification output")
             : labels.joined(separator: " · ")
@@ -245,14 +256,16 @@ private struct NotificationRuleEditor: View {
                 NotificationOutputsEditor(outputs: $rule.outputs, defaults: defaults)
             }
         } actions: {
-            HStack {
-                Button("Preview rule outputs") { service.showPreview(outputs: rule.outputs) }
+                HStack {
+                    Button("Preview rule outputs") { service.showPreview(outputs: rule.outputs) }
                 Spacer()
                 Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
                 Button("Save") { onSave(rule) }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(rule.isEmpty || rule.patternError != nil || rule.outputs.countdownPatternError(defaults: defaults) != nil)
-            }
+                        .disabled(rule.isEmpty || rule.patternError != nil || rule.outputs.countdownPatternError(defaults: defaults) != nil)
+                }
+                Text("Preview shows only WinTaskbar output and never closes a real system notification.")
+                    .font(.caption).foregroundStyle(.secondary)
         }
         .onAppear { apps.reloadInstalledApps() }
     }
@@ -293,14 +306,16 @@ private struct NotificationFallbackEditor: View {
                 NotificationOutputsEditor(outputs: $outputs, defaults: defaults)
             }
         } actions: {
-            HStack {
-                Button("Preview fallback") { service.showPreview(outputs: outputs) }
+                HStack {
+                    Button("Preview fallback") { service.showPreview(outputs: outputs) }
                 Spacer()
                 Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
                 Button("Save") { onSave(outputs) }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(outputs.countdownPatternError(defaults: defaults) != nil)
-            }
+                        .disabled(outputs.countdownPatternError(defaults: defaults) != nil)
+                }
+                Text("Preview shows only WinTaskbar output and never closes a real system notification.")
+                    .font(.caption).foregroundStyle(.secondary)
         }
     }
 }
@@ -349,7 +364,7 @@ private struct NotificationOutputsEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Output combination").font(.body.weight(.semibold))
-            Text("Each checkbox controls this rule only. Select none to ignore a matching notification.")
+            Text("Each checkbox controls a WinTaskbar output for this rule.")
                 .font(.caption).foregroundStyle(.secondary)
             ForEach(NotificationOutputKind.allCases, id: \.self) { kind in
                 VStack(alignment: .leading, spacing: 6) {
@@ -377,6 +392,9 @@ private struct NotificationOutputsEditor: View {
                     }
                 }
             }
+            Toggle("Automatically close original macOS notification", isOn: $outputs.dismissSystemNotification)
+            Text("After reading it, close this system notification. It may also leave Notification Center, and its banner may appear briefly. If it cannot be closed safely, keep the system notification.")
+                .font(.caption).foregroundStyle(.secondary)
             if !outputs.enabled.isEmpty {
                 NotificationNumberSetting("Repeat cooldown", value: $outputs.cooldownSeconds,
                                           range: 0...300, suffix: "s")
