@@ -34,7 +34,6 @@ final class SystemNotificationService: ObservableObject {
     private var captureTimer: Timer?
     private var expiryTimer: Timer?
     private let captureWorker = SystemNotificationCapture()
-    private var dismissalAttempts: [String: (content: SystemNotificationContent, count: Int)] = [:]
     private var scanTask: Task<Void, Never>?
     private var sourceOpenTask: Task<Void, Never>?
     private var capturePending = false
@@ -82,6 +81,7 @@ final class SystemNotificationService: ObservableObject {
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated {
             guard let self else { return }
+            self.captureWorker.restoreBanners()
             self.presenter.configure(self.configuration.presentation)
             self.syncAlertLists()
             self.layout()
@@ -92,6 +92,7 @@ final class SystemNotificationService: ObservableObject {
                     self?.suspended = true
                     self?.scanTask?.cancel()
                     self?.sourceOpenTask?.cancel()
+                    self?.captureWorker.setBannerHidingEnabled(false)
                     self?.presenter.setSuspended(true)
                     self?.panels.values.forEach { $0.orderOut(nil) }
                 }
@@ -101,6 +102,7 @@ final class SystemNotificationService: ObservableObject {
             observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
                     self?.suspended = false
+                    if let self { self.captureWorker.setBannerHidingEnabled(self.configuration.enabled) }
                     self?.lastTick = ProcessInfo.processInfo.systemUptime
                     self?.presenter.setSuspended(false)
                     self?.tick()
@@ -111,6 +113,7 @@ final class SystemNotificationService: ObservableObject {
     }
 
     func stop() {
+        captureWorker.setBannerHidingEnabled(false)
         subscription = nil
         layoutSubscription = nil
         captureTimer?.invalidate()
@@ -119,7 +122,6 @@ final class SystemNotificationService: ObservableObject {
         scanTask?.cancel()
         capturePending = false
         Task { await captureWorker.stopObserving() }
-        dismissalAttempts.removeAll()
         systemBannerStatusKey = nil
         clearAllAlerts()
         seen.removeAll()
@@ -135,11 +137,12 @@ final class SystemNotificationService: ObservableObject {
         let changedRules = configuration.rules != value.rules || configuration.fallback != value.fallback
             || configuration.outputDefaults != value.outputDefaults
         configuration = value
+        captureWorker.setBannerHidingEnabled(value.enabled && !suspended)
         if changedEnabled || changedRules {
+            captureWorker.restoreBanners()
             generation = UUID()
             scanTask?.cancel()
             capturePending = value.enabled
-            dismissalAttempts.removeAll()
             systemBannerStatusKey = nil
         }
         if changedRules {
@@ -210,9 +213,6 @@ final class SystemNotificationService: ObservableObject {
                 : "Listening for system notification banners."
             let now = ProcessInfo.processInfo.systemUptime
             self.seen = self.seen.filter { now - $0.value.time < 600 }
-            self.dismissalAttempts = self.dismissalAttempts.filter { self.seen[$0.key] != nil }
-            var dismissalFailed = false
-            var dismissalSucceeded = false
             for content in result.notifications {
                 guard !Task.isCancelled, self.configuration == rules,
                       self.generation == currentGeneration, !self.suspended else { return }
@@ -226,31 +226,14 @@ final class SystemNotificationService: ObservableObject {
                     }
                     self.receive(plan, now: now)
                 }
-                guard plan.outputs.dismissSystemNotification else { continue }
-                let attempt = self.dismissalAttempts[content.sourceID]
-                let count = attempt?.content == content ? attempt?.count ?? 0 : 0
-                guard count < 3 else { continue }
-                guard let token = result.dismissalTokens[content.sourceID] else {
-                    dismissalFailed = true
-                    continue
-                }
-                self.dismissalAttempts[content.sourceID] = (content, count + 1)
-                let outcome = await worker.dismiss(token, expected: content)
-                guard !Task.isCancelled, self.configuration == rules,
-                      self.generation == currentGeneration, !self.suspended else { return }
-                switch outcome {
-                case .closed:
-                    self.dismissalAttempts[content.sourceID] = (content, 3)
-                    dismissalSucceeded = true
-                case .unsupported, .failed: dismissalFailed = true
-                case .changed, .cancelled: break
-                }
             }
-            if dismissalFailed {
-                self.systemBannerStatusKey = "Some original macOS notifications could not be closed. They have been left visible."
-            } else if dismissalSucceeded {
-                self.systemBannerStatusKey = nil
-            }
+            let requested = result.notifications.filter { rules.plan(for: $0).outputs.dismissSystemNotification }
+            let hidingFailed = await worker.hideBanners(matching: requested)
+            guard !Task.isCancelled, self.configuration == rules,
+                  self.generation == currentGeneration, !self.suspended else { return }
+            self.systemBannerStatusKey = hidingFailed
+                ? "Some macOS banners could not be hidden without affecting other notifications. They have been left visible."
+                : nil
         }
     }
 

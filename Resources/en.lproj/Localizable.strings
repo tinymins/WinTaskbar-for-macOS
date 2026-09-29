@@ -896,24 +896,24 @@
 	<string>Uses shared output settings</string>
 	<key>Enable desktop alerts</key>
 	<string>Enable desktop alerts</string>
-	<key>Close original macOS notification</key>
-	<string>Close original macOS notification</string>
-	<key>Automatically close original macOS notification</key>
-	<string>Automatically close original macOS notification</string>
-	<key>After reading it, close this system notification. It may also leave Notification Center, and its banner may appear briefly. If it cannot be closed safely, keep the system notification.</key>
-	<string>After reading it, close this system notification. It may also leave Notification Center, and its banner may appear briefly. If it cannot be closed safely, keep the system notification.</string>
+	<key>Hide original macOS banner</key>
+	<string>Hide original macOS banner</string>
+	<key>Hide original macOS banner (keep in Notification Center)</key>
+	<string>Hide original macOS banner (keep in Notification Center)</string>
+	<key>Hide only the banner; keep the notification in Notification Center. Shared windows are hidden only when all their notifications allow it. Unsupported banners remain visible.</key>
+	<string>Hide only the banner; keep the notification in Notification Center. Shared windows are hidden only when all their notifications allow it. Unsupported banners remain visible.</string>
 	<key>Each checkbox controls a WinTaskbar output for this rule.</key>
 	<string>Each checkbox controls a WinTaskbar output for this rule.</string>
 	<key>Preview shows only WinTaskbar output and never closes a real system notification.</key>
 	<string>Preview shows only WinTaskbar output and never closes a real system notification.</string>
-	<key>Some original macOS notifications could not be closed. They have been left visible.</key>
-	<string>Some original macOS notifications could not be closed. They have been left visible.</string>
+	<key>Some macOS banners could not be hidden without affecting other notifications. They have been left visible.</key>
+	<string>Some macOS banners could not be hidden without affecting other notifications. They have been left visible.</string>
 	<key>Height rounds up to a complete message from this default each time. Fewer messages shrink the list; an empty list hides its frame.</key>
 	<string>Height rounds up to a complete message from this default each time. Fewer messages shrink the list; an empty list hides its frame.</string>
 	<key>Warning: notifications may be missed</key>
 	<string>Warning: notifications may be missed</string>
-	<key>No bottom-right card will be shown, but the original macOS notification will be closed. You may miss this message.</key>
-	<string>No bottom-right card will be shown, but the original macOS notification will be closed. You may miss this message.</string>
+	<key>No bottom-right card will be shown, but the macOS banner will be hidden. The notification remains in Notification Center, but you may miss its arrival.</key>
+	<string>No bottom-right card will be shown, but the macOS banner will be hidden. The notification remains in Notification Center, but you may miss its arrival.</string>
 	<key>Open source app. This does not jump to the original message.</key>
 	<string>Open source app. This does not jump to the original message.</string>
 	<key>Could not open the source app</key>

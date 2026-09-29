@@ -12,6 +12,8 @@ final class Probe: NSObject, ObservableObject, UNUserNotificationCenterDelegate 
     private var targets: [String: AXUIElement] = [:]
     private var productionTargets: [String: NotificationOriginalAction] = [:]
     private var summaries: [String: String] = [:]
+    private var windows: [String: AXUIElement] = [:]
+    let bannerVisibility = NotificationBannerVisibility()
 
     func note(_ message: String) {
         events.insert("\(Date().formatted(date: .omitted, time: .standard))  \(message)", at: 0)
@@ -103,9 +105,38 @@ final class Probe: NSObject, ObservableObject, UNUserNotificationCenterDelegate 
         note("扫描 \(nodes) 个结构节点；本通知精确命中 \(matches.count)；完整：\(!incomplete)")
         guard !incomplete, matches.count == 1, let match = matches.first else { return }
         targets[id] = match.0
+        windows[id] = match.1
+        for (label, element) in [("测试卡片", match.0), ("所属窗口", match.1)] {
+            var fields: [String] = []
+            for key in [kAXPositionAttribute, kAXSizeAttribute, kAXMinimizedAttribute, "AXHidden"] {
+                var writable: DarwinBoolean = false
+                let check = AXUIElementIsAttributeSettable(element, key as CFString, &writable)
+                var raw: CFTypeRef?
+                let read = AXUIElementCopyAttributeValue(element, key as CFString, &raw)
+                var geometry = ""
+                if let raw, CFGetTypeID(raw) == AXValueGetTypeID() {
+                    let ax = raw as! AXValue
+                    if AXValueGetType(ax) == .cgPoint {
+                        var point = CGPoint.zero
+                        AXValueGetValue(ax, .cgPoint, &point)
+                        geometry = "\(point)"
+                    } else if AXValueGetType(ax) == .cgSize {
+                        var size = CGSize.zero
+                        AXValueGetValue(ax, .cgSize, &size)
+                        geometry = "\(size)"
+                    }
+                }
+                fields.append("\(key): read=\(read.rawValue) settable=\(check.rawValue)/\(writable.boolValue) \(geometry)")
+            }
+            note("\(label)隐藏能力：\(fields.joined(separator: "; "))")
+        }
         // The scope check above authorizes reading only this synthetic notification subtree.
         var processID: pid_t = 0
         AXUIElementGetPid(match.0, &processID)
+        let application = AXUIElementCreateApplication(processID)
+        var focused: CFTypeRef?
+        let focusStatus = AXUIElementCopyAttributeValue(application, kAXFocusedWindowAttribute as CFString, &focused)
+        note("系统窗口焦点：active=\(NSRunningApplication(processIdentifier: processID)?.isActive == true) status=\(focusStatus.rawValue) hasFocus=\(focused != nil)")
         let snapshot = NotificationAXSnapshot.read(match.0, deadline: ProcessInfo.processInfo.systemUptime + 0.5)
         let contents = snapshot.tree?.notifications(processID: processID) ?? []
         if contents.count == 1, let content = contents.first {
@@ -137,6 +168,33 @@ final class Probe: NSObject, ObservableObject, UNUserNotificationCenterDelegate 
             return
         }
         note("正式实现：\(String(describing: target.press()))；等待系统消息回调确认。")
+    }
+
+    func hideSyntheticBanner() {
+        guard let id = selectedID, let target = targets[id], let window = windows[id],
+              isOwnTarget(target, id: id) else { note("测试横幅已失效。"); return }
+        var visited = Set<AXUIElement>()
+        let deadline = ProcessInfo.processInfo.systemUptime + 0.5
+        func exclusivelyOwn(_ node: AXUIElement) -> Bool {
+            if CFEqual(node, target) { return true }
+            guard visited.count < 100, visited.insert(node).inserted,
+                  ProcessInfo.processInfo.systemUptime < deadline else { return false }
+            var role: CFTypeRef?
+            var children: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(node, kAXRoleAttribute as CFString, &role) == .success,
+                  ["AXWindow", "AXGroup", "AXScrollArea", "AXLayoutArea"].contains(role as? String ?? ""),
+                  AXUIElementCopyAttributeValue(node, kAXChildrenAttribute as CFString, &children) == .success,
+                  let children = children as? [AXUIElement] else { return false }
+            return children.allSatisfy(exclusivelyOwn)
+        }
+        guard exclusivelyOwn(window) else { note("窗口并非仅含本条测试通知，拒绝移动。"); return }
+        note("正式隐藏实现：\(bannerVisibility.hide(window))；8 秒后自动恢复窗口位置。")
+        inventory()
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(8))
+            self?.bannerVisibility.restoreAll()
+            self?.note("已执行窗口位置恢复。")
+        }
     }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
@@ -183,6 +241,7 @@ struct ProbeView: View {
                 Button("原通知 AXCancel") { probe.perform(kAXCancelAction) }
                 Button("正式实现点击") { probe.performProductionAction() }
             }
+            Button("只隐藏测试横幅（不关闭）") { probe.hideSyntheticBanner() }
             Text("只操作 UUID 或完整测试内容精确匹配的唯一对象；不记录其他通知。退出清除测试通知。")
                 .font(.caption).foregroundStyle(.secondary)
             ScrollView {
@@ -210,6 +269,7 @@ final class Delegate: NSObject, NSApplicationDelegate {
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
     func applicationWillTerminate(_ notification: Notification) {
+        probe.bannerVisibility.setEnabled(false)
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: probe.ids)
     }
 }

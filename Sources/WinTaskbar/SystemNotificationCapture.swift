@@ -13,31 +13,32 @@ private let systemNotificationAXCallback: AXObserverCallback = { _, _, _, _ in
 
 struct SystemNotificationScan: Sendable {
     var notifications: [SystemNotificationContent] = []
-    var dismissalTokens: [String: UUID] = [:]
     var unreadable = false
     var unrecognized = false
 }
 
-enum SystemNotificationDismissalResult: Sendable {
-    case closed, unsupported, changed, failed, cancelled
-}
-
-// AX references stay on this serial worker. Only content and single-use dismissal tokens leave it.
+// AX content/action references stay on this serial worker. Reversible window placement
+// has a separate synchronized owner so termination can restore it before the app exits.
 actor SystemNotificationCapture {
-    private struct Candidate {
+    private struct BannerWindow {
         let window: AXUIElement
-        let targetIdentity: String
         let processID: Int32
-        let content: SystemNotificationContent
+        let contents: [SystemNotificationContent]
     }
+    private nonisolated let bannerVisibility = NotificationBannerVisibility()
+    private var bannerWindows: [BannerWindow] = []
+
+    nonisolated func setBannerHidingEnabled(_ enabled: Bool) { bannerVisibility.setEnabled(enabled) }
+    nonisolated func restoreBanners() { bannerVisibility.restoreAll() }
+
     private struct Observation {
         let observer: AXObserver
         var elements: Set<AXUIElement> = []
     }
     private var observations: [Int32: Observation] = [:]
     private static let events = [kAXWindowCreatedNotification, kAXCreatedNotification,
-                                 kAXLayoutChangedNotification, kAXValueChangedNotification]
-    private var candidates: [UUID: Candidate] = [:]
+                                 kAXLayoutChangedNotification, kAXValueChangedNotification,
+                                 kAXFocusedWindowChangedNotification]
     private var openTargets: [String: NotificationOriginalAction] = [:]
 
     func stopObserving() {
@@ -45,7 +46,7 @@ actor SystemNotificationCapture {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observation.observer), .commonModes)
         }
         observations.removeAll()
-        candidates.removeAll()
+        bannerWindows.removeAll()
         openTargets.removeAll()
     }
 
@@ -70,10 +71,11 @@ actor SystemNotificationCapture {
     }
 
     func scan(retaining contents: [SystemNotificationContent] = []) -> SystemNotificationScan {
-        candidates.removeAll()
+        bannerWindows.removeAll()
         let retained = Dictionary(grouping: contents, by: \.sourceID)
         openTargets = openTargets.filter { retained[$0.key]?.contains($0.value.content) == true }
         var result = SystemNotificationScan()
+        var liveWindows: [AXUIElement] = []
         var runningProcessIDs: Set<Int32> = []
         for bundleID in ["com.apple.UserNotificationCenter", "com.apple.notificationcenterui"] {
             guard !Task.isCancelled else { break }
@@ -88,25 +90,27 @@ actor SystemNotificationCapture {
                 continue
             }
             observe(processID: process.processIdentifier, elements: [root] + windows)
+            liveWindows.append(contentsOf: windows)
+            guard isPassive(processID: process.processIdentifier) else {
+                for window in windows { bannerVisibility.restore(window) }
+                continue
+            }
             let deadline = ProcessInfo.processInfo.systemUptime + 1.5
             for window in windows {
                 let snapshot = NotificationAXSnapshot.read(window, deadline: deadline)
                 result.unreadable = result.unreadable || snapshot.incomplete
-                guard !snapshot.incomplete, let tree = snapshot.tree else { continue }
+                guard !snapshot.incomplete, let tree = snapshot.tree else {
+                    bannerVisibility.restore(window)
+                    continue
+                }
                 let notifications = tree.notifications(processID: process.processIdentifier)
                 result.notifications.append(contentsOf: notifications)
+                bannerWindows.append(BannerWindow(window: window, processID: process.processIdentifier, contents: notifications))
                 if notifications.isEmpty, tree.containsNotification { result.unrecognized = true }
                 for content in notifications {
                     if let target = NotificationOriginalAction.find(in: snapshot, content: content, processID: process.processIdentifier) {
                         openTargets[content.sourceID] = target
                     }
-                    guard let identity = NotificationDismissalPolicy.targetIdentity(
-                        in: tree, for: content, processID: process.processIdentifier
-                    ) else { continue }
-                    let token = UUID()
-                    candidates[token] = Candidate(window: window, targetIdentity: identity,
-                                                  processID: process.processIdentifier, content: content)
-                    result.dismissalTokens[content.sourceID] = token
                 }
             }
         }
@@ -115,6 +119,7 @@ actor SystemNotificationCapture {
                 CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observation.observer), .commonModes)
             }
         }
+        bannerVisibility.restoreUnlisted(liveWindows)
         return result
     }
 
@@ -154,25 +159,39 @@ actor SystemNotificationCapture {
         return target.press()
     }
 
-    func dismiss(_ token: UUID, expected: SystemNotificationContent) -> SystemNotificationDismissalResult {
-        guard !Task.isCancelled else { return .cancelled }
-        guard let candidate = candidates.removeValue(forKey: token), candidate.content == expected else { return .changed }
-        let snapshot = NotificationAXSnapshot.read(candidate.window, deadline: ProcessInfo.processInfo.systemUptime + 1.5)
-        guard !Task.isCancelled else { return .cancelled }
-        guard !snapshot.incomplete, let tree = snapshot.tree else { return .failed }
-        guard NotificationDismissalPolicy.targetIdentity(in: tree, for: expected, processID: candidate.processID)
-                == candidate.targetIdentity,
-              let target = snapshot.elements[candidate.targetIdentity] else { return .changed }
-        var rawActions: CFArray?
-        guard AXUIElementCopyActionNames(target, &rawActions) == .success,
-              let names = rawActions as? [String] else { return .unsupported }
-        let actions = names.map { name in
-            var description: CFString?
-            AXUIElementCopyActionDescription(target, name as CFString, &description)
-            return NotificationDismissalAction(name: name, description: description as String? ?? "")
+    // Only move an entire shared window when every card in it opted in. Re-read
+    // immediately before moving so a newly arrived unmatched card remains visible.
+    func hideBanners(matching expected: [SystemNotificationContent]) -> Bool {
+        var failed = false
+        for candidate in bannerWindows {
+            guard !Task.isCancelled else { bannerVisibility.restoreAll(); return false }
+            guard isPassive(processID: candidate.processID) else {
+                bannerVisibility.restore(candidate.window)
+                continue
+            }
+            let requested = candidate.contents.filter { expected.contains($0) }
+            guard !requested.isEmpty else { bannerVisibility.restore(candidate.window); continue }
+            let snapshot = NotificationAXSnapshot.read(candidate.window, deadline: ProcessInfo.processInfo.systemUptime + 0.5)
+            guard !snapshot.incomplete, let tree = snapshot.tree,
+                  tree.notifications(processID: candidate.processID) == candidate.contents,
+                  candidate.contents.allSatisfy({ expected.contains($0) }),
+                  tree.containsOnlyNotificationCards(candidate.contents, processID: candidate.processID),
+                  isPassive(processID: candidate.processID) else {
+                bannerVisibility.restore(candidate.window)
+                failed = true
+                continue
+            }
+            if !bannerVisibility.hide(candidate.window) { failed = true }
         }
-        guard let action = NotificationDismissalPolicy.closeAction(actions: actions) else { return .unsupported }
-        guard !Task.isCancelled else { return .cancelled }
-        return AXUIElementPerformAction(target, action as CFString) == .success ? .closed : .failed
+        return failed
+    }
+
+    private func isPassive(processID: Int32) -> Bool {
+        guard NSRunningApplication(processIdentifier: processID)?.isActive == false else { return false }
+        let root = AXUIElementCreateApplication(processID)
+        AXUIElementSetMessagingTimeout(root, 0.15)
+        var focused: CFTypeRef?
+        let status = AXUIElementCopyAttributeValue(root, kAXFocusedWindowAttribute as CFString, &focused)
+        return status == .noValue || status == .attributeUnsupported || (status == .success && focused == nil)
     }
 }

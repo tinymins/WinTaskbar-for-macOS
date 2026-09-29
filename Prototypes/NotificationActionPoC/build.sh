@@ -23,6 +23,7 @@ xcrun swiftc -swift-version 6 -target "$(uname -m)-apple-macosx13.0" \
     "$SOURCE_DIR/main.swift" \
     "$ROOT_DIR/Sources/WinTaskbar/NotificationContentParser.swift" \
     "$ROOT_DIR/Sources/WinTaskbar/NotificationOriginalAction.swift" \
+    "$ROOT_DIR/Sources/WinTaskbar/NotificationBannerVisibility.swift" \
     -o "$APP_DIR/Contents/MacOS/NotificationActionPoC"
 codesign --force --sign - "$APP_DIR"
 codesign --verify --deep --strict "$APP_DIR"

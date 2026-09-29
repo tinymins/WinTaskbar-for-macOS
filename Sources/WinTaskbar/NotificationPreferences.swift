@@ -76,6 +76,7 @@ struct NotificationOutputs: Codable, Equatable {
     var enabled: Set<NotificationOutputKind> = [.card]
     var overrides: [NotificationOutputKind: NotificationOutputSettings] = [:]
     var cooldownSeconds: Double = 0
+    // Stored rule field; controls reversible banner hiding, never notification deletion.
     var dismissSystemNotification = false
 
     func warnsAboutHiddenNotification(defaults: [NotificationOutputKind: NotificationOutputSettings]) -> Bool {

@@ -227,7 +227,7 @@ struct NotificationSettingsView: View {
     private func outputSummary(_ outputs: NotificationOutputs) -> String {
         var labels = NotificationOutputKind.allCases.filter { outputs.enabled.contains($0) }.map(\.label)
         if outputs.dismissSystemNotification {
-            labels.append(NSLocalizedString("Close original macOS notification", comment: "Notification rule summary"))
+            labels.append(NSLocalizedString("Hide original macOS banner", comment: "Notification rule summary"))
         }
         return labels.isEmpty
             ? NSLocalizedString("Ignore notification", comment: "Notification output")
@@ -402,7 +402,7 @@ private struct NotificationOutputsEditor: View {
             }
             Toggle(isOn: $outputs.dismissSystemNotification) {
                 HStack(spacing: 6) {
-                    Text("Automatically close original macOS notification")
+                    Text("Hide original macOS banner (keep in Notification Center)")
                     if outputs.warnsAboutHiddenNotification(defaults: defaults) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.red)
@@ -411,12 +411,12 @@ private struct NotificationOutputsEditor: View {
                 }
             }
             if outputs.warnsAboutHiddenNotification(defaults: defaults) {
-                Label("No bottom-right card will be shown, but the original macOS notification will be closed. You may miss this message.",
+                Label("No bottom-right card will be shown, but the macOS banner will be hidden. The notification remains in Notification Center, but you may miss its arrival.",
                       systemImage: "exclamationmark.triangle.fill")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(.red)
             }
-            Text("After reading it, close this system notification. It may also leave Notification Center, and its banner may appear briefly. If it cannot be closed safely, keep the system notification.")
+            Text("Hide only the banner; keep the notification in Notification Center. Shared windows are hidden only when all their notifications allow it. Unsupported banners remain visible.")
                 .font(.caption).foregroundStyle(.secondary)
             if !outputs.enabled.isEmpty {
                 NotificationNumberSetting("Repeat cooldown", value: $outputs.cooldownSeconds,

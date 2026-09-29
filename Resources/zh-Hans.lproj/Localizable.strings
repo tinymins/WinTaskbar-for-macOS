@@ -902,24 +902,24 @@
 	<string>使用通用输出设置</string>
 	<key>Enable desktop alerts</key>
 	<string>启用桌面提醒</string>
-	<key>Close original macOS notification</key>
-	<string>关闭 macOS 原始通知</string>
-	<key>Automatically close original macOS notification</key>
-	<string>自动关闭 macOS 原始通知</string>
-	<key>After reading it, close this system notification. It may also leave Notification Center, and its banner may appear briefly. If it cannot be closed safely, keep the system notification.</key>
-	<string>成功读取后关闭这一条系统通知；它也可能从通知中心移除，原横幅仍可能短暂出现。无法安全关闭时保留系统提示。</string>
+	<key>Hide original macOS banner</key>
+	<string>隐藏 macOS 原生横幅</string>
+	<key>Hide original macOS banner (keep in Notification Center)</key>
+	<string>隐藏 macOS 原生横幅（保留在通知中心）</string>
+	<key>Hide only the banner; keep the notification in Notification Center. Shared windows are hidden only when all their notifications allow it. Unsupported banners remain visible.</key>
+	<string>仅隐藏横幅，保留通知中心内的消息。同一窗口内的通知必须全部允许隐藏，否则保留系统横幅。不支持隐藏的横幅会保持可见。</string>
 	<key>Each checkbox controls a WinTaskbar output for this rule.</key>
 	<string>每个勾选框只控制此规则的一种 WinTaskbar 输出。</string>
 	<key>Preview shows only WinTaskbar output and never closes a real system notification.</key>
 	<string>预览只显示 WinTaskbar 输出，不会关闭真实系统通知。</string>
-	<key>Some original macOS notifications could not be closed. They have been left visible.</key>
-	<string>部分 macOS 原始通知无法关闭，已保留系统提示。</string>
+	<key>Some macOS banners could not be hidden without affecting other notifications. They have been left visible.</key>
+	<string>部分 macOS 横幅无法在不影响其他通知的情况下隐藏，已保持可见。</string>
 	<key>Height rounds up to a complete message from this default each time. Fewer messages shrink the list; an empty list hides its frame.</key>
 	<string>每次以默认高度为基准，向上扩展到完整消息的边界；消息较少时收缩，无消息时隐藏。</string>
 	<key>Warning: notifications may be missed</key>
 	<string>警告：可能错过消息</string>
-	<key>No bottom-right card will be shown, but the original macOS notification will be closed. You may miss this message.</key>
-	<string>此规则不显示右下角卡片，却会关闭 macOS 原始通知，可能导致你错过这条消息。</string>
+	<key>No bottom-right card will be shown, but the macOS banner will be hidden. The notification remains in Notification Center, but you may miss its arrival.</key>
+	<string>未开启右下角卡片，却选择了隐藏 macOS 横幅。消息仍会保留在通知中心，但你可能错过新消息提示。</string>
 	<key>Open source app. This does not jump to the original message.</key>
 	<string>打开来源应用，不会跳转到原始消息。</string>
 	<key>Could not open the source app</key>

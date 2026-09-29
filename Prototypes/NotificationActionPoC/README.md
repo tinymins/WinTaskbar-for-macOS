@@ -35,6 +35,12 @@ automatically close the synthetic banner. Restore them immediately afterward.
 4. **Notification Center:** optionally open Notification Center manually and retry
    locating the same selected test UUID. Do not assume its rebuilt AX object has
    the same identity as the expired banner.
+5. **Non-destructive hiding:** send and locate a synthetic banner, then use
+   `只隐藏测试横幅（不关闭）`. This reuses the production window-placement owner and
+   refuses to move a window containing anything outside the selected synthetic
+   card. Verify the delivered UUID remains present and `正式实现点击` still invokes
+   its callback. In a separate run, let the hidden banner expire and query again.
+   The PoC restores the window position after eight seconds and on normal exit.
 
 ## Boundaries
 
@@ -85,3 +91,21 @@ automatically close the synthetic banner. Restore them immediately afterward.
   re-finding was not verified on this host, which did not expose a usable stable
   identifier. An explicitly closed notification can therefore fall back to opening
   its source app. The installed WinTaskbar was not replaced for these PoC checks.
+
+### Non-destructive hiding verification
+
+On 2026-09-29, the selected banner's own position was read-only, but its containing
+1920 x 1080 window exposed a writable AXPosition. The shared production hiding
+implementation moved that window outside the active displays and verified its
+new frame. The synthetic request remained in the delivered list; pressing its
+original action while hidden produced the matching default-action callback.
+
+A second hidden request remained in the delivered list more than 40 seconds
+later, after natural expiration and window-position restoration. Its cached AX
+object was then unavailable: hiding preserves Notification Center contents, but
+does not extend a banner object's lifetime or guarantee old-message routing.
+
+WinTaskbar now hides only fully parsed, passive notification windows whose cards
+all opt in. It restores moved windows when their contents no longer qualify,
+Notification Center takes focus, rules change, the feature stops, or the session
+is suspended. No native close/cancel action is used for automatic suppression.
