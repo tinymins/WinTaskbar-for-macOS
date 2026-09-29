@@ -8,21 +8,31 @@ struct NotificationSettingsView: View {
     @ObservedObject var service: SystemNotificationService = .shared
     @ObservedObject private var permissions = PermissionsService.shared
     @State private var editingRule: NotificationCaptureRule?
+    @State private var editingFallback = false
+    @State private var selectedOutput: NotificationOutputKind = .card
     @State private var settingsOpenFailed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            SettingsSection("Desktop alerts") {
-                Toggle("Capture system notifications", isOn: $preferences.notifications.enabled)
-                Text("Rules can trigger several outputs for one notification. Messages and countdowns are kept in memory only and disappear when WinTaskbar quits.")
+            SettingsSection("Notification receiving") {
+                Toggle("Receive new system notifications", isOn: $preferences.notifications.enabled)
+                    .toggleStyle(.switch)
+                Text("Turning this on waits for new system notification banners; it does not show a sample. Turning it off stops receiving and clears current alerts.")
                     .font(.caption).foregroundStyle(.secondary)
-                Text(LocalizedStringKey(service.statusKey))
+                if preferences.notifications.enabled {
+                    Text(LocalizedStringKey(service.statusKey))
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("Notification receiving is off.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Text("Current alerts are kept in memory and disappear when WinTaskbar quits.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Clear current alerts") { service.clearAllAlerts() }
             }
 
             SettingsSection("Trigger rules") {
-                Text("Rules are checked from top to bottom. The first enabled match decides which outputs run. Unmatched notifications use the fallback below.")
+                Text("Rules are checked from top to bottom. The first enabled match chooses the output combination. Unmatched notifications use the fallback.")
                     .font(.caption).foregroundStyle(.secondary)
                 ForEach($preferences.notifications.rules) { $rule in
                     HStack(alignment: .top, spacing: 10) {
@@ -34,8 +44,7 @@ struct NotificationSettingsView: View {
                                 Text(rule.messagePattern).font(.system(.caption, design: .monospaced))
                                     .textSelection(.enabled)
                             }
-                            Text(outputSummary(rule.outputs))
-                                .font(.caption).foregroundStyle(.secondary)
+                            Text(outputSummary(rule.outputs)).font(.caption).foregroundStyle(.secondary)
                             if let error = rule.patternError {
                                 Text(error).font(.caption).foregroundStyle(.red)
                             }
@@ -58,31 +67,40 @@ struct NotificationSettingsView: View {
                 Divider()
                 Label("Default rule (fallback)", systemImage: "arrow.turn.down.right")
                     .font(.body.weight(.semibold))
-                Text("Always applies when no rule matches. This rule stays last and cannot be disabled or deleted.")
+                Text(outputSummary(preferences.notifications.fallback))
                     .font(.caption).foregroundStyle(.secondary)
-                NotificationOutputsEditor(outputs: $preferences.notifications.fallback)
-                Button("Preview fallback") { service.showPreview() }
-            }
-
-            SettingsSection("Display styles") {
-                Text("Each rule chooses its outputs and their text, timing, glow, countdown, and sound. These display settings apply to every rule.")
+                Text("Always applies when no rule matches. It stays last and cannot be disabled or deleted.")
                     .font(.caption).foregroundStyle(.secondary)
-                NotificationNumberSetting("Center text size", value: $preferences.notifications.presentation.centerFontSize, range: 12...72, suffix: "pt")
-                NotificationNumberSetting("Large text size", value: $preferences.notifications.presentation.largeFontSize, range: 24...160, suffix: "pt")
-                Toggle("Show above other windows", isOn: $preferences.notifications.presentation.alwaysOnTop)
-                Toggle("Show over fullscreen apps", isOn: $preferences.notifications.presentation.showInFullscreen)
-                Divider()
-                Text("Preview one output").font(.body.weight(.medium))
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())],
-                          alignment: .leading) {
-                    ForEach(NotificationOutputKind.allCases, id: \.self) { kind in
-                        Button(LocalizedStringKey(kind.label)) { service.showOutputPreview(kind) }
-                    }
+                HStack {
+                    Button("Edit fallback") { editingFallback = true }
+                    Button("Preview fallback") { service.showPreview() }
                 }
             }
 
-            SettingsSection("Layout editing") {
-                Text("Drag the sample overlays to place them. The important-message frame is visible in layout editing even when its list is empty.")
+            SettingsSection("Output settings") {
+                Text("Choose one output to edit its shared defaults. Rules may inherit these settings or customize that output.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Picker("Output category", selection: $selectedOutput) {
+                    ForEach(NotificationOutputKind.allCases, id: \.self) { kind in
+                        Text(kind.label).tag(kind)
+                    }
+                }
+                .pickerStyle(.menu)
+                NotificationChannelSettingsEditor(
+                    kind: selectedOutput,
+                    settings: defaultSettingsBinding(selectedOutput)
+                )
+                outputPlacement
+                Button("Preview this output") { service.showOutputPreview(selectedOutput) }
+                Text("Preview works even when notification receiving is off.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            SettingsSection("Window behavior and layout") {
+                Toggle("Show above other windows", isOn: $preferences.notifications.presentation.alwaysOnTop)
+                Toggle("Show over fullscreen apps", isOn: $preferences.notifications.presentation.showInFullscreen)
+                Divider()
+                Text("Drag the sample overlays to place them. The important-message frame appears here even when its list is empty.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button(service.isLayoutEditing ? "Finish layout editing" : "Edit layout") {
                     if service.isLayoutEditing {
@@ -91,18 +109,6 @@ struct NotificationSettingsView: View {
                         service.beginLayoutEditing()
                     }
                 }
-                NotificationPositionSettings("Center reminder", x: $preferences.notifications.presentation.centerX,
-                                             y: $preferences.notifications.presentation.centerY)
-                NotificationPositionSettings("Large text", x: $preferences.notifications.presentation.largeX,
-                                             y: $preferences.notifications.presentation.largeY)
-                NotificationPositionSettings("Countdown bar", x: $preferences.notifications.presentation.countdownX,
-                                             y: $preferences.notifications.presentation.countdownY)
-                NotificationPositionSettings("Important message list", x: $preferences.notifications.presentation.importantX,
-                                             y: $preferences.notifications.presentation.importantY)
-                NotificationNumberSetting("List width", value: $preferences.notifications.presentation.importantWidth,
-                                          range: 200...800, suffix: "pt")
-                NotificationNumberSetting("List height", value: $preferences.notifications.presentation.importantHeight,
-                                          range: 100...900, suffix: "pt")
             }
 
             SettingsSection("System setup") {
@@ -130,7 +136,8 @@ struct NotificationSettingsView: View {
         }
         .onDisappear { service.endLayoutEditing() }
         .sheet(item: $editingRule) { rule in
-            NotificationRuleEditor(rule: rule, apps: apps, service: service) { updated in
+            NotificationRuleEditor(rule: rule, defaults: preferences.notifications.outputDefaults,
+                                   apps: apps, service: service) { updated in
                 if let index = preferences.notifications.rules.firstIndex(where: { $0.id == updated.id }) {
                     preferences.notifications.rules[index] = updated
                 } else {
@@ -139,6 +146,51 @@ struct NotificationSettingsView: View {
                 editingRule = nil
             } onCancel: { editingRule = nil }
         }
+        .sheet(isPresented: $editingFallback) {
+            NotificationFallbackEditor(outputs: preferences.notifications.fallback,
+                                       defaults: preferences.notifications.outputDefaults,
+                                       service: service) { updated in
+                preferences.notifications.fallback = updated
+                editingFallback = false
+            } onCancel: { editingFallback = false }
+        }
+    }
+
+    @ViewBuilder
+    private var outputPlacement: some View {
+        switch selectedOutput {
+        case .centerText:
+            NotificationPositionSettings("Center reminder", x: $preferences.notifications.presentation.centerX,
+                                         y: $preferences.notifications.presentation.centerY)
+            NotificationNumberSetting("Center text size", value: $preferences.notifications.presentation.centerFontSize,
+                                      range: 12...72, suffix: "pt")
+        case .largeText:
+            NotificationPositionSettings("Large text", x: $preferences.notifications.presentation.largeX,
+                                         y: $preferences.notifications.presentation.largeY)
+            NotificationNumberSetting("Large text size", value: $preferences.notifications.presentation.largeFontSize,
+                                      range: 24...160, suffix: "pt")
+        case .countdown:
+            NotificationPositionSettings("Countdown bar", x: $preferences.notifications.presentation.countdownX,
+                                         y: $preferences.notifications.presentation.countdownY)
+        case .important:
+            NotificationPositionSettings("Important message list", x: $preferences.notifications.presentation.importantX,
+                                         y: $preferences.notifications.presentation.importantY)
+            NotificationNumberSetting("List width", value: $preferences.notifications.presentation.importantWidth,
+                                      range: 200...800, suffix: "pt")
+            NotificationNumberSetting("List height", value: $preferences.notifications.presentation.importantHeight,
+                                      range: 100...900, suffix: "pt")
+            Text("The list hides its frame when there are no messages.")
+                .font(.caption).foregroundStyle(.secondary)
+        default:
+            EmptyView()
+        }
+    }
+
+    private func defaultSettingsBinding(_ kind: NotificationOutputKind) -> Binding<NotificationOutputSettings> {
+        Binding(
+            get: { preferences.notifications.outputDefaults[kind] ?? NotificationOutputSettings() },
+            set: { preferences.notifications.outputDefaults[kind] = $0 }
+        )
     }
 
     private func moveRule(_ id: UUID, offset: Int) {
@@ -148,9 +200,7 @@ struct NotificationSettingsView: View {
     }
 
     private func outputSummary(_ outputs: NotificationOutputs) -> String {
-        let labels = NotificationOutputKind.allCases
-            .filter { outputs.enabled.contains($0) }
-            .map { NSLocalizedString($0.label, comment: "Notification output") }
+        let labels = NotificationOutputKind.allCases.filter { outputs.enabled.contains($0) }.map(\.label)
         return labels.isEmpty
             ? NSLocalizedString("Ignore notification", comment: "Notification output")
             : labels.joined(separator: " · ")
@@ -159,6 +209,7 @@ struct NotificationSettingsView: View {
 
 private struct NotificationRuleEditor: View {
     @State var rule: NotificationCaptureRule
+    let defaults: [NotificationOutputKind: NotificationOutputSettings]
     @ObservedObject var apps: AppDiscoveryService
     @ObservedObject var service: SystemNotificationService
     let onSave: (NotificationCaptureRule) -> Void
@@ -182,20 +233,19 @@ private struct NotificationRuleEditor: View {
                     Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
                 }
                 Divider()
-                NotificationOutputsEditor(outputs: $rule.outputs)
+                NotificationOutputsEditor(outputs: $rule.outputs, defaults: defaults)
                 HStack {
                     Button("Preview rule outputs") { service.showPreview(outputs: rule.outputs) }
                     Spacer()
                     Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
-                Button("Save") { onSave(rule) }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(rule.isEmpty || rule.patternError != nil || rule.outputs.countdownPatternError != nil)
+                    Button("Save") { onSave(rule) }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(rule.isEmpty || rule.patternError != nil || rule.outputs.countdownPatternError(defaults: defaults) != nil)
                 }
             }
             .padding(24)
         }
-        .frame(width: 560)
-        .frame(maxHeight: 760)
+        .frame(width: 560, height: 760)
         .onAppear { apps.reloadInstalledApps() }
     }
 
@@ -219,85 +269,69 @@ private struct NotificationRuleEditor: View {
     }
 }
 
+private struct NotificationFallbackEditor: View {
+    @State var outputs: NotificationOutputs
+    let defaults: [NotificationOutputKind: NotificationOutputSettings]
+    @ObservedObject var service: SystemNotificationService
+    let onSave: (NotificationOutputs) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Default rule (fallback)").font(.title2.weight(.semibold))
+                Text("This rule applies whenever no enabled rule matches.")
+                    .font(.caption).foregroundStyle(.secondary)
+                NotificationOutputsEditor(outputs: $outputs, defaults: defaults)
+                HStack {
+                    Button("Preview fallback") { service.showPreview(outputs: outputs) }
+                    Spacer()
+                    Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
+                    Button("Save") { onSave(outputs) }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(outputs.countdownPatternError(defaults: defaults) != nil)
+                }
+            }
+            .padding(24)
+        }
+        .frame(width: 560, height: 760)
+    }
+}
+
 private struct NotificationOutputsEditor: View {
     @Binding var outputs: NotificationOutputs
+    let defaults: [NotificationOutputKind: NotificationOutputSettings]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Outputs").font(.body.weight(.semibold))
-            Text("Select any combination. Selecting none ignores the notification.")
+            Text("Output combination").font(.body.weight(.semibold))
+            Text("Each checkbox controls this rule only. Select none to ignore a matching notification.")
                 .font(.caption).foregroundStyle(.secondary)
             ForEach(NotificationOutputKind.allCases, id: \.self) { kind in
-                Toggle(LocalizedStringKey(kind.label), isOn: enabledBinding(kind))
-            }
-            if outputs.enabled.contains(.card) {
-                Picker("Card lifetime", selection: $outputs.card.mode) {
-                    Text("Hide after a delay").tag(NotificationDisplayBehavior.Mode.timed)
-                    Text("Keep until dismissed").tag(NotificationDisplayBehavior.Mode.persistent)
-                }
-                if outputs.card.mode == .timed {
-                    HStack {
-                        Text("Card display time (seconds)")
-                        Spacer()
-                        TextField("Seconds", value: $outputs.card.seconds, format: .number)
-                            .textFieldStyle(.roundedBorder).frame(width: 70)
-                            .onChange(of: outputs.card.seconds) { value in
-                                outputs.card.seconds = min(3600, max(1, value))
-                            }
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle(kind.label, isOn: enabledBinding(kind))
+                    if outputs.enabled.contains(kind) {
+                        NotificationOverrideEditor(kind: kind, outputs: $outputs, defaults: defaults)
+                            .padding(.leading, 22)
                     }
                 }
-            }
-            if !outputs.enabled.isEmpty {
-                TextField("Output text template", text: $outputs.textTemplate)
-                    .textFieldStyle(.roundedBorder)
-                Text("Leave empty to use the notification text. Use {app}, {title}, {body}, or regex captures such as {1}.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            if !outputs.enabled.isDisjoint(with: [.centerText, .largeText, .glow])
-                || (outputs.enabled.contains(.countdown)
-                    && !outputs.completionOutputs.isDisjoint(with: [.centerText, .largeText, .glow])) {
-                NotificationNumberSetting("Effect duration", value: $outputs.durationSeconds,
-                                          range: 0.5...3600, suffix: "s")
-            }
-            if !outputs.enabled.isDisjoint(with: [.centerText, .largeText, .glow, .countdown])
-                || (outputs.enabled.contains(.countdown)
-                    && !outputs.completionOutputs.isDisjoint(with: [.centerText, .largeText, .glow])) {
-                ColorPicker("Alert color", selection: Binding(
-                    get: { Color(hex: outputs.colorHex) ?? .yellow },
-                    set: { value in
-                        guard let color = NSColor(value).usingColorSpace(.genericRGB) else { return }
-                        outputs.colorHex = String(
-                            format: "#%02X%02X%02X",
-                            Int((min(1, max(0, color.redComponent)) * 255).rounded()),
-                            Int((min(1, max(0, color.greenComponent)) * 255).rounded()),
-                            Int((min(1, max(0, color.blueComponent)) * 255).rounded())
-                        )
-                    }
-                ), supportsOpacity: false)
             }
             if outputs.enabled.contains(.countdown) {
-                NotificationNumberSetting("Countdown duration", value: $outputs.countdownSeconds,
-                                          range: 1...86400, suffix: "s")
-                TextField("Countdown regex", text: $outputs.countdownPattern)
-                    .textFieldStyle(.roundedBorder)
-                Text("Optional regex: capture a number of seconds in group 1. If it does not match, no countdown starts.")
-                    .font(.caption).foregroundStyle(.secondary)
-                if let error = outputs.countdownPatternError {
-                    Text(error).font(.caption).foregroundStyle(.red)
-                }
-                Text("When countdown ends").font(.body.weight(.medium))
-                ForEach(NotificationOutputKind.allCases.filter { $0 != .countdown }, id: \.self) { kind in
-                    Toggle(LocalizedStringKey(kind.label), isOn: completionBinding(kind))
-                }
-            }
-            if outputs.enabled.contains(.sound)
-                || (outputs.enabled.contains(.countdown) && outputs.completionOutputs.contains(.sound)) {
-                Picker("Alert sound", selection: $outputs.soundName) {
-                    ForEach(["Glass", "Hero", "Morse", "Ping", "Pop", "Submarine", "Tink"], id: \.self) { name in
-                        Text(name).tag(name)
+                let completion = outputs.overrides[.countdown]?.completionOutputs
+                    ?? defaults[.countdown]?.completionOutputs
+                    ?? NotificationOutputSettings().completionOutputs
+                ForEach(NotificationOutputKind.allCases.filter {
+                    completion.contains($0) && $0 != .countdown && !outputs.enabled.contains($0)
+                },
+                        id: \.self) { kind in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(String(format: NSLocalizedString("%@ after countdown", comment: "Notification output"),
+                                    kind.label))
+                            .font(.caption.weight(.medium))
+                        NotificationOverrideEditor(kind: kind, outputs: $outputs, defaults: defaults)
+                            .padding(.leading, 22)
                     }
                 }
-                Toggle("Speak the message", isOn: $outputs.speechEnabled)
             }
             if !outputs.enabled.isEmpty {
                 NotificationNumberSetting("Repeat cooldown", value: $outputs.cooldownSeconds,
@@ -314,20 +348,138 @@ private struct NotificationOutputsEditor: View {
             }
         )
     }
+}
 
-    private func completionBinding(_ kind: NotificationOutputKind) -> Binding<Bool> {
+private struct NotificationOverrideEditor: View {
+    let kind: NotificationOutputKind
+    @Binding var outputs: NotificationOutputs
+    let defaults: [NotificationOutputKind: NotificationOutputSettings]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle("Customize for this rule", isOn: overrideBinding)
+            if outputs.overrides[kind] != nil {
+                NotificationChannelSettingsEditor(kind: kind, settings: settingsBinding)
+                    .padding(.leading, 18)
+            } else {
+                Text("Uses shared output settings").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var overrideBinding: Binding<Bool> {
         Binding(
-            get: { outputs.completionOutputs.contains(kind) },
+            get: { outputs.overrides[kind] != nil },
+            set: { custom in
+                if custom {
+                    outputs.overrides[kind] = defaults[kind] ?? NotificationOutputSettings()
+                } else {
+                    outputs.overrides.removeValue(forKey: kind)
+                }
+            }
+        )
+    }
+
+    private var settingsBinding: Binding<NotificationOutputSettings> {
+        Binding(
+            get: { outputs.overrides[kind] ?? defaults[kind] ?? NotificationOutputSettings() },
+            set: { outputs.overrides[kind] = $0 }
+        )
+    }
+}
+
+private struct NotificationChannelSettingsEditor: View {
+    let kind: NotificationOutputKind
+    @Binding var settings: NotificationOutputSettings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if kind == .card {
+                Picker("Card lifetime", selection: $settings.card.mode) {
+                    Text("Hide after a delay").tag(NotificationDisplayBehavior.Mode.timed)
+                    Text("Keep until dismissed").tag(NotificationDisplayBehavior.Mode.persistent)
+                }
+                if settings.card.mode == .timed {
+                    HStack {
+                        Text("Card display time (seconds)")
+                        Spacer()
+                        TextField("Seconds", value: $settings.card.seconds, format: .number)
+                            .textFieldStyle(.roundedBorder).frame(width: 70)
+                            .onChange(of: settings.card.seconds) { value in
+                                settings.card.seconds = min(3600, max(1, value))
+                            }
+                    }
+                }
+            }
+            if [.card, .centerText, .largeText, .countdown, .sound, .important].contains(kind) {
+                TextField("Output text template", text: $settings.textTemplate)
+                    .textFieldStyle(.roundedBorder)
+                Text("Leave empty to use the notification text. Use {app}, {title}, {body}, or regex captures such as {1}.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if [.centerText, .largeText, .glow].contains(kind) {
+                NotificationNumberSetting("Effect duration", value: $settings.durationSeconds,
+                                          range: 0.5...3600, suffix: "s")
+            }
+            if [.centerText, .largeText, .glow, .countdown].contains(kind) {
+                ColorPicker("Alert color", selection: colorBinding, supportsOpacity: false)
+            }
+            if kind == .countdown {
+                NotificationNumberSetting("Countdown duration", value: $settings.countdownSeconds,
+                                          range: 1...86400, suffix: "s")
+                TextField("Countdown regex", text: $settings.countdownPattern)
+                    .textFieldStyle(.roundedBorder)
+                Text("Optional regex: capture a number of seconds in group 1. If it does not match, no countdown starts.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let error = settings.countdownPatternError {
+                    Text(error).font(.caption).foregroundStyle(.red)
+                }
+                Text("When countdown ends").font(.body.weight(.medium))
+                ForEach(NotificationOutputKind.allCases.filter { $0 != .countdown }, id: \.self) { completion in
+                    Toggle(completion.label, isOn: completionBinding(completion))
+                }
+            }
+            if kind == .sound {
+                Picker("Alert sound", selection: $settings.soundName) {
+                    ForEach(["Glass", "Hero", "Morse", "Ping", "Pop", "Submarine", "Tink"], id: \.self) { name in
+                        Text(name).tag(name)
+                    }
+                }
+                .disabled(settings.speechEnabled)
+                Toggle("Speak the message", isOn: $settings.speechEnabled)
+            }
+        }
+    }
+
+    private var colorBinding: Binding<Color> {
+        Binding(
+            get: { Color(hex: settings.colorHex) ?? .yellow },
+            set: { value in
+                guard let color = NSColor(value).usingColorSpace(.genericRGB) else { return }
+                settings.colorHex = String(
+                    format: "#%02X%02X%02X",
+                    Int((min(1, max(0, color.redComponent)) * 255).rounded()),
+                    Int((min(1, max(0, color.greenComponent)) * 255).rounded()),
+                    Int((min(1, max(0, color.blueComponent)) * 255).rounded())
+                )
+            }
+        )
+    }
+
+    private func completionBinding(_ completion: NotificationOutputKind) -> Binding<Bool> {
+        Binding(
+            get: { settings.completionOutputs.contains(completion) },
             set: { enabled in
-                if enabled { outputs.completionOutputs.insert(kind) } else { outputs.completionOutputs.remove(kind) }
+                if enabled { settings.completionOutputs.insert(completion) }
+                else { settings.completionOutputs.remove(completion) }
             }
         )
     }
 }
 
-private extension NotificationOutputs {
+private extension NotificationOutputSettings {
     var countdownPatternError: String? {
-        guard enabled.contains(.countdown), !countdownPattern.isEmpty else { return nil }
+        guard !countdownPattern.isEmpty else { return nil }
         guard let expression = try? NSRegularExpression(pattern: countdownPattern) else {
             return NSLocalizedString("Invalid countdown regex.", comment: "Notification countdown rule")
         }
@@ -335,6 +487,13 @@ private extension NotificationOutputs {
             return NSLocalizedString("Countdown regex must capture seconds in group 1.", comment: "Notification countdown rule")
         }
         return nil
+    }
+}
+
+private extension NotificationOutputs {
+    func countdownPatternError(defaults: [NotificationOutputKind: NotificationOutputSettings]) -> String? {
+        guard enabled.contains(.countdown) else { return nil }
+        return (overrides[.countdown] ?? defaults[.countdown] ?? NotificationOutputSettings()).countdownPatternError
     }
 }
 

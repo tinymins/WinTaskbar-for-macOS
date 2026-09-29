@@ -854,5 +854,49 @@
 	<string>Messages appear here.</string>
 	<key>Value</key>
 	<string>Value</string>
+	<key>Notification receiving</key>
+	<string>Notification receiving</string>
+	<key>Receive new system notifications</key>
+	<string>Receive new system notifications</string>
+	<key>Turning this on waits for new system notification banners; it does not show a sample. Turning it off stops receiving and clears current alerts.</key>
+	<string>Turning this on waits for new system notification banners; it does not show a sample. Turning it off stops receiving and clears current alerts.</string>
+	<key>Notification receiving is off.</key>
+	<string>Notification receiving is off.</string>
+	<key>Current alerts are kept in memory and disappear when WinTaskbar quits.</key>
+	<string>Current alerts are kept in memory and disappear when WinTaskbar quits.</string>
+	<key>Rules are checked from top to bottom. The first enabled match chooses the output combination. Unmatched notifications use the fallback.</key>
+	<string>Rules are checked from top to bottom. The first enabled match chooses the output combination. Unmatched notifications use the fallback.</string>
+	<key>Always applies when no rule matches. It stays last and cannot be disabled or deleted.</key>
+	<string>Always applies when no rule matches. It stays last and cannot be disabled or deleted.</string>
+	<key>Edit fallback</key>
+	<string>Edit fallback</string>
+	<key>Output settings</key>
+	<string>Output settings</string>
+	<key>Choose one output to edit its shared defaults. Rules may inherit these settings or customize that output.</key>
+	<string>Choose one output to edit its shared defaults. Rules may inherit these settings or customize that output.</string>
+	<key>Output category</key>
+	<string>Output category</string>
+	<key>Preview this output</key>
+	<string>Preview this output</string>
+	<key>Preview works even when notification receiving is off.</key>
+	<string>Preview works even when notification receiving is off.</string>
+	<key>Window behavior and layout</key>
+	<string>Window behavior and layout</string>
+	<key>Drag the sample overlays to place them. The important-message frame appears here even when its list is empty.</key>
+	<string>Drag the sample overlays to place them. The important-message frame appears here even when its list is empty.</string>
+	<key>The list hides its frame when there are no messages.</key>
+	<string>The list hides its frame when there are no messages.</string>
+	<key>This rule applies whenever no enabled rule matches.</key>
+	<string>This rule applies whenever no enabled rule matches.</string>
+	<key>Output combination</key>
+	<string>Output combination</string>
+	<key>Each checkbox controls this rule only. Select none to ignore a matching notification.</key>
+	<string>Each checkbox controls this rule only. Select none to ignore a matching notification.</string>
+	<key>%@ after countdown</key>
+	<string>%@ after countdown</string>
+	<key>Customize for this rule</key>
+	<string>Customize for this rule</string>
+	<key>Uses shared output settings</key>
+	<string>Uses shared output settings</string>
 </dict>
 </plist>

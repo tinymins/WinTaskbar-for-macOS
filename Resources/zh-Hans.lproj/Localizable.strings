@@ -860,5 +860,49 @@
 	<string>消息将在这里显示。</string>
 	<key>Value</key>
 	<string>数值</string>
+	<key>Notification receiving</key>
+	<string>通知接收</string>
+	<key>Receive new system notifications</key>
+	<string>接收新的系统通知</string>
+	<key>Turning this on waits for new system notification banners; it does not show a sample. Turning it off stops receiving and clears current alerts.</key>
+	<string>开启后等待新的系统通知横幅；不会自动弹出示例。关闭会停止接收并清空当前提醒。</string>
+	<key>Notification receiving is off.</key>
+	<string>通知接收已关闭。</string>
+	<key>Current alerts are kept in memory and disappear when WinTaskbar quits.</key>
+	<string>当前提醒只保存在内存中，退出 WinTaskbar 后清空。</string>
+	<key>Rules are checked from top to bottom. The first enabled match chooses the output combination. Unmatched notifications use the fallback.</key>
+	<string>规则从上到下匹配。首条命中的已启用规则决定输出组合；未命中时使用默认规则。</string>
+	<key>Always applies when no rule matches. It stays last and cannot be disabled or deleted.</key>
+	<string>未命中规则时始终应用。它固定在末尾，不可禁用或删除。</string>
+	<key>Edit fallback</key>
+	<string>编辑默认规则</string>
+	<key>Output settings</key>
+	<string>输出设置</string>
+	<key>Choose one output to edit its shared defaults. Rules may inherit these settings or customize that output.</key>
+	<string>选择一种输出编辑其通用设置。规则可以继承，也可以为该输出自定义。</string>
+	<key>Output category</key>
+	<string>输出类别</string>
+	<key>Preview this output</key>
+	<string>预览当前输出</string>
+	<key>Preview works even when notification receiving is off.</key>
+	<string>即使关闭通知接收，仍可使用预览。</string>
+	<key>Window behavior and layout</key>
+	<string>窗口行为与布局</string>
+	<key>Drag the sample overlays to place them. The important-message frame appears here even when its list is empty.</key>
+	<string>拖动示例浮层调整位置。即使列表为空，布局编辑时也会显示重要消息框架。</string>
+	<key>The list hides its frame when there are no messages.</key>
+	<string>没有消息时，列表会隐藏整个框架。</string>
+	<key>This rule applies whenever no enabled rule matches.</key>
+	<string>没有已启用规则匹配时应用此规则。</string>
+	<key>Output combination</key>
+	<string>输出组合</string>
+	<key>Each checkbox controls this rule only. Select none to ignore a matching notification.</key>
+	<string>每个勾选框只控制此规则。全部不选时忽略匹配的通知。</string>
+	<key>%@ after countdown</key>
+	<string>倒计时结束后：%@</string>
+	<key>Customize for this rule</key>
+	<string>为此规则自定义</string>
+	<key>Uses shared output settings</key>
+	<string>使用通用输出设置</string>
 </dict>
 </plist>

@@ -117,17 +117,18 @@ final class SystemNotificationService: ObservableObject {
     private func configure(_ value: NotificationPreferences) {
         let changedEnabled = configuration.enabled != value.enabled
         let changedRules = configuration.rules != value.rules || configuration.fallback != value.fallback
+            || configuration.outputDefaults != value.outputDefaults
         configuration = value
         if changedRules {
             cards = cards.compactMap { card in
                 guard !card.content.sourceID.hasPrefix("preview:") else { return card }
                 let plan = value.plan(for: card.content)
                 let outputs = plan.outputs
-                guard outputs.enabled.contains(.card), outputs.card.mode != .hidden else { return nil }
+                guard outputs.enabled.contains(.card), outputs.settings(for: .card).card.mode != .hidden else { return nil }
                 var updated = card
-                updated.renderedText = outputs.textTemplate.isEmpty ? nil : plan.text
-                if updated.behavior != outputs.card {
-                    updated.behavior = outputs.card
+                updated.renderedText = outputs.settings(for: .card).textTemplate.isEmpty ? nil : plan.text(for: .card)
+                if updated.behavior != outputs.settings(for: .card).card {
+                    updated.behavior = outputs.settings(for: .card).card
                     updated.remaining = nil
                 }
                 return updated
@@ -177,7 +178,7 @@ final class SystemNotificationService: ObservableObject {
                 self.seen[content.sourceID] = (content, now)
                 guard previous != content else { continue }
                 let plan = rules.plan(for: content)
-                if !plan.outputs.enabled.contains(.card) || plan.outputs.card.mode == .hidden {
+                if !plan.outputs.enabled.contains(.card) || plan.outputs.settings(for: .card).card.mode == .hidden {
                     self.cards.removeAll { $0.content.sourceID == content.sourceID }
                     self.layout()
                 }
@@ -195,15 +196,20 @@ final class SystemNotificationService: ObservableObject {
             title: NSLocalizedString("Notification preview", comment: "Notification sample"),
             body: NSLocalizedString("Preview message. Alerts stay in memory and disappear when WinTaskbar quits.", comment: "Notification sample")
         )
-        receive(NotificationPreferences(fallback: value).plan(for: content), now: ProcessInfo.processInfo.systemUptime)
+        var preview = configuration
+        preview.rules = []
+        preview.fallback = value
+        receive(preview.plan(for: content), now: ProcessInfo.processInfo.systemUptime)
     }
 
     func showOutputPreview(_ kind: NotificationOutputKind) {
-        var outputs = configuration.fallback
-        outputs.enabled = [kind]
-        outputs.card = NotificationDisplayBehavior()
-        outputs.countdownPattern = ""
-        outputs.countdownSeconds = 5
+        var outputs = NotificationOutputs(enabled: [kind])
+        if kind == .countdown {
+            var settings = configuration.outputDefaults[.countdown] ?? NotificationOutputSettings()
+            settings.countdownPattern = ""
+            settings.completionOutputs = []
+            outputs.overrides[.countdown] = settings
+        }
         showPreview(outputs: outputs)
     }
 
@@ -227,29 +233,31 @@ final class SystemNotificationService: ObservableObject {
     private func deliver(_ plan: NotificationAlertPlan) {
         let outputs = plan.outputs
         let content = plan.content
-        if outputs.enabled.contains(.card), outputs.card.mode != .hidden {
+        if outputs.enabled.contains(.card), outputs.settings(for: .card).card.mode != .hidden {
             if let index = cards.firstIndex(where: { $0.content.sourceID == content.sourceID }) {
                 cards[index].content = content
-                cards[index].renderedText = outputs.textTemplate.isEmpty ? nil : plan.text
-                cards[index].behavior = outputs.card
+                cards[index].renderedText = outputs.settings(for: .card).textTemplate.isEmpty ? nil : plan.text(for: .card)
+                cards[index].behavior = outputs.settings(for: .card).card
                 cards[index].remaining = nil
             } else {
                 cards.append(Card(id: UUID(), content: content,
-                                  renderedText: outputs.textTemplate.isEmpty ? nil : plan.text,
-                                  behavior: outputs.card, remaining: nil))
+                                  renderedText: outputs.settings(for: .card).textTemplate.isEmpty ? nil : plan.text(for: .card),
+                                  behavior: outputs.settings(for: .card).card, remaining: nil))
             }
         }
-        let color = NSColor(hex: outputs.colorHex) ?? NotificationGlow.defaultColor
-        let duration = min(3600, max(0.5, outputs.durationSeconds))
-        if outputs.enabled.contains(.centerText) {
-            presenter.showText(plan.text, large: false, color: color, duration: duration)
+        for kind in [NotificationOutputKind.centerText, .largeText, .glow] where outputs.enabled.contains(kind) {
+            let settings = outputs.settings(for: kind)
+            let color = NSColor(hex: settings.colorHex) ?? NotificationGlow.defaultColor
+            let duration = min(3600, max(0.5, settings.durationSeconds))
+            if kind == .glow {
+                presenter.showGlow(color: color, duration: duration)
+            } else {
+                presenter.showText(plan.text(for: kind), large: kind == .largeText, color: color, duration: duration)
+            }
         }
-        if outputs.enabled.contains(.largeText) {
-            presenter.showText(plan.text, large: true, color: color, duration: duration)
-        }
-        if outputs.enabled.contains(.glow) { presenter.showGlow(color: color, duration: duration) }
         if outputs.enabled.contains(.sound) {
-            presenter.playSound(named: outputs.soundName, speech: outputs.speechEnabled ? plan.text : nil)
+            let settings = outputs.settings(for: .sound)
+            presenter.playSound(named: settings.soundName, speech: settings.speechEnabled ? plan.text(for: .sound) : nil)
         }
         layout()
     }

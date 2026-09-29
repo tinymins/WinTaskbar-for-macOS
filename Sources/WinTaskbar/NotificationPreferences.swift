@@ -45,8 +45,7 @@ enum NotificationOutputKind: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-struct NotificationOutputs: Codable, Equatable {
-    var enabled: Set<NotificationOutputKind> = [.card]
+struct NotificationOutputSettings: Codable, Equatable {
     var card = NotificationDisplayBehavior()
     var colorHex = "#FFCC05"
     var textTemplate = ""
@@ -54,15 +53,8 @@ struct NotificationOutputs: Codable, Equatable {
     var countdownSeconds: Double = 60
     var countdownPattern = ""
     var completionOutputs: Set<NotificationOutputKind> = [.largeText, .glow]
-    var cooldownSeconds: Double = 0
     var soundName = "Glass"
     var speechEnabled = false
-
-    var summary: String {
-        let names = NotificationOutputKind.allCases.filter { enabled.contains($0) }.map(\.label)
-        return names.isEmpty ? NSLocalizedString("Do not show", comment: "Notification outputs")
-            : names.joined(separator: ", ")
-    }
 
     func countdownDuration(message: String) -> TimeInterval? {
         let seconds: Double
@@ -77,6 +69,23 @@ struct NotificationOutputs: Codable, Equatable {
             seconds = parsed
         }
         return seconds.isFinite && seconds > 0 ? min(86_400, seconds) : nil
+    }
+}
+
+struct NotificationOutputs: Codable, Equatable {
+    var enabled: Set<NotificationOutputKind> = [.card]
+    var overrides: [NotificationOutputKind: NotificationOutputSettings] = [:]
+    var cooldownSeconds: Double = 0
+
+    // Every key is present after NotificationPreferences resolves the rule against defaults.
+    func settings(for kind: NotificationOutputKind) -> NotificationOutputSettings {
+        overrides[kind] ?? NotificationOutputSettings()
+    }
+
+    var summary: String {
+        let names = NotificationOutputKind.allCases.filter { enabled.contains($0) }.map(\.label)
+        return names.isEmpty ? NSLocalizedString("Do not show", comment: "Notification outputs")
+            : names.joined(separator: ", ")
     }
 }
 
@@ -140,59 +149,69 @@ struct NotificationPresentationPreferences: Codable, Equatable {
 struct NotificationAlertPlan {
     let content: SystemNotificationContent
     let outputs: NotificationOutputs
-    let text: String
     let countdownDuration: TimeInterval?
     let ruleID: String
+    let captures: [String]
+
+    func text(for kind: NotificationOutputKind) -> String {
+        let template = outputs.settings(for: kind).textTemplate
+        if template.isEmpty { return content.title.isEmpty ? content.body : content.title }
+        let expression = try? NSRegularExpression(pattern: #"\{(app|title|body|[1-9][0-9]*)\}"#)
+        var rendered = ""
+        var cursor = template.startIndex
+        for match in expression?.matches(in: template, range: NSRange(template.startIndex..., in: template)) ?? [] {
+            guard let fullRange = Range(match.range, in: template),
+                  let keyRange = Range(match.range(at: 1), in: template) else { continue }
+            rendered.append(contentsOf: template[cursor..<fullRange.lowerBound])
+            let key = String(template[keyRange])
+            switch key {
+            case "app": rendered += content.appName
+            case "title": rendered += content.title
+            case "body": rendered += content.body
+            default:
+                if let number = Int(key), number <= captures.count {
+                    rendered += captures[number - 1]
+                } else {
+                    rendered.append(contentsOf: template[fullRange])
+                }
+            }
+            cursor = fullRange.upperBound
+        }
+        rendered.append(contentsOf: template[cursor...])
+        return rendered
+    }
 }
 
 struct NotificationPreferences: Codable, Equatable {
     var enabled = false
     var rules: [NotificationCaptureRule] = []
     var fallback = NotificationOutputs()
+    var outputDefaults: [NotificationOutputKind: NotificationOutputSettings] = Dictionary(
+        uniqueKeysWithValues: NotificationOutputKind.allCases.map { ($0, NotificationOutputSettings()) }
+    )
     var presentation = NotificationPresentationPreferences()
 
     func outputs(app: String, title: String, body: String) -> NotificationOutputs {
-        rules.first { $0.matches(app: app, message: title + "\n" + body) }?.outputs ?? fallback
+        resolved(rules.first { $0.matches(app: app, message: title + "\n" + body) }?.outputs ?? fallback)
     }
 
     func plan(for content: SystemNotificationContent) -> NotificationAlertPlan {
         let message = content.title + "\n" + content.body
         let rule = rules.first { $0.matches(app: content.appName, message: message) }
-        let selected = rule?.outputs ?? fallback
-        let template = selected.textTemplate
-        let text: String
-        if template.isEmpty {
-            text = content.title.isEmpty ? content.body : content.title
-        } else {
-            let captures = rule?.captureGroups(in: message) ?? []
-            let expression = try? NSRegularExpression(pattern: #"\{(app|title|body|[1-9][0-9]*)\}"#)
-            var rendered = ""
-            var cursor = template.startIndex
-            for match in expression?.matches(in: template, range: NSRange(template.startIndex..., in: template)) ?? [] {
-                guard let fullRange = Range(match.range, in: template),
-                      let keyRange = Range(match.range(at: 1), in: template) else { continue }
-                rendered.append(contentsOf: template[cursor..<fullRange.lowerBound])
-                let key = String(template[keyRange])
-                switch key {
-                case "app": rendered += content.appName
-                case "title": rendered += content.title
-                case "body": rendered += content.body
-                default:
-                    if let number = Int(key), number <= captures.count {
-                        rendered += captures[number - 1]
-                    } else {
-                        rendered.append(contentsOf: template[fullRange])
-                    }
-                }
-                cursor = fullRange.upperBound
-            }
-            rendered.append(contentsOf: template[cursor...])
-            text = rendered
-        }
+        let selected = resolved(rule?.outputs ?? fallback)
         return NotificationAlertPlan(
-            content: content, outputs: selected, text: text,
-            countdownDuration: selected.enabled.contains(.countdown) ? selected.countdownDuration(message: message) : nil,
-            ruleID: rule?.id.uuidString ?? "fallback"
+            content: content, outputs: selected,
+            countdownDuration: selected.enabled.contains(.countdown)
+                ? selected.settings(for: .countdown).countdownDuration(message: message) : nil,
+            ruleID: rule?.id.uuidString ?? "fallback", captures: rule?.captureGroups(in: message) ?? []
         )
+    }
+
+    private func resolved(_ selected: NotificationOutputs) -> NotificationOutputs {
+        var result = selected
+        result.overrides = Dictionary(uniqueKeysWithValues: NotificationOutputKind.allCases.map { kind in
+            (kind, selected.overrides[kind] ?? outputDefaults[kind] ?? NotificationOutputSettings())
+        })
+        return result
     }
 }

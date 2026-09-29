@@ -164,7 +164,9 @@ final class NotificationParserSelfTest {
         guard parsed.count == 2 else { return }
         let chat = parsed[0]
         let calendar = parsed[1]
-        let persistent = NotificationOutputs(card: NotificationDisplayBehavior(mode: .persistent))
+        let persistent = NotificationOutputs(overrides: [
+            .card: NotificationOutputSettings(card: NotificationDisplayBehavior(mode: .persistent))
+        ])
         let hidden = NotificationOutputs(enabled: [])
         var settings = NotificationPreferences(rules: [
             NotificationCaptureRule(appName: "messag", messagePattern: "(?i)urgent", outputs: persistent),
@@ -173,14 +175,14 @@ final class NotificationParserSelfTest {
         func behavior(_ content: SystemNotificationContent) -> NotificationOutputs {
             settings.outputs(app: content.appName, title: content.title, body: content.body)
         }
-        checkEqual(behavior(chat), persistent)
-        checkNil(behavior(chat).card.duration)
-        checkEqual(behavior(calendar).card.duration, 15)
+        checkEqual(behavior(chat).enabled, persistent.enabled)
+        checkNil(behavior(chat).settings(for: .card).card.duration)
+        checkEqual(behavior(calendar).settings(for: .card).card.duration, 15)
         settings.rules.swapAt(0, 1)
         check(behavior(chat).enabled.isEmpty)
         settings.rules[0].enabled = false
-        checkEqual(behavior(chat), persistent)
+        checkNil(behavior(chat).settings(for: .card).card.duration)
         settings.rules[1].messagePattern = "does not match"
-        checkEqual(behavior(chat), settings.fallback)
+        checkEqual(behavior(chat).settings(for: .card), settings.fallback.settings(for: .card))
     }
 }

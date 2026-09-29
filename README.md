@@ -41,7 +41,9 @@ The full-screen Alt+Tab switcher uses live window thumbnails, recent-use orderin
 
 ## Desktop alerts
 
-In Settings > Notifications, enable capture and choose outputs for the fallback or add app-name/message-regex rules. Rules use the first enabled match; each rule can combine several outputs. Disabling the card still allows the other outputs. The fixed fallback handles unmatched notifications.
+In Settings > Notifications, enable receiving new system notifications, then edit the fallback or add app-name/message-regex rules. The receiving switch listens for new notifications; use Preview to show a sample immediately. Rules use the first enabled match; each rule can combine several outputs. Disabling the card still allows the other outputs. The fixed fallback handles unmatched notifications.
+
+Each output has its own common settings and preview, including applicable color, duration, text, position, and size. Rules inherit these settings unless you customize that output for the rule. For example, set cards to disappear after 15 seconds by default, then customize the Feishu rule to keep its cards until dismissed. Output checkboxes select what a rule triggers; they are not global channel switches.
 
 Important messages show an app icon and content until removed. The frame disappears when the list is empty. Messages, active countdowns, and alert history stay in memory and are cleared when WinTaskbar quits. Only rules and appearance/layout settings are saved.
 

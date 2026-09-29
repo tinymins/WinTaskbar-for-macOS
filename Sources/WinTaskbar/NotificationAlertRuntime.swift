@@ -29,15 +29,16 @@ final class NotificationAlertRuntime {
     func ingest(_ plan: NotificationAlertPlan, now: TimeInterval) -> Bool {
         let id = plan.content.sourceID
         if plan.outputs.enabled.contains(.important) {
-            let body = plan.outputs.textTemplate.isEmpty ? plan.content.body : plan.text
+            let settings = plan.outputs.settings(for: .important)
+            let body = settings.textTemplate.isEmpty ? plan.content.body : plan.text(for: .important)
             if let index = important.firstIndex(where: { $0.id == id }) {
                 important[index].content = plan.content
                 important[index].text = body
-                important[index].colorHex = plan.outputs.colorHex
+                important[index].colorHex = settings.colorHex
             } else {
                 important.append(ImportantMessage(
                     id: id, content: plan.content, text: body,
-                    colorHex: plan.outputs.colorHex, createdAt: now
+                    colorHex: settings.colorHex, createdAt: now
                 ))
             }
         }
@@ -50,16 +51,17 @@ final class NotificationAlertRuntime {
         if cooldown.isFinite, cooldown > 0 { lastAlertByRule[plan.ruleID] = now }
 
         if let duration = plan.countdownDuration {
+            let settings = plan.outputs.settings(for: .countdown)
             var completionOutputs = plan.outputs
-            completionOutputs.enabled = plan.outputs.completionOutputs.subtracting([.countdown])
+            completionOutputs.enabled = settings.completionOutputs.subtracting([.countdown])
             completionOutputs.cooldownSeconds = 0
             let completion = NotificationAlertPlan(
-                content: plan.content, outputs: completionOutputs, text: plan.text,
-                countdownDuration: nil, ruleID: plan.ruleID
+                content: plan.content, outputs: completionOutputs,
+                countdownDuration: nil, ruleID: plan.ruleID, captures: plan.captures
             )
             let countdown = NotificationCountdown(
-                id: id, content: plan.content, text: plan.text,
-                colorHex: plan.outputs.colorHex, deadline: now + duration,
+                id: id, content: plan.content, text: plan.text(for: .countdown),
+                colorHex: settings.colorHex, deadline: now + duration,
                 duration: duration, completionPlan: completion
             )
             if let index = countdowns.firstIndex(where: { $0.id == id }) {
