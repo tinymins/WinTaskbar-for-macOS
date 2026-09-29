@@ -522,7 +522,7 @@ private struct NotificationImportantOverlay: View {
     private var messageList: some View {
         VStack(spacing: 0) {
             ForEach(Array(rows.prefix(measuredRowCount ?? rows.count).enumerated()), id: \.element.id) { index, row in
-                HStack(alignment: .top, spacing: 10) {
+                ZStack(alignment: .topTrailing) {
                     Button { onOpen(row.appName) } label: {
                         HStack(alignment: .top, spacing: 10) {
                             Image(nsImage: icons[index]).resizable().frame(width: 28, height: 28)
@@ -541,20 +541,46 @@ private struct NotificationImportantOverlay: View {
                             Spacer(minLength: 0)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 12)
+                        .padding(.leading, 12)
+                        .padding(.trailing, editing ? 12 : 32)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(NotificationImportantButtonStyle())
                     .disabled(editing)
                     .help("Open source app. This does not jump to the original message.")
                     if !editing {
-                        Button { onDismiss(row.id) } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .bold)) }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(NSLocalizedString("Remove message", comment: "Remove important message"))
+                        Button { onDismiss(row.id) } label: {
+                            Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                                .padding(6)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(NotificationImportantButtonStyle())
+                        .accessibilityLabel(NSLocalizedString("Remove message", comment: "Remove important message"))
+                        .padding(6)
                     }
                 }
-                .padding(12)
                 if index < (measuredRowCount ?? rows.count) - 1 { Divider().padding(.leading, 50) }
             }
+        }
+    }
+}
+
+private struct NotificationImportantButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Feedback(configuration: configuration)
+    }
+
+    private struct Feedback: View {
+        let configuration: ButtonStyle.Configuration
+        @Environment(\.isEnabled) private var isEnabled
+        @State private var hovered = false
+
+        var body: some View {
+            configuration.label
+                .background(.primary.opacity(isEnabled ? (configuration.isPressed ? 0.14 : hovered ? 0.07 : 0) : 0),
+                            in: RoundedRectangle(cornerRadius: 6))
+                .onHover { hovered = $0 }
         }
     }
 }
