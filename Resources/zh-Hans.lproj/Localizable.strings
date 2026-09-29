@@ -920,8 +920,8 @@
 	<string>警告：可能错过消息</string>
 	<key>No bottom-right card will be shown, but the macOS banner will be hidden. The notification remains in Notification Center, but you may miss its arrival.</key>
 	<string>未开启右下角卡片，却选择了隐藏 macOS 横幅。消息仍会保留在通知中心，但你可能错过新消息提示。</string>
-	<key>Open source app. This does not jump to the original message.</key>
-	<string>打开来源应用，不会跳转到原始消息。</string>
+	<key>Open notification, then remove this item. Falls back to the source app if needed.</key>
+	<string>打开通知并移除此条目；无法跳转时打开来源应用。</string>
 	<key>Could not open the source app</key>
 	<string>无法打开来源应用</string>
 	<key>The source app is unavailable or its name matches more than one app. Open it manually.</key>

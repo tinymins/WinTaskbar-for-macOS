@@ -35,7 +35,7 @@ final class SystemNotificationService: ObservableObject {
     private var expiryTimer: Timer?
     private let captureWorker = SystemNotificationCapture()
     private var scanTask: Task<Void, Never>?
-    private var sourceOpenTask: Task<Void, Never>?
+    private var sourceOpenTasks: [UUID: (content: SystemNotificationContent, task: Task<Void, Never>)] = [:]
     private var capturePending = false
     private var generation = UUID()
     private var lastTick = ProcessInfo.processInfo.systemUptime
@@ -91,7 +91,7 @@ final class SystemNotificationService: ObservableObject {
                 MainActor.assumeIsolated {
                     self?.suspended = true
                     self?.scanTask?.cancel()
-                    self?.sourceOpenTask?.cancel()
+                    self?.cancelSourceOpens()
                     self?.captureWorker.setBannerHidingEnabled(false)
                     self?.presenter.setSuspended(true)
                     self?.panels.values.forEach { $0.orderOut(nil) }
@@ -196,6 +196,7 @@ final class SystemNotificationService: ObservableObject {
         let rules = configuration
         let worker = captureWorker
         let retained = runtime.important.map(\.content) + runtime.countdowns.map(\.content)
+            + cards.map(\.content) + sourceOpenTasks.values.map(\.content)
         scanTask = Task { [weak self] in
             let result = await worker.scan(retaining: retained)
             guard let self else { return }
@@ -323,21 +324,42 @@ final class SystemNotificationService: ObservableObject {
     }
 
     private func openImportant(_ id: String) {
-        guard sourceOpenTask == nil, configuration.enabled, !suspended,
+        guard configuration.enabled, !suspended,
               let content = runtime.important.first(where: { $0.id == id })?.content else { return }
+        openNotification(content)
+        runtime.removeImportant(id)
+        syncAlertLists()
+    }
+
+    private func openCard(_ id: UUID) {
+        guard configuration.enabled, !suspended,
+              let content = cards.first(where: { $0.id == id })?.content else { return }
+        openNotification(content)
+        dismiss(id)
+    }
+
+    private func openNotification(_ content: SystemNotificationContent) {
+        let requestID = UUID()
         let worker = captureWorker
-        sourceOpenTask = Task { [weak self] in
+        let task = Task { [weak self] in
+            guard !Task.isCancelled else { return }
             let result = await worker.open(content)
             guard let self else { return }
-            defer { self.sourceOpenTask = nil }
-            guard !Task.isCancelled, self.configuration.enabled, !self.suspended,
-                  self.runtime.important.first(where: { $0.id == id })?.content == content else { return }
+            defer { self.sourceOpenTasks.removeValue(forKey: requestID) }
+            guard !Task.isCancelled, self.configuration.enabled, !self.suspended else { return }
             if case .unavailable = result { self.presenter.openSourceApplication(content.appName) }
         }
+        // Keep the original target alive after its presentation has been consumed.
+        sourceOpenTasks[requestID] = (content, task)
+    }
+
+    private func cancelSourceOpens() {
+        sourceOpenTasks.values.forEach { $0.task.cancel() }
+        sourceOpenTasks.removeAll()
     }
 
     func clearAllAlerts() {
-        sourceOpenTask?.cancel()
+        cancelSourceOpens()
         endLayoutEditing()
         runtime.clear()
         presenter.stop()
@@ -442,6 +464,7 @@ final class SystemNotificationService: ObservableObject {
                 icon: runningApps.first { $0.localizedName?.localizedCaseInsensitiveCompare(card.content.appName) == .orderedSame }?.icon,
                 width: width, metrics: entry.metrics, expanded: expanded.contains(card.id),
                 queued: slot == visible.count - 1 ? max(0, cards.count - visible.count) : 0,
+                open: { [weak self] in self?.openCard(card.id) },
                 toggleExpanded: { [weak self] in
                     guard let self else { return }
                     if !self.expanded.insert(card.id).inserted { self.expanded.remove(card.id) }

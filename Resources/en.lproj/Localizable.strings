@@ -914,8 +914,8 @@
 	<string>Warning: notifications may be missed</string>
 	<key>No bottom-right card will be shown, but the macOS banner will be hidden. The notification remains in Notification Center, but you may miss its arrival.</key>
 	<string>No bottom-right card will be shown, but the macOS banner will be hidden. The notification remains in Notification Center, but you may miss its arrival.</string>
-	<key>Open source app. This does not jump to the original message.</key>
-	<string>Open source app. This does not jump to the original message.</string>
+	<key>Open notification, then remove this item. Falls back to the source app if needed.</key>
+	<string>Open notification, then remove this item. Falls back to the source app if needed.</string>
 	<key>Could not open the source app</key>
 	<string>Could not open the source app</string>
 	<key>The source app is unavailable or its name matches more than one app. Open it manually.</key>

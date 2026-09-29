@@ -9,6 +9,7 @@ struct NotificationCardView: View {
     let metrics: NotificationCardMetrics
     let expanded: Bool
     let queued: Int
+    let open: () -> Void
     let toggleExpanded: () -> Void
     let dismiss: () -> Void
     let clearAll: () -> Void
@@ -16,7 +17,7 @@ struct NotificationCardView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 Group {
                     if let icon {
@@ -64,27 +65,34 @@ struct NotificationCardView: View {
                 .font(.system(size: 12)).foregroundStyle(.secondary)
             }
             .frame(height: 28)
+            .padding(.horizontal, 20).padding(.top, 12)
 
-            Group {
-                if expanded {
-                    ScrollView {
-                        NotificationCardText(content: content, expanded: true)
-                            .textSelection(.enabled)
+            Button(action: open) {
+                Group {
+                    if expanded {
+                        ScrollView {
+                            NotificationCardText(content: content, expanded: true)
+                        }
+                    } else {
+                        NotificationCardText(content: content, expanded: false)
                     }
-                } else {
-                    NotificationCardText(content: content, expanded: false)
                 }
+                .frame(height: metrics.textHeight, alignment: .topLeading)
+                .clipped()
+                .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .frame(height: metrics.textHeight, alignment: .topLeading)
-            .clipped()
+            .buttonStyle(.plain)
+            .help("Open notification, then remove this item. Falls back to the source app if needed.")
         }
-        .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 20)
         .frame(width: width, height: metrics.height, alignment: .topLeading)
         .background {
             let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
             shape.fill(.regularMaterial)
                 .overlay(shape.fill(Color(white: colorScheme == .dark ? 0.16 : 0.97).opacity(0.85)))
         }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.09 : 0.65), lineWidth: 1)

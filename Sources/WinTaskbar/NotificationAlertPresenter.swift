@@ -447,11 +447,14 @@ final class NotificationAlertPresenter {
     }
 
     private func showSourceOpenError() {
-        guard let importantPanel else { return }
         let alert = NSAlert()
         alert.messageText = NSLocalizedString("Could not open the source app", comment: "Notification source")
         alert.informativeText = NSLocalizedString("The source app is unavailable or its name matches more than one app. Open it manually.", comment: "Notification source")
-        alert.beginSheetModal(for: importantPanel)
+        if let importantPanel, importantPanel.isVisible {
+            alert.beginSheetModal(for: importantPanel)
+        } else {
+            alert.runModal()
+        }
     }
 
     private func appIcon(_ name: String) -> NSImage {
@@ -657,7 +660,7 @@ private struct NotificationImportantOverlay: View {
                     }
                     .buttonStyle(NotificationImportantButtonStyle())
                     .disabled(editing)
-                    .help("Open source app. This does not jump to the original message.")
+                    .help("Open notification, then remove this item. Falls back to the source app if needed.")
                     if !editing {
                         Button { onDismiss(row.id) } label: {
                             Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
