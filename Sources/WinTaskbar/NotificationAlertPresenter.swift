@@ -235,7 +235,11 @@ final class NotificationAlertPresenter {
         let bottom = max(top - height, visibleFrame?.minY ?? top - height)
         let left = visibleFrame.map { min(max(panel.frame.minX, $0.minX), $0.maxX - width) } ?? panel.frame.minX
         panel.setFrame(NSRect(x: left, y: bottom, width: width, height: height), display: true)
-        panel.contentView = NSHostingView(rootView: view)
+        if let hosting = panel.contentView as? NSHostingView<NotificationImportantOverlay> {
+            hosting.rootView = view
+        } else {
+            panel.contentView = NSHostingView(rootView: view)
+        }
         if importantPanel == nil { position(panel, kind: .important) }
         importantPanel = panel
         panel.orderFrontRegardless()
@@ -669,6 +673,7 @@ private struct NotificationImportantOverlay: View {
                     if !editing {
                         Button { onDismiss(row.id) } label: {
                             Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                                .offset(y: -1)
                                 .frame(width: 24, height: 24)
                                 .contentShape(Rectangle())
                         }
@@ -682,12 +687,82 @@ private struct NotificationImportantOverlay: View {
                         .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: showsClose)
                     }
                 }
-                .onHover { inside in
-                    if inside { hoveredRowID = row.id }
-                    else if hoveredRowID == row.id { hoveredRowID = nil }
+                .background {
+                    if !measuring {
+                        NotificationImportantHoverTracking { inside in
+                            if inside { hoveredRowID = row.id }
+                            else if hoveredRowID == row.id { hoveredRowID = nil }
+                        }
+                    }
                 }
                 if index < (measuredRowCount ?? rows.count) - 1 { Divider().padding(.leading, 50) }
             }
+        }
+    }
+}
+
+private struct NotificationImportantHoverTracking: NSViewRepresentable {
+    let onHover: (Bool) -> Void
+
+    func makeNSView(context: Context) -> TrackingView { TrackingView() }
+
+    func updateNSView(_ view: TrackingView, context: Context) {
+        view.onHover = onHover
+        view.refreshAfterLayout()
+    }
+
+    final class TrackingView: NSView {
+        var onHover: ((Bool) -> Void)?
+        private var lastInside = false
+        private var refreshPending = false
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            trackingAreas.forEach(removeTrackingArea)
+            addTrackingArea(NSTrackingArea(rect: .zero,
+                                          options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                          owner: self, userInfo: nil))
+            refreshAfterLayout()
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            refreshAfterLayout()
+        }
+
+        override func setFrameOrigin(_ newOrigin: NSPoint) {
+            super.setFrameOrigin(newOrigin)
+            refreshAfterLayout()
+        }
+
+        override func setFrameSize(_ newSize: NSSize) {
+            super.setFrameSize(newSize)
+            refreshAfterLayout()
+        }
+
+        override func mouseEntered(with event: NSEvent) { refreshHover() }
+        override func mouseExited(with event: NSEvent) { refreshHover() }
+
+        func refreshAfterLayout() {
+            guard !refreshPending else { return }
+            refreshPending = true
+            // Rows can move beneath a stationary pointer without a mouse-enter event.
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.refreshPending = false
+                self.refreshHover()
+            }
+        }
+
+        private func refreshHover() {
+            let inside = window.map {
+                $0.isVisible && visibleRect.contains(convert($0.mouseLocationOutsideOfEventStream, from: nil))
+            } ?? false
+            guard inside != lastInside else { return }
+            lastInside = inside
+            onHover?(inside)
         }
     }
 }
