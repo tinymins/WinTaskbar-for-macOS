@@ -216,7 +216,7 @@ private struct NotificationRuleEditor: View {
     let onCancel: () -> Void
 
     var body: some View {
-        ScrollView {
+        NotificationEditorSheet {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Capture rule").font(.title2.weight(.semibold))
                 HStack {
@@ -234,18 +234,17 @@ private struct NotificationRuleEditor: View {
                 }
                 Divider()
                 NotificationOutputsEditor(outputs: $rule.outputs, defaults: defaults)
-                HStack {
-                    Button("Preview rule outputs") { service.showPreview(outputs: rule.outputs) }
-                    Spacer()
-                    Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
-                    Button("Save") { onSave(rule) }
-                        .keyboardShortcut(.defaultAction)
-                        .disabled(rule.isEmpty || rule.patternError != nil || rule.outputs.countdownPatternError(defaults: defaults) != nil)
-                }
             }
-            .padding(24)
+        } actions: {
+            HStack {
+                Button("Preview rule outputs") { service.showPreview(outputs: rule.outputs) }
+                Spacer()
+                Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
+                Button("Save") { onSave(rule) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(rule.isEmpty || rule.patternError != nil || rule.outputs.countdownPatternError(defaults: defaults) != nil)
+            }
         }
-        .frame(width: 560, height: 760)
         .onAppear { apps.reloadInstalledApps() }
     }
 
@@ -277,24 +276,60 @@ private struct NotificationFallbackEditor: View {
     let onCancel: () -> Void
 
     var body: some View {
-        ScrollView {
+        NotificationEditorSheet {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Default rule (fallback)").font(.title2.weight(.semibold))
                 Text("This rule applies whenever no enabled rule matches.")
                     .font(.caption).foregroundStyle(.secondary)
                 NotificationOutputsEditor(outputs: $outputs, defaults: defaults)
-                HStack {
-                    Button("Preview fallback") { service.showPreview(outputs: outputs) }
-                    Spacer()
-                    Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
-                    Button("Save") { onSave(outputs) }
-                        .keyboardShortcut(.defaultAction)
-                        .disabled(outputs.countdownPatternError(defaults: defaults) != nil)
-                }
             }
-            .padding(24)
+        } actions: {
+            HStack {
+                Button("Preview fallback") { service.showPreview(outputs: outputs) }
+                Spacer()
+                Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
+                Button("Save") { onSave(outputs) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(outputs.countdownPatternError(defaults: defaults) != nil)
+            }
         }
-        .frame(width: 560, height: 760)
+    }
+}
+
+private struct NotificationEditorSheet<Content: View, Actions: View>: View {
+    @ViewBuilder let content: Content
+    @ViewBuilder let actions: Actions
+    @State private var contentHeight: CGFloat = 440
+
+    private var maximumContentHeight: CGFloat {
+        min(620, max(180, (NSScreen.main?.visibleFrame.height ?? 800) - 180))
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                content
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(24)
+                    .background(GeometryReader { geometry in
+                        Color.clear.preference(key: NotificationEditorHeight.self, value: geometry.size.height)
+                    })
+            }
+            .frame(height: min(contentHeight, maximumContentHeight))
+            Divider()
+            actions
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
+        }
+        .frame(width: 560)
+        .onPreferenceChange(NotificationEditorHeight.self) { contentHeight = $0 }
+    }
+}
+
+private struct NotificationEditorHeight: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
