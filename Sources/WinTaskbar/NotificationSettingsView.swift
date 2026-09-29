@@ -14,10 +14,10 @@ struct NotificationSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            SettingsSection("Notification receiving") {
-                Toggle("Receive new system notifications", isOn: $preferences.notifications.enabled)
+            SettingsSection("Desktop alerts") {
+                Toggle("Enable desktop alerts", isOn: $preferences.notifications.enabled)
                     .toggleStyle(.switch)
-                Text("Turning this on waits for new system notification banners; it does not show a sample. Turning it off stops receiving and clears current alerts.")
+                Text("Turning this off stops receiving, clears current alerts, and disables all settings below. Your configuration is kept.")
                     .font(.caption).foregroundStyle(.secondary)
                 if preferences.notifications.enabled {
                     Text(LocalizedStringKey(service.statusKey))
@@ -29,112 +29,121 @@ struct NotificationSettingsView: View {
                 Text("Current alerts are kept in memory and disappear when WinTaskbar quits.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Clear current alerts") { service.clearAllAlerts() }
+                    .disabled(!preferences.notifications.enabled)
             }
 
-            SettingsSection("Trigger rules") {
-                Text("Rules are checked from top to bottom. The first enabled match chooses the output combination. Unmatched notifications use the fallback.")
-                    .font(.caption).foregroundStyle(.secondary)
-                ForEach($preferences.notifications.rules) { $rule in
-                    HStack(alignment: .top, spacing: 10) {
-                        Toggle("Enabled", isOn: $rule.enabled).labelsHidden()
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(rule.appName.isEmpty ? NSLocalizedString("Any app", comment: "Notification rule") : rule.appName)
-                                .font(.body.weight(.medium))
-                            if !rule.messagePattern.isEmpty {
-                                Text(rule.messagePattern).font(.system(.caption, design: .monospaced))
-                                    .textSelection(.enabled)
-                            }
-                            Text(outputSummary(rule.outputs)).font(.caption).foregroundStyle(.secondary)
-                            if let error = rule.patternError {
-                                Text(error).font(.caption).foregroundStyle(.red)
-                            }
-                        }
-                        Spacer()
-                        Button { moveRule(rule.id, offset: -1) } label: { Image(systemName: "arrow.up") }
-                            .disabled(preferences.notifications.rules.first?.id == rule.id).help("Move rule up")
-                            .accessibilityLabel("Move rule up")
-                        Button { moveRule(rule.id, offset: 1) } label: { Image(systemName: "arrow.down") }
-                            .disabled(preferences.notifications.rules.last?.id == rule.id).help("Move rule down")
-                            .accessibilityLabel("Move rule down")
-                        Button("Edit") { editingRule = rule }
-                        Button {
-                            preferences.notifications.rules.removeAll { $0.id == rule.id }
-                        } label: { Image(systemName: "trash") }
-                            .help("Delete rule")
-                    }.padding(.vertical, 4)
-                }
-                Button("Add capture rule") { editingRule = NotificationCaptureRule() }
-                Divider()
-                Label("Default rule (fallback)", systemImage: "arrow.turn.down.right")
-                    .font(.body.weight(.semibold))
-                Text(outputSummary(preferences.notifications.fallback))
-                    .font(.caption).foregroundStyle(.secondary)
-                Text("Always applies when no rule matches. It stays last and cannot be disabled or deleted.")
-                    .font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    Button("Edit fallback") { editingFallback = true }
-                    Button("Preview fallback") { service.showPreview() }
-                }
-            }
-
-            SettingsSection("Output settings") {
-                Text("Choose one output to edit its shared defaults. Rules may inherit these settings or customize that output.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Picker("Output category", selection: $selectedOutput) {
-                    ForEach(NotificationOutputKind.allCases, id: \.self) { kind in
-                        Text(kind.label).tag(kind)
-                    }
-                }
-                .pickerStyle(.menu)
-                NotificationChannelSettingsEditor(
-                    kind: selectedOutput,
-                    settings: defaultSettingsBinding(selectedOutput)
-                )
-                outputPlacement
-                Button("Preview this output") { service.showOutputPreview(selectedOutput) }
-                Text("Preview works even when notification receiving is off.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-
-            SettingsSection("Window behavior and layout") {
-                Toggle("Show above other windows", isOn: $preferences.notifications.presentation.alwaysOnTop)
-                Toggle("Show over fullscreen apps", isOn: $preferences.notifications.presentation.showInFullscreen)
-                Divider()
-                Text("Drag the sample overlays to place them. The important-message frame appears here even when its list is empty.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Button(service.isLayoutEditing ? "Finish layout editing" : "Edit layout") {
-                    if service.isLayoutEditing {
-                        service.endLayoutEditing()
-                    } else {
-                        service.beginLayoutEditing()
-                    }
-                }
-            }
-
-            SettingsSection("System setup") {
-                Label(LocalizedStringKey(permissions.accessibilityTrusted ? "Accessibility access granted" : "Accessibility access required"),
-                      systemImage: permissions.accessibilityTrusted ? "checkmark.circle" : "exclamationmark.triangle")
-                Button("Open Accessibility settings") { permissions.openAccessibilitySettings() }
-                Divider()
-                Text("In System Settings > Notifications, set “when mirroring or sharing the display” to “Allow Notifications”. Also enable Desktop notifications for the apps you want to capture.")
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("This allows notification content to appear in shared screens. Focus modes can still suppress banners; notifications without a visible system banner may not be captured.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Button("Open system notification settings") {
-                    guard let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") else { return }
-                    settingsOpenFailed = !NSWorkspace.shared.open(url)
-                }
-                if settingsOpenFailed {
-                    Text("Open System Settings manually and choose Notifications.")
+            Group {
+                SettingsSection("Trigger rules") {
+                    Text("Rules are checked from top to bottom. The first enabled match chooses the output combination. Unmatched notifications use the fallback.")
                         .font(.caption).foregroundStyle(.secondary)
+                    ForEach($preferences.notifications.rules) { $rule in
+                        HStack(alignment: .top, spacing: 10) {
+                            Toggle("Enabled", isOn: $rule.enabled).labelsHidden()
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(rule.appName.isEmpty ? NSLocalizedString("Any app", comment: "Notification rule") : rule.appName)
+                                    .font(.body.weight(.medium))
+                                if !rule.messagePattern.isEmpty {
+                                    Text(rule.messagePattern).font(.system(.caption, design: .monospaced))
+                                        .textSelection(.enabled)
+                                }
+                                Text(outputSummary(rule.outputs)).font(.caption).foregroundStyle(.secondary)
+                                if let error = rule.patternError {
+                                    Text(error).font(.caption).foregroundStyle(.red)
+                                }
+                            }
+                            Spacer()
+                            Button { moveRule(rule.id, offset: -1) } label: { Image(systemName: "arrow.up") }
+                                .disabled(preferences.notifications.rules.first?.id == rule.id).help("Move rule up")
+                                .accessibilityLabel("Move rule up")
+                            Button { moveRule(rule.id, offset: 1) } label: { Image(systemName: "arrow.down") }
+                                .disabled(preferences.notifications.rules.last?.id == rule.id).help("Move rule down")
+                                .accessibilityLabel("Move rule down")
+                            Button("Edit") { editingRule = rule }
+                            Button {
+                                preferences.notifications.rules.removeAll { $0.id == rule.id }
+                            } label: { Image(systemName: "trash") }
+                                .help("Delete rule")
+                        }.padding(.vertical, 4)
+                    }
+                    Button("Add capture rule") { editingRule = NotificationCaptureRule() }
+                    Divider()
+                    Label("Default rule (fallback)", systemImage: "arrow.turn.down.right")
+                        .font(.body.weight(.semibold))
+                    Text(outputSummary(preferences.notifications.fallback))
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Always applies when no rule matches. It stays last and cannot be disabled or deleted.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        Button("Edit fallback") { editingFallback = true }
+                        Button("Preview fallback") { service.showPreview() }
+                    }
+                }
+
+                SettingsSection("Output settings") {
+                    Text("Choose one output to edit its shared defaults. Rules may inherit these settings or customize that output.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Picker("Output category", selection: $selectedOutput) {
+                        ForEach(NotificationOutputKind.allCases, id: \.self) { kind in
+                            Text(kind.label).tag(kind)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    NotificationChannelSettingsEditor(
+                        kind: selectedOutput,
+                        settings: defaultSettingsBinding(selectedOutput)
+                    )
+                    outputPlacement
+                    Button("Preview this output") { service.showOutputPreview(selectedOutput) }
+                }
+
+                SettingsSection("Window behavior and layout") {
+                    Toggle("Show above other windows", isOn: $preferences.notifications.presentation.alwaysOnTop)
+                    Toggle("Show over fullscreen apps", isOn: $preferences.notifications.presentation.showInFullscreen)
+                    Divider()
+                    Text("Drag the sample overlays to place them. The important-message frame appears here even when its list is empty.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button(service.isLayoutEditing ? "Finish layout editing" : "Edit layout") {
+                        if service.isLayoutEditing {
+                            service.endLayoutEditing()
+                        } else {
+                            service.beginLayoutEditing()
+                        }
+                    }
+                }
+
+                SettingsSection("System setup") {
+                    Label(LocalizedStringKey(permissions.accessibilityTrusted ? "Accessibility access granted" : "Accessibility access required"),
+                          systemImage: permissions.accessibilityTrusted ? "checkmark.circle" : "exclamationmark.triangle")
+                    Button("Open Accessibility settings") { permissions.openAccessibilitySettings() }
+                    Divider()
+                    Text("In System Settings > Notifications, set “when mirroring or sharing the display” to “Allow Notifications”. Also enable Desktop notifications for the apps you want to capture.")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("This allows notification content to appear in shared screens. Focus modes can still suppress banners; notifications without a visible system banner may not be captured.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Open system notification settings") {
+                        guard let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") else { return }
+                        settingsOpenFailed = !NSWorkspace.shared.open(url)
+                    }
+                    if settingsOpenFailed {
+                        Text("Open System Settings manually and choose Notifications.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
+            .disabled(!preferences.notifications.enabled)
+            .opacity(preferences.notifications.enabled ? 1 : 0.5)
         }
         .onAppear { permissions.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             permissions.refresh()
         }
         .onDisappear { service.endLayoutEditing() }
+        .onChange(of: preferences.notifications.enabled) { enabled in
+            if !enabled {
+                editingRule = nil
+                editingFallback = false
+            }
+        }
         .sheet(item: $editingRule) { rule in
             NotificationRuleEditor(rule: rule, defaults: preferences.notifications.outputDefaults,
                                    apps: apps, service: service) { updated in

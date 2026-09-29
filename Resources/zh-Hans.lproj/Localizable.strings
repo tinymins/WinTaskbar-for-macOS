@@ -864,8 +864,8 @@
 	<string>通知接收</string>
 	<key>Receive new system notifications</key>
 	<string>接收新的系统通知</string>
-	<key>Turning this on waits for new system notification banners; it does not show a sample. Turning it off stops receiving and clears current alerts.</key>
-	<string>开启后等待新的系统通知横幅；不会自动弹出示例。关闭会停止接收并清空当前提醒。</string>
+	<key>Turning this off stops receiving, clears current alerts, and disables all settings below. Your configuration is kept.</key>
+	<string>关闭后停止接收、清空当前提醒，并禁用下方全部设置；已有配置会保留。</string>
 	<key>Notification receiving is off.</key>
 	<string>通知接收已关闭。</string>
 	<key>Current alerts are kept in memory and disappear when WinTaskbar quits.</key>
@@ -884,8 +884,6 @@
 	<string>输出类别</string>
 	<key>Preview this output</key>
 	<string>预览当前输出</string>
-	<key>Preview works even when notification receiving is off.</key>
-	<string>即使关闭通知接收，仍可使用预览。</string>
 	<key>Window behavior and layout</key>
 	<string>窗口行为与布局</string>
 	<key>Drag the sample overlays to place them. The important-message frame appears here even when its list is empty.</key>
@@ -904,5 +902,7 @@
 	<string>为此规则自定义</string>
 	<key>Uses shared output settings</key>
 	<string>使用通用输出设置</string>
+	<key>Enable desktop alerts</key>
+	<string>启用桌面提醒</string>
 </dict>
 </plist>

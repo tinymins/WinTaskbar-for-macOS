@@ -858,8 +858,8 @@
 	<string>Notification receiving</string>
 	<key>Receive new system notifications</key>
 	<string>Receive new system notifications</string>
-	<key>Turning this on waits for new system notification banners; it does not show a sample. Turning it off stops receiving and clears current alerts.</key>
-	<string>Turning this on waits for new system notification banners; it does not show a sample. Turning it off stops receiving and clears current alerts.</string>
+	<key>Turning this off stops receiving, clears current alerts, and disables all settings below. Your configuration is kept.</key>
+	<string>Turning this off stops receiving, clears current alerts, and disables all settings below. Your configuration is kept.</string>
 	<key>Notification receiving is off.</key>
 	<string>Notification receiving is off.</string>
 	<key>Current alerts are kept in memory and disappear when WinTaskbar quits.</key>
@@ -878,8 +878,6 @@
 	<string>Output category</string>
 	<key>Preview this output</key>
 	<string>Preview this output</string>
-	<key>Preview works even when notification receiving is off.</key>
-	<string>Preview works even when notification receiving is off.</string>
 	<key>Window behavior and layout</key>
 	<string>Window behavior and layout</string>
 	<key>Drag the sample overlays to place them. The important-message frame appears here even when its list is empty.</key>
@@ -898,5 +896,7 @@
 	<string>Customize for this rule</string>
 	<key>Uses shared output settings</key>
 	<string>Uses shared output settings</string>
+	<key>Enable desktop alerts</key>
+	<string>Enable desktop alerts</string>
 </dict>
 </plist>
