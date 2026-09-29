@@ -639,9 +639,12 @@ private struct NotificationImportantOverlay: View {
                                     Text(row.receivedAt, format: .dateTime.hour().minute().second())
                                         .font(.system(size: 10)).monospacedDigit().foregroundStyle(.secondary)
                                         .fixedSize()
+                                        .alignmentGuide(.importantMessageHeader) {
+                                            // Align the close glyph to the digits, excluding the font's descender space.
+                                            $0[.firstTextBaseline] - NSFont.systemFont(ofSize: 10).capHeight / 2
+                                        }
                                         .help(row.receivedAt.formatted(date: .complete, time: .standard))
                                 }
-                                .alignmentGuide(.importantMessageHeader) { $0[VerticalAlignment.center] }
                                 if !row.body.isEmpty { Text(row.body).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) }
                             }
                             Spacer(minLength: 0)
