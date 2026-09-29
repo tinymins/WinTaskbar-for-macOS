@@ -424,14 +424,43 @@ struct AccessibilityWindowSnapshot: Sendable {
     let fullScreenWindowIDs: Set<CGWindowID>
 }
 
-struct DetailedWindowSnapshot: Sendable {
-    let windows: [WindowInfo]
-    let accessibilitySnapshotsByPID: [pid_t: AccessibilityWindowSnapshot]
-}
-
 struct CachedWindowFilterResult {
     let windows: [WindowInfo]
     let hasUnclassifiedWindows: Bool
+}
+
+@MainActor
+private struct WindowSpaceSnapshot {
+    private typealias MainConnection = @convention(c) () -> Int32
+    private typealias CopyDisplaySpaces = @convention(c) (Int32) -> Unmanaged<CFArray>?
+    private typealias CopyWindowSpaces = @convention(c) (Int32, Int32, CFArray) -> Unmanaged<CFArray>?
+
+    private let connectionID: Int32
+    private let copyWindowSpaces: CopyWindowSpaces
+    private let visibleSpaceIDs: Set<UInt64>
+
+    init?() {
+        guard let handle = dlopen(nil, RTLD_LAZY) else { return nil }
+        defer { dlclose(handle) }
+        guard let connection = dlsym(handle, "CGSMainConnectionID"),
+              let displaySpaces = dlsym(handle, "CGSCopyManagedDisplaySpaces"),
+              let windowSpaces = dlsym(handle, "CGSCopySpacesForWindows") else { return nil }
+        connectionID = unsafeBitCast(connection, to: MainConnection.self)()
+        copyWindowSpaces = unsafeBitCast(windowSpaces, to: CopyWindowSpaces.self)
+        guard let displays = unsafeBitCast(displaySpaces, to: CopyDisplaySpaces.self)(connectionID)?
+            .takeRetainedValue() as? [[String: Any]] else { return nil }
+        visibleSpaceIDs = Set(displays.compactMap {
+            ($0["Current Space"] as? [String: Any])?["ManagedSpaceID"] as? UInt64
+        })
+        guard !visibleSpaceIDs.isEmpty else { return nil }
+    }
+
+    func isOnOtherSpace(_ windowID: CGWindowID) -> Bool {
+        // Mask 7 includes user and fullscreen Spaces. Check every display's current Space.
+        guard let spaces = copyWindowSpaces(connectionID, 7, [NSNumber(value: windowID)] as CFArray)?
+            .takeRetainedValue() as? [UInt64], !spaces.isEmpty else { return false }
+        return visibleSpaceIDs.isDisjoint(with: spaces)
+    }
 }
 
 struct WindowSwitcherEligibilityCache {
@@ -482,6 +511,10 @@ final class WindowsService {
             forPIDs: pids,
             options: WindowPreviewWindowPolicy.listOptions
         )
+        let spaceSnapshot = WindowSpaceSnapshot()
+        let hiddenPIDs = Set(pids.filter {
+            NSRunningApplication(processIdentifier: $0)?.isHidden == true
+        })
         switcherEligibilityCache.reconcile(
             observedWindowIDsByPID: Dictionary(grouping: candidates, by: \.pid).mapValues {
                 Set($0.map(\.windowID))
@@ -502,7 +535,11 @@ final class WindowsService {
                 classifiedWindowIDs: snapshot?.classifiedWindowIDs ?? [],
                 wasPreviouslyEligible: switcherEligibilityCache.contains(
                     candidate.windowID, forPID: candidate.pid
-                )
+                ),
+                isOnOtherSpace: !candidate.isOnScreen
+                    && spaceSnapshot?.isOnOtherSpace(candidate.windowID) == true,
+                isApplicationHidden: hiddenPIDs.contains(candidate.pid),
+                isFullScreen: snapshot?.fullScreenWindowIDs.contains(candidate.windowID) == true
             ) else { return nil }
             return WindowInfo(
                 windowID: candidate.windowID,
@@ -518,35 +555,14 @@ final class WindowsService {
         )
     }
 
-    nonisolated static func detailedWindowSnapshot(forPIDs pids: [pid_t]) -> DetailedWindowSnapshot {
+    nonisolated static func windowClassificationSnapshot(
+        forPIDs pids: [pid_t]
+    ) -> [pid_t: AccessibilityWindowSnapshot] {
         let candidates = windowCandidates(
             forPIDs: pids,
             options: WindowPreviewWindowPolicy.listOptions
         )
-        let snapshotsByPID = accessibilityWindowSnapshots(
-            forPIDs: Array(Set(candidates.map(\.pid)))
-        )
-        let windows: [WindowInfo] = candidates.compactMap { candidate in
-            let snapshot = snapshotsByPID[candidate.pid]
-            let states = snapshot?.states
-            guard WindowPreviewWindowPolicy.shouldInclude(
-                windowID: candidate.windowID,
-                isOnScreen: candidate.isOnScreen,
-                accessibilityWindows: states,
-                fullScreenWindowIDs: snapshot?.fullScreenWindowIDs ?? []
-            ) else { return nil }
-            return WindowInfo(
-                windowID: candidate.windowID,
-                title: candidate.title,
-                ownerPID: candidate.pid,
-                frame: candidate.frame,
-                isMinimized: states?[candidate.windowID] ?? false
-            )
-        }
-        return DetailedWindowSnapshot(
-            windows: windows,
-            accessibilitySnapshotsByPID: snapshotsByPID
-        )
+        return accessibilityWindowSnapshots(forPIDs: Array(Set(candidates.map(\.pid))))
     }
 
     func storeAccessibilityWindowSnapshots(_ snapshots: [pid_t: AccessibilityWindowSnapshot]) {
@@ -743,12 +759,20 @@ struct WindowPreviewWindowPolicy {
         hasWindowTitle: Bool = true,
         accessibilityWindows: [CGWindowID: Bool]?,
         classifiedWindowIDs: Set<CGWindowID>,
-        wasPreviouslyEligible: Bool = false
+        wasPreviouslyEligible: Bool = false,
+        isOnOtherSpace: Bool = false,
+        isApplicationHidden: Bool = false,
+        isFullScreen: Bool = false
     ) -> Bool {
+        let isRestorable = isOnOtherSpace || isApplicationHidden || isFullScreen
         guard classifiedWindowIDs.contains(windowID) else {
-            return (isOnScreen && hasWindowTitle) || wasPreviouslyEligible
+            if wasPreviouslyEligible && isRestorable { return true }
+            // A successful AX query is authoritative for visible windows; an empty
+            // result must not be treated like an unavailable query.
+            return accessibilityWindows == nil && isOnScreen && hasWindowTitle
         }
-        return accessibilityWindows?[windowID] != nil
+        guard let isMinimized = accessibilityWindows?[windowID] else { return false }
+        return isOnScreen || isMinimized || isRestorable
     }
 
     static func shouldIncludeAccessibilityWindow(role: String?, subrole: String?) -> Bool {

@@ -2628,7 +2628,8 @@ func runSelfTest() async -> Int32 {
 
     guard WindowPreviewWindowPolicy.shouldIncludeInSwitcher(
               windowID: 303, isOnScreen: false,
-              accessibilityWindows: [303: false], classifiedWindowIDs: [303]
+              accessibilityWindows: [303: false], classifiedWindowIDs: [303],
+              isOnOtherSpace: true
           ),
           WindowPreviewWindowPolicy.shouldIncludeInSwitcher(
               windowID: 404, isOnScreen: true,
@@ -2666,7 +2667,8 @@ func runSelfTest() async -> Int32 {
           WindowPreviewWindowPolicy.shouldIncludeInSwitcher(
               windowID: 404, isOnScreen: false,
               accessibilityWindows: [303: false], classifiedWindowIDs: [303],
-              wasPreviouslyEligible: crossSpaceEligibility.contains(404, forPID: 1)
+              wasPreviouslyEligible: crossSpaceEligibility.contains(404, forPID: 1),
+              isOnOtherSpace: true
           ) else {
         fputs("SELF-TEST FAILED: cross-Space eligible window history mismatch\n", stderr)
         return 1
@@ -3095,20 +3097,6 @@ func runSelfTest() async -> Int32 {
         screenFrame: switcherScreenFrame
     )
     let switcherVisibleFrame = CGRect(x: 100, y: 50, width: 1_200, height: 800)
-    let visibleSwitcherWindow = WindowInfo(
-        windowID: 501,
-        title: "Visible",
-        ownerPID: 50,
-        frame: landscapeWindowFrame,
-        isMinimized: false
-    )
-    let cachedMinimizedSwitcherWindow = WindowInfo(
-        windowID: 502,
-        title: "Minimized",
-        ownerPID: 50,
-        frame: landscapeWindowFrame,
-        isMinimized: true
-    )
     guard windowActivationOrder.reconcile(
         availableWindowIDs: [101, 202, 303],
         fallbackWindowIDs: [202, 101, 303]
@@ -3191,18 +3179,6 @@ func runSelfTest() async -> Int32 {
         taskbarThickness: 48,
         reservesTaskbar: false
     ) == switcherVisibleFrame,
-    WindowSwitcherWindowList.initialWindows(
-        visibleWindows: [visibleSwitcherWindow],
-        cachedWindows: [visibleSwitcherWindow, cachedMinimizedSwitcherWindow],
-        activePIDs: [50],
-        usesDetailedCache: true
-    ).map(\.windowID) == [501, 502],
-    WindowSwitcherWindowList.initialWindows(
-        visibleWindows: [visibleSwitcherWindow],
-        cachedWindows: [cachedMinimizedSwitcherWindow],
-        activePIDs: [50],
-        usesDetailedCache: false
-    ).map(\.windowID) == [501],
     singleRowSwitcherLayout.rows.count == 1,
     singleRowSwitcherLayout.previewHeight > WindowSwitcherLayout.previewHeight,
     crowdedSwitcherLayout.previewHeight < WindowSwitcherLayout.previewHeight,

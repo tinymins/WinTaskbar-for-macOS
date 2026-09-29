@@ -468,26 +468,6 @@ enum WindowSwitcherSelection {
     }
 }
 
-enum WindowSwitcherWindowList {
-    static let detailedCacheLifetime: TimeInterval = 10
-
-    static func initialWindows(
-        visibleWindows: [WindowInfo],
-        cachedWindows: [WindowInfo],
-        activePIDs: Set<pid_t>,
-        usesDetailedCache: Bool
-    ) -> [WindowInfo] {
-        guard usesDetailedCache else { return visibleWindows }
-        var windowIDs = Set(visibleWindows.map(\.windowID))
-        let cachedMinimizedWindows = cachedWindows.filter { window in
-            window.isMinimized
-                && activePIDs.contains(window.ownerPID)
-                && windowIDs.insert(window.windowID).inserted
-        }
-        return visibleWindows + cachedMinimizedWindows
-    }
-}
-
 enum WindowSwitcherDismissalPolicy {
     static func shouldDismissForMouseDown(panelFrame: CGRect, mouseLocation: CGPoint) -> Bool {
         !panelFrame.contains(mouseLocation)
@@ -607,7 +587,6 @@ final class WindowSwitcherPanelController {
     private var presentationWorkItem: DispatchWorkItem?
     private var refreshTask: Task<Void, Never>?
     private var windowCacheTask: Task<Void, Never>?
-    private var detailedWindowsCache: [WindowInfo] = []
     private var detailedWindowsCacheDate = Date.distantPast
     private var controlCapabilitiesCache: [CGWindowID: WindowControlCapabilities] = [:]
     private var needsWindowCacheRefresh = false
@@ -700,7 +679,6 @@ final class WindowSwitcherPanelController {
         windowCacheTask = nil
         for task in windowClassificationTasks.values { task.cancel() }
         windowClassificationTasks = [:]
-        detailedWindowsCache = []
         detailedWindowsCacheDate = .distantPast
         controlCapabilitiesCache = [:]
         needsWindowCacheRefresh = false
@@ -713,7 +691,7 @@ final class WindowSwitcherPanelController {
             try? await Task.sleep(for: .milliseconds(50))
             guard !Task.isCancelled else { return }
             let worker = Task.detached(priority: .utility) {
-                WindowsService.detailedWindowSnapshot(forPIDs: [pid])
+                WindowsService.windowClassificationSnapshot(forPIDs: [pid])
             }
             let snapshot = await withTaskCancellationHandler {
                 await worker.value
@@ -722,7 +700,7 @@ final class WindowSwitcherPanelController {
             }
             guard let self, !Task.isCancelled else { return }
             self.windowsService.storeAccessibilityWindowSnapshots(
-                snapshot.accessibilitySnapshotsByPID
+                snapshot
             )
             self.windowClassificationTasks.removeValue(forKey: pid)
         }
@@ -748,17 +726,10 @@ final class WindowSwitcherPanelController {
             forPIDs: applicationPIDs
         )
         needsWindowCacheRefresh = cachedFilter.hasUnclassifiedWindows
-        let cacheIsFresh = Date().timeIntervalSince(detailedWindowsCacheDate)
-            <= WindowSwitcherWindowList.detailedCacheLifetime
-        let frontToBackWindows = WindowSwitcherWindowList.initialWindows(
-            visibleWindows: cachedFilter.windows,
-            cachedWindows: detailedWindowsCache,
-            activePIDs: Set(applicationPIDs),
-            usesDetailedCache: cacheIsFresh
-        )
-        windows = activationHistory.orderedWindows(from: frontToBackWindows)
+        windows = activationHistory.orderedWindows(from: cachedFilter.windows)
         guard !windows.isEmpty else {
             dismiss()
+            refreshWindowCacheIfNeeded()
             return
         }
         selectedIndex = reverse ? windows.count - 1 : min(1, windows.count - 1)
@@ -930,7 +901,7 @@ final class WindowSwitcherPanelController {
         windowCacheTask?.cancel()
         windowCacheTask = Task { @MainActor [weak self] in
             let worker = Task.detached(priority: .utility) {
-                WindowsService.detailedWindowSnapshot(forPIDs: pids)
+                WindowsService.windowClassificationSnapshot(forPIDs: pids)
             }
             let snapshot = await withTaskCancellationHandler {
                 await worker.value
@@ -939,9 +910,8 @@ final class WindowSwitcherPanelController {
             }
             guard let self, !Task.isCancelled else { return }
             self.windowsService.storeAccessibilityWindowSnapshots(
-                snapshot.accessibilitySnapshotsByPID
+                snapshot
             )
-            self.detailedWindowsCache = snapshot.windows
             self.detailedWindowsCacheDate = Date()
             self.needsWindowCacheRefresh = false
             self.windowCacheTask = nil
@@ -950,7 +920,7 @@ final class WindowSwitcherPanelController {
 
     private func refreshWindowCacheIfNeeded() {
         let cacheIsStale = Date().timeIntervalSince(detailedWindowsCacheDate)
-            > WindowSwitcherWindowList.detailedCacheLifetime
+            > 10
         guard needsWindowCacheRefresh || cacheIsStale else { return }
         prewarm()
     }
