@@ -51,12 +51,12 @@ final class NotificationAlertSelfTest {
     private func testTextIncludesBodyAndTruncatesWithoutSplittingCharacters() {
         let settings = NotificationPreferences()
         let full = settings.plan(for: content("text", title: "Sender", body: "Full message body"))
-        checkEqual(full.text(for: .centerText), "Sender\nFull message body")
-        checkEqual(full.text(for: .largeText), "Sender\nFull message body")
+        checkEqual(full.text(for: .centerText), "Sender：Full message body")
+        checkEqual(full.text(for: .largeText), "Sender：Full message body")
         checkEqual(full.text(for: .countdown), "Sender")
         checkEqual(settings.plan(for: content("body-only", title: "", body: "Body")).text(for: .largeText), "Body")
         checkEqual(settings.plan(for: content("title-only", title: "Title", body: "")).text(for: .centerText), "Title")
-        checkEqual(NotificationTextPresentation.displayText("Title\nBody"), "Title\nBody")
+        checkEqual(NotificationTextPresentation.displayText("Title\nBody"), "Title Body")
         let emoji = "👩🏽‍💻"
         let limit = NotificationTextPresentation.maximumCharacters
         let exact = String(repeating: emoji, count: limit)

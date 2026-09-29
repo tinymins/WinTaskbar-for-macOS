@@ -156,6 +156,7 @@ enum NotificationTextPresentation {
     static let maximumCharacters = 240
 
     static func displayText(_ text: String) -> String {
+        let text = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         guard let end = text.index(text.startIndex, offsetBy: maximumCharacters, limitedBy: text.endIndex),
               end < text.endIndex else { return text }
         return String(text[..<text.index(before: end)]) + "…"
@@ -173,7 +174,7 @@ struct NotificationAlertPlan {
         let template = outputs.settings(for: kind).textTemplate
         if template.isEmpty {
             if kind == .centerText || kind == .largeText {
-                return [content.title, content.body].filter { !$0.isEmpty }.joined(separator: "\n")
+                return [content.title, content.body].filter { !$0.isEmpty }.joined(separator: "：")
             }
             return content.title.isEmpty ? content.body : content.title
         }
