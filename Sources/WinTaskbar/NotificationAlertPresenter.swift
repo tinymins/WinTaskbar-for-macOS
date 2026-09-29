@@ -585,6 +585,8 @@ private struct NotificationImportantOverlay: View {
     let onClear: () -> Void
     let onMove: () -> Void
     let onResize: (CGSize, Bool) -> Void
+    @State private var hoveredRowID: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -630,6 +632,7 @@ private struct NotificationImportantOverlay: View {
     private var messageList: some View {
         VStack(spacing: 0) {
             ForEach(Array(rows.prefix(measuredRowCount ?? rows.count).enumerated()), id: \.element.id) { index, row in
+                let showsClose = !editing && hoveredRowID == row.id
                 ZStack(alignment: Alignment(horizontal: .trailing, vertical: .importantMessageHeader)) {
                     Button { onOpen(row.id) } label: {
                         HStack(alignment: .top, spacing: 10) {
@@ -647,31 +650,41 @@ private struct NotificationImportantOverlay: View {
                                             $0[.firstTextBaseline] - NSFont.systemFont(ofSize: 10).capHeight / 2
                                         }
                                         .help(row.receivedAt.formatted(date: .complete, time: .standard))
+                                        .opacity(showsClose ? 0 : 1)
+                                        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: showsClose)
                                 }
                                 if !row.body.isEmpty { Text(row.body).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) }
                             }
-                            Spacer(minLength: 0)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 12)
                         .padding(.leading, 12)
-                        .padding(.trailing, editing ? 12 : 32)
+                        .padding(.trailing, 12)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(NotificationImportantButtonStyle())
                     .disabled(editing)
                     .help("Open notification, then remove this item. Falls back to the source app if needed.")
+                    .accessibilityAction(named: Text("Remove message")) { if !editing { onDismiss(row.id) } }
                     if !editing {
                         Button { onDismiss(row.id) } label: {
                             Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
-                                .padding(6)
+                                .frame(width: 24, height: 24)
                                 .contentShape(Rectangle())
                         }
-                        .buttonStyle(NotificationImportantButtonStyle())
+                        .buttonStyle(.plain)
                         .accessibilityLabel(NSLocalizedString("Remove message", comment: "Remove important message"))
-                        .padding(.horizontal, 6)
+                        .padding(.trailing, 12)
                         .alignmentGuide(.importantMessageHeader) { $0[VerticalAlignment.center] }
+                        .opacity(showsClose ? 1 : 0)
+                        .allowsHitTesting(showsClose)
+                        .accessibilityHidden(!showsClose)
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: showsClose)
                     }
+                }
+                .onHover { inside in
+                    if inside { hoveredRowID = row.id }
+                    else if hoveredRowID == row.id { hoveredRowID = nil }
                 }
                 if index < (measuredRowCount ?? rows.count) - 1 { Divider().padding(.leading, 50) }
             }
