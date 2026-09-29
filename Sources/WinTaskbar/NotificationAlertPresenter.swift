@@ -21,6 +21,7 @@ final class NotificationAlertPresenter {
     }
 
     var onImportantDismiss: ((String) -> Void)?
+    var onImportantOpen: ((String) -> Void)?
     var onImportantClear: (() -> Void)?
     var onCountdownDismiss: ((String) -> Void)?
     var onLayoutChanged: ((NotificationPresentationPreferences) -> Void)?
@@ -217,7 +218,7 @@ final class NotificationAlertPresenter {
             ? [ImportantRow(id: "preview", appName: "WinTaskbar", title: NSLocalizedString("Important message", comment: "Layout preview"), body: NSLocalizedString("Messages appear here.", comment: "Layout preview"), receivedAt: Date())]
             : importantRows
         let view = NotificationImportantOverlay(rows: rows, icons: rows.map { appIcon($0.appName) },
-            editing: layoutEditing, onOpen: { [weak self] name in self?.openSourceApplication(name) },
+            editing: layoutEditing, onOpen: { [weak self] id in self?.onImportantOpen?(id) },
             onDismiss: { [weak self] id in
                 guard id != "preview" else { return }
                 self?.onImportantDismiss?(id)
@@ -425,7 +426,7 @@ final class NotificationAlertPresenter {
             })
     }
 
-    private func openSourceApplication(_ name: String) {
+    func openSourceApplication(_ name: String) {
         let candidates = (sourceApps.runningApps + sourceApps.installedApps).map { app in
             let bundle = Bundle(url: app.url)
             let aliases = [app.name, app.url.deletingPathExtension().lastPathComponent]
@@ -627,7 +628,7 @@ private struct NotificationImportantOverlay: View {
         VStack(spacing: 0) {
             ForEach(Array(rows.prefix(measuredRowCount ?? rows.count).enumerated()), id: \.element.id) { index, row in
                 ZStack(alignment: Alignment(horizontal: .trailing, vertical: .importantMessageHeader)) {
-                    Button { onOpen(row.appName) } label: {
+                    Button { onOpen(row.id) } label: {
                         HStack(alignment: .top, spacing: 10) {
                             Image(nsImage: icons[index]).resizable().frame(width: 28, height: 28)
                             VStack(alignment: .leading, spacing: 3) {

@@ -23,6 +23,9 @@ automatically close the synthetic banner. Restore them immediately afterward.
 
 1. **Visible banner:** send a notification, locate its original object, then press
    `AXPress`. Success requires a callback with the same request and target UUID.
+   The `正式实现点击` button runs WinTaskbar's shared `NotificationOriginalAction`
+   implementation against the already authorized synthetic subtree. Use it to
+   verify the production parser, identity validation and original action together.
 2. **Natural expiration:** send and locate another notification; let the banner
    expire, query this app's delivered notifications, then try the cached object.
    A stored notification and a currently actionable AX object are distinct states.
@@ -69,6 +72,16 @@ automatically close the synthetic banner. Restore them immediately afterward.
 - For a separately captured banner, the cached target failed identity validation
   after natural expiration, while the request remained in the app's delivered
   list. No action was attempted against the invalid target.
-- WinTaskbar was resumed afterward without changing its configuration. Re-finding
-  historical notifications in Notification Center, routing after explicit closure,
-  and production integration remain unverified or unimplemented.
+- Repeating the live and expired scenarios with `正式实现点击` verified the shared
+  production implementation: live action returned `handedOff` and received the
+  matching default-action callback; the expired action returned `unavailable`
+  while its request remained in the delivered list.
+- WinTaskbar's important-message click now tries the retained original action,
+  then a unique current card with the same UUID-bearing AX identifier and unchanged
+  source/title/body, then its existing source-app opener. Text equality alone is
+  never sufficient for re-finding an expired object. References remain in memory
+  and are pruned as important messages and countdowns leave the runtime.
+- WinTaskbar was resumed afterward without changing its configuration. Historical
+  re-finding was not verified on this host, which did not expose a usable stable
+  identifier. An explicitly closed notification can therefore fall back to opening
+  its source app. The installed WinTaskbar was not replaced for these PoC checks.

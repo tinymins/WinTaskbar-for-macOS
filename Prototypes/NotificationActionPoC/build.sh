@@ -20,7 +20,10 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 PLIST
 xcrun swiftc -swift-version 6 -target "$(uname -m)-apple-macosx13.0" \
     -framework AppKit -framework SwiftUI -framework ApplicationServices -framework UserNotifications \
-    "$SOURCE_DIR/main.swift" -o "$APP_DIR/Contents/MacOS/NotificationActionPoC"
+    "$SOURCE_DIR/main.swift" \
+    "$ROOT_DIR/Sources/WinTaskbar/NotificationContentParser.swift" \
+    "$ROOT_DIR/Sources/WinTaskbar/NotificationOriginalAction.swift" \
+    -o "$APP_DIR/Contents/MacOS/NotificationActionPoC"
 codesign --force --sign - "$APP_DIR"
 codesign --verify --deep --strict "$APP_DIR"
 plutil -lint "$APP_DIR/Contents/Info.plist"

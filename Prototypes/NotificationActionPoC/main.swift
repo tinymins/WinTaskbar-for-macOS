@@ -10,6 +10,7 @@ final class Probe: NSObject, ObservableObject, UNUserNotificationCenterDelegate 
     @Published var selectedID: String?
     @Published var ids: [String] = []
     private var targets: [String: AXUIElement] = [:]
+    private var productionTargets: [String: NotificationOriginalAction] = [:]
     private var summaries: [String: String] = [:]
 
     func note(_ message: String) {
@@ -102,6 +103,14 @@ final class Probe: NSObject, ObservableObject, UNUserNotificationCenterDelegate 
         note("扫描 \(nodes) 个结构节点；本通知精确命中 \(matches.count)；完整：\(!incomplete)")
         guard !incomplete, matches.count == 1, let match = matches.first else { return }
         targets[id] = match.0
+        // The scope check above authorizes reading only this synthetic notification subtree.
+        var processID: pid_t = 0
+        AXUIElementGetPid(match.0, &processID)
+        let snapshot = NotificationAXSnapshot.read(match.0, deadline: ProcessInfo.processInfo.systemUptime + 0.5)
+        let contents = snapshot.tree?.notifications(processID: processID) ?? []
+        if contents.count == 1, let content = contents.first {
+            productionTargets[id] = NotificationOriginalAction.find(in: snapshot, content: content, processID: processID)
+        }
         var raw: CFArray?
         let result = AXUIElementCopyActionNames(match.0, &raw)
         note("动作列表状态 \(result.rawValue)：\((raw as? [String] ?? []).joined(separator: ", "))")
@@ -117,6 +126,17 @@ final class Probe: NSObject, ObservableObject, UNUserNotificationCenterDelegate 
               (raw as? [String] ?? []).contains(name) else { note("原通知不支持 \(name)。"); return }
         let result = AXUIElementPerformAction(target, name as CFString)
         note("\(name) 返回 \(result.rawValue)；只有收到目标回调才能确认定位成功。")
+    }
+
+    func performProductionAction() {
+        guard let id = selectedID, let target = productionTargets[id] else { note("尚未捕获正式实现的目标。"); return }
+        guard isOwnTarget(target.element, id: id) else {
+            // The production action must independently reject the expired reference as well.
+            let result = target.press()
+            note("正式实现：\(String(describing: result))；原测试对象已失效。")
+            return
+        }
+        note("正式实现：\(String(describing: target.press()))；等待系统消息回调确认。")
     }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
@@ -161,6 +181,7 @@ struct ProbeView: View {
                 Button("定位原通知 / 查看动作") { probe.locate() }
                 Button("原通知 AXPress") { probe.perform(kAXPressAction) }
                 Button("原通知 AXCancel") { probe.perform(kAXCancelAction) }
+                Button("正式实现点击") { probe.performProductionAction() }
             }
             Text("只操作 UUID 或完整测试内容精确匹配的唯一对象；不记录其他通知。退出清除测试通知。")
                 .font(.caption).foregroundStyle(.secondary)

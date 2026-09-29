@@ -36,6 +36,7 @@ final class SystemNotificationService: ObservableObject {
     private let captureWorker = SystemNotificationCapture()
     private var dismissalAttempts: [String: (content: SystemNotificationContent, count: Int)] = [:]
     private var scanTask: Task<Void, Never>?
+    private var sourceOpenTask: Task<Void, Never>?
     private var capturePending = false
     private var generation = UUID()
     private var lastTick = ProcessInfo.processInfo.systemUptime
@@ -50,6 +51,7 @@ final class SystemNotificationService: ObservableObject {
 
     func start() {
         guard subscription == nil else { return }
+        presenter.onImportantOpen = { [weak self] id in self?.openImportant(id) }
         presenter.onImportantDismiss = { [weak self] id in
             self?.runtime.removeImportant(id)
             self?.syncAlertLists()
@@ -89,6 +91,7 @@ final class SystemNotificationService: ObservableObject {
                 MainActor.assumeIsolated {
                     self?.suspended = true
                     self?.scanTask?.cancel()
+                    self?.sourceOpenTask?.cancel()
                     self?.presenter.setSuspended(true)
                     self?.panels.values.forEach { $0.orderOut(nil) }
                 }
@@ -189,8 +192,9 @@ final class SystemNotificationService: ObservableObject {
         let currentGeneration = generation
         let rules = configuration
         let worker = captureWorker
+        let retained = runtime.important.map(\.content) + runtime.countdowns.map(\.content)
         scanTask = Task { [weak self] in
-            let result = await worker.scan()
+            let result = await worker.scan(retaining: retained)
             guard let self else { return }
             defer {
                 self.scanTask = nil
@@ -335,7 +339,22 @@ final class SystemNotificationService: ObservableObject {
         })
     }
 
+    private func openImportant(_ id: String) {
+        guard sourceOpenTask == nil, configuration.enabled, !suspended,
+              let content = runtime.important.first(where: { $0.id == id })?.content else { return }
+        let worker = captureWorker
+        sourceOpenTask = Task { [weak self] in
+            let result = await worker.open(content)
+            guard let self else { return }
+            defer { self.sourceOpenTask = nil }
+            guard !Task.isCancelled, self.configuration.enabled, !self.suspended,
+                  self.runtime.important.first(where: { $0.id == id })?.content == content else { return }
+            if case .unavailable = result { self.presenter.openSourceApplication(content.appName) }
+        }
+    }
+
     func clearAllAlerts() {
+        sourceOpenTask?.cancel()
         endLayoutEditing()
         runtime.clear()
         presenter.stop()
