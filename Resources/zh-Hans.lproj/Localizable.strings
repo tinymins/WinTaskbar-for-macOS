@@ -792,8 +792,8 @@
 	<string>重要消息列表</string>
 	<key>List width</key>
 	<string>列表宽度</string>
-	<key>Maximum list height</key>
-	<string>列表最大高度</string>
+	<key>Default list height</key>
+	<string>列表默认高度</string>
 	<key>Preview rule outputs</key>
 	<string>预览规则输出</string>
 	<key>Outputs</key>
@@ -914,5 +914,7 @@
 	<string>预览只显示 WinTaskbar 输出，不会关闭真实系统通知。</string>
 	<key>Some original macOS notifications could not be closed. They have been left visible.</key>
 	<string>部分 macOS 原始通知无法关闭，已保留系统提示。</string>
+	<key>Height rounds up to a complete message from this default each time. Fewer messages shrink the list; an empty list hides its frame.</key>
+	<string>每次以默认高度为基准，向上扩展到完整消息的边界；消息较少时收缩，无消息时隐藏。</string>
 </dict>
 </plist>

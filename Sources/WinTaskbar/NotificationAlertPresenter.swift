@@ -221,11 +221,10 @@ final class NotificationAlertPresenter {
             onResize: { [weak self] delta, ended in self?.resizeImportant(delta: delta, ended: ended) })
         let width = CGFloat(preferences.importantWidth)
         let visibleFrame = (panel.screen ?? NSScreen.screens.first)?.visibleFrame
-        let maximumHeight = min(CGFloat(preferences.importantHeight), visibleFrame?.height ?? CGFloat(preferences.importantHeight))
-        var measuredView = view
-        measuredView.measuring = true
-        let measurement = NSHostingView(rootView: measuredView.frame(width: width).fixedSize(horizontal: false, vertical: true))
-        let height = layoutEditing ? maximumHeight : min(maximumHeight, ceil(measurement.fittingSize.height))
+        let screenHeight = visibleFrame?.height ?? CGFloat(preferences.importantHeight)
+        let defaultHeight = min(CGFloat(preferences.importantHeight), screenHeight)
+        let height = layoutEditing ? defaultHeight
+            : importantHeight(view, width: width, defaultHeight: defaultHeight, screenHeight: screenHeight)
         let top = panel.frame.maxY
         let bottom = max(top - height, visibleFrame?.minY ?? top - height)
         let left = visibleFrame.map { min(max(panel.frame.minX, $0.minX), $0.maxX - width) } ?? panel.frame.minX
@@ -234,6 +233,30 @@ final class NotificationAlertPresenter {
         if importantPanel == nil { position(panel, kind: .important) }
         importantPanel = panel
         panel.orderFrontRegardless()
+    }
+
+    private func importantHeight(_ view: NotificationImportantOverlay, width: CGFloat,
+                                 defaultHeight: CGFloat, screenHeight: CGFloat) -> CGFloat {
+        func height(for count: Int) -> CGFloat {
+            var measuredView = view
+            measuredView.measuring = true
+            measuredView.measuredRowCount = count
+            let measurement = NSHostingView(rootView: measuredView.frame(width: width).fixedSize(horizontal: false, vertical: true))
+            return ceil(measurement.fittingSize.height)
+        }
+
+        // Measure real wrapped rows; always round from the configured height, never the current frame.
+        var lower = 1
+        var upper = view.rows.count
+        while lower < upper {
+            let middle = (lower + upper) / 2
+            if height(for: middle) < defaultHeight { lower = middle + 1 } else { upper = middle }
+        }
+        let roundedHeight = height(for: lower)
+        // If rounding would leave the screen, stop at the previous complete row. A single
+        // oversized message still needs scrolling within the available screen height.
+        let fittingHeight = roundedHeight <= screenHeight ? roundedHeight : height(for: max(1, lower - 1))
+        return min(screenHeight, fittingHeight)
     }
 
     private func renderCountdown() {
@@ -408,6 +431,7 @@ private struct NotificationImportantOverlay: View {
     let icons: [NSImage]
     let editing: Bool
     var measuring = false
+    var measuredRowCount: Int?
     let onDismiss: (String) -> Void
     let onClear: () -> Void
     let onMove: (CGSize, Bool) -> Void
@@ -456,7 +480,7 @@ private struct NotificationImportantOverlay: View {
 
     private var messageList: some View {
         VStack(spacing: 0) {
-            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+            ForEach(Array(rows.prefix(measuredRowCount ?? rows.count).enumerated()), id: \.element.id) { index, row in
                 HStack(alignment: .top, spacing: 10) {
                     Image(nsImage: icons[index]).resizable().frame(width: 28, height: 28)
                     VStack(alignment: .leading, spacing: 3) {
@@ -471,7 +495,7 @@ private struct NotificationImportantOverlay: View {
                     }
                 }
                 .padding(12)
-                if index < rows.count - 1 { Divider().padding(.leading, 50) }
+                if index < (measuredRowCount ?? rows.count) - 1 { Divider().padding(.leading, 50) }
             }
         }
     }

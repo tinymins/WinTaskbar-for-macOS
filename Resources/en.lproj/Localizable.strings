@@ -786,8 +786,8 @@
 	<string>Important message list</string>
 	<key>List width</key>
 	<string>List width</string>
-	<key>Maximum list height</key>
-	<string>Maximum list height</string>
+	<key>Default list height</key>
+	<string>Default list height</string>
 	<key>Preview rule outputs</key>
 	<string>Preview rule outputs</string>
 	<key>Outputs</key>
@@ -908,5 +908,7 @@
 	<string>Preview shows only WinTaskbar output and never closes a real system notification.</string>
 	<key>Some original macOS notifications could not be closed. They have been left visible.</key>
 	<string>Some original macOS notifications could not be closed. They have been left visible.</string>
+	<key>Height rounds up to a complete message from this default each time. Fewer messages shrink the list; an empty list hides its frame.</key>
+	<string>Height rounds up to a complete message from this default each time. Fewer messages shrink the list; an empty list hides its frame.</string>
 </dict>
 </plist>
