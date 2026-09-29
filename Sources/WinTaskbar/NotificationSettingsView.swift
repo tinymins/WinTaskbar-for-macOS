@@ -194,7 +194,7 @@ struct NotificationSettingsView: View {
                                          y: $preferences.notifications.presentation.importantY)
             NotificationNumberSetting("List width", value: $preferences.notifications.presentation.importantWidth,
                                       range: 200...800, suffix: "pt")
-            NotificationNumberSetting("List height", value: $preferences.notifications.presentation.importantHeight,
+            NotificationNumberSetting("Maximum list height", value: $preferences.notifications.presentation.importantHeight,
                                       range: 100...900, suffix: "pt")
             Text("The list hides its frame when there are no messages.")
                 .font(.caption).foregroundStyle(.secondary)

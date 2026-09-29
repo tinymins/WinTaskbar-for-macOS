@@ -786,8 +786,8 @@
 	<string>Important message list</string>
 	<key>List width</key>
 	<string>List width</string>
-	<key>List height</key>
-	<string>List height</string>
+	<key>Maximum list height</key>
+	<string>Maximum list height</string>
 	<key>Preview rule outputs</key>
 	<string>Preview rule outputs</string>
 	<key>Outputs</key>

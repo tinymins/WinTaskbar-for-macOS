@@ -792,8 +792,8 @@
 	<string>重要消息列表</string>
 	<key>List width</key>
 	<string>列表宽度</string>
-	<key>List height</key>
-	<string>列表高度</string>
+	<key>Maximum list height</key>
+	<string>列表最大高度</string>
 	<key>Preview rule outputs</key>
 	<string>预览规则输出</string>
 	<key>Outputs</key>

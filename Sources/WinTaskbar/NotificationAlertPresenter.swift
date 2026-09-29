@@ -74,9 +74,11 @@ final class NotificationAlertPresenter {
         }
         if let importantPanel {
             if old.importantWidth != value.importantWidth || old.importantHeight != value.importantHeight {
-                importantPanel.setContentSize(NSSize(width: value.importantWidth, height: value.importantHeight))
+                renderImportant()
             }
-            position(importantPanel, kind: .important)
+            if old.importantX != value.importantX || old.importantY != value.importantY {
+                position(importantPanel, kind: .important)
+            }
             applyLevel(to: importantPanel)
         }
         if let countdownPanel { position(countdownPanel, kind: .countdown); applyLevel(to: countdownPanel) }
@@ -217,6 +219,17 @@ final class NotificationAlertPresenter {
             }, onClear: { [weak self] in self?.onImportantClear?() },
             onMove: { [weak self] delta, ended in self?.move(.important, delta: delta, ended: ended) },
             onResize: { [weak self] delta, ended in self?.resizeImportant(delta: delta, ended: ended) })
+        let width = CGFloat(preferences.importantWidth)
+        let visibleFrame = (panel.screen ?? NSScreen.screens.first)?.visibleFrame
+        let maximumHeight = min(CGFloat(preferences.importantHeight), visibleFrame?.height ?? CGFloat(preferences.importantHeight))
+        var measuredView = view
+        measuredView.measuring = true
+        let measurement = NSHostingView(rootView: measuredView.frame(width: width).fixedSize(horizontal: false, vertical: true))
+        let height = layoutEditing ? maximumHeight : min(maximumHeight, ceil(measurement.fittingSize.height))
+        let top = panel.frame.maxY
+        let bottom = max(top - height, visibleFrame?.minY ?? top - height)
+        let left = visibleFrame.map { min(max(panel.frame.minX, $0.minX), $0.maxX - width) } ?? panel.frame.minX
+        panel.setFrame(NSRect(x: left, y: bottom, width: width, height: height), display: true)
         panel.contentView = NSHostingView(rootView: view)
         if importantPanel == nil { position(panel, kind: .important) }
         importantPanel = panel
@@ -284,7 +297,7 @@ final class NotificationAlertPresenter {
     }
 
     private func move(_ kind: PanelKind, delta: CGSize, ended: Bool) {
-        guard layoutEditing, let panel = panel(for: kind), let screen = NSScreen.screens.first else { return }
+        guard layoutEditing || kind == .important, let panel = panel(for: kind), let screen = NSScreen.screens.first else { return }
         let mouse = NSEvent.mouseLocation
         if moveSession?.panel !== panel {
             moveSession = LayoutPointerSession(panel: panel, firstTranslation: delta, mouse: mouse)
@@ -394,6 +407,7 @@ private struct NotificationImportantOverlay: View {
     let rows: [NotificationAlertPresenter.ImportantRow]
     let icons: [NSImage]
     let editing: Bool
+    var measuring = false
     let onDismiss: (String) -> Void
     let onClear: () -> Void
     let onMove: (CGSize, Bool) -> Void
@@ -412,30 +426,14 @@ private struct NotificationImportantOverlay: View {
             }
             .padding(12)
             .contentShape(Rectangle())
-            .gesture(editing ? DragGesture(minimumDistance: 1)
+            .gesture(DragGesture(minimumDistance: 1)
                 .onChanged { onMove($0.translation, false) }
-                .onEnded { onMove($0.translation, true) } : nil)
+                .onEnded { onMove($0.translation, true) })
             Divider()
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(nsImage: icons[index]).resizable().frame(width: 28, height: 28)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(row.title.isEmpty ? row.appName : row.title).font(.system(size: 13, weight: .semibold)).lineLimit(2)
-                                if !row.body.isEmpty { Text(row.body).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) }
-                            }
-                            Spacer(minLength: 0)
-                            if !editing {
-                                Button { onDismiss(row.id) } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .bold)) }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel(NSLocalizedString("Remove message", comment: "Remove important message"))
-                            }
-                        }
-                        .padding(12)
-                        if index < rows.count - 1 { Divider().padding(.leading, 50) }
-                    }
-                }
+            if measuring {
+                messageList
+            } else {
+                ScrollView { messageList }
             }
             if editing {
                 HStack {
@@ -452,6 +450,28 @@ private struct NotificationImportantOverlay: View {
         .foregroundStyle(.primary)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .padding(4)
+    }
+
+    private var messageList: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                HStack(alignment: .top, spacing: 10) {
+                    Image(nsImage: icons[index]).resizable().frame(width: 28, height: 28)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(row.title.isEmpty ? row.appName : row.title).font(.system(size: 13, weight: .semibold)).lineLimit(2)
+                        if !row.body.isEmpty { Text(row.body).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) }
+                    }
+                    Spacer(minLength: 0)
+                    if !editing {
+                        Button { onDismiss(row.id) } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .bold)) }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(NSLocalizedString("Remove message", comment: "Remove important message"))
+                    }
+                }
+                .padding(12)
+                if index < rows.count - 1 { Divider().padding(.leading, 50) }
+            }
+        }
     }
 }
 
