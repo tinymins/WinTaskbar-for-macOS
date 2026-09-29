@@ -36,6 +36,7 @@ final class SystemNotificationService: ObservableObject {
     private let captureWorker = SystemNotificationCapture()
     private var dismissalAttempts: [String: (content: SystemNotificationContent, count: Int)] = [:]
     private var scanTask: Task<Void, Never>?
+    private var capturePending = false
     private var generation = UUID()
     private var lastTick = ProcessInfo.processInfo.systemUptime
     private var suspended = false
@@ -66,6 +67,9 @@ final class SystemNotificationService: ObservableObject {
         presenter.onLayoutChanged = { [weak self] value in
             self?.preferences.notifications.presentation = value
         }
+        observers.append(NotificationCenter.default.addObserver(
+            forName: .systemNotificationAXChanged, object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.capture(queueIfBusy: true) } })
         subscription = preferences.$notifications.sink { [weak self] in self?.configure($0) }
         layoutSubscription = Publishers.CombineLatest4(
             preferences.$taskbarEnabled, preferences.$position, preferences.$barHeight, preferences.$theme
@@ -110,6 +114,8 @@ final class SystemNotificationService: ObservableObject {
         captureTimer = nil
         generation = UUID()
         scanTask?.cancel()
+        capturePending = false
+        Task { await captureWorker.stopObserving() }
         dismissalAttempts.removeAll()
         systemBannerStatusKey = nil
         clearAllAlerts()
@@ -129,6 +135,7 @@ final class SystemNotificationService: ObservableObject {
         if changedEnabled || changedRules {
             generation = UUID()
             scanTask?.cancel()
+            capturePending = value.enabled
             dismissalAttempts.removeAll()
             systemBannerStatusKey = nil
         }
@@ -152,6 +159,8 @@ final class SystemNotificationService: ObservableObject {
         if !value.enabled {
             captureTimer?.invalidate()
             captureTimer = nil
+            capturePending = false
+            Task { await captureWorker.stopObserving() }
             generation = UUID()
             seen.removeAll()
             statusKey = "Notification capture is off."
@@ -166,8 +175,13 @@ final class SystemNotificationService: ObservableObject {
         layout()
     }
 
-    private func capture() {
-        guard configuration.enabled, !suspended, scanTask == nil else { return }
+    private func capture(queueIfBusy: Bool = false) {
+        guard configuration.enabled, !suspended else { return }
+        guard scanTask == nil else {
+            if queueIfBusy { capturePending = true }
+            return
+        }
+        capturePending = false
         guard AXIsProcessTrusted() else {
             statusKey = "Accessibility access is required to capture notifications."
             return
@@ -178,7 +192,13 @@ final class SystemNotificationService: ObservableObject {
         scanTask = Task { [weak self] in
             let result = await worker.scan()
             guard let self else { return }
-            defer { self.scanTask = nil }
+            defer {
+                self.scanTask = nil
+                if self.capturePending {
+                    self.capturePending = false
+                    self.capture()
+                }
+            }
             guard !Task.isCancelled, self.configuration == rules,
                   self.generation == currentGeneration, !self.suspended else { return }
             self.statusKey = result.unreadable ? "Some notification content could not be read. Check Accessibility access."

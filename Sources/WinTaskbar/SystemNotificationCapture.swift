@@ -1,6 +1,16 @@
 import AppKit
 import ApplicationServices
 
+extension Notification.Name {
+    static let systemNotificationAXChanged = Notification.Name("WinTaskbar.SystemNotificationAXChanged")
+}
+
+private let systemNotificationAXCallback: AXObserverCallback = { _, _, _, _ in
+    DispatchQueue.main.async {
+        NotificationCenter.default.post(name: .systemNotificationAXChanged, object: nil)
+    }
+}
+
 struct SystemNotificationScan: Sendable {
     var notifications: [SystemNotificationContent] = []
     var dismissalTokens: [String: UUID] = [:]
@@ -25,14 +35,51 @@ actor SystemNotificationCapture {
         var elements: [String: AXUIElement] = [:]
         var incomplete = false
     }
+    private struct Observation {
+        let observer: AXObserver
+        var elements: Set<AXUIElement> = []
+    }
+    private var observations: [Int32: Observation] = [:]
+    private static let events = [kAXWindowCreatedNotification, kAXCreatedNotification,
+                                 kAXLayoutChangedNotification, kAXValueChangedNotification]
     private var candidates: [UUID: Candidate] = [:]
+
+    func stopObserving() {
+        for observation in observations.values {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observation.observer), .commonModes)
+        }
+        observations.removeAll()
+        candidates.removeAll()
+    }
+
+    private func observe(processID: Int32, elements: [AXUIElement]) {
+        if observations[processID] == nil {
+            var observer: AXObserver?
+            guard AXObserverCreate(processID, systemNotificationAXCallback, &observer) == .success,
+                  let observer else { return }
+            observations[processID] = Observation(observer: observer)
+            CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
+        }
+        guard var observation = observations[processID] else { return }
+        let current = Set(elements)
+        for element in observation.elements.subtracting(current) {
+            for event in Self.events { AXObserverRemoveNotification(observation.observer, element, event as CFString) }
+        }
+        for element in current.subtracting(observation.elements) {
+            for event in Self.events { AXObserverAddNotification(observation.observer, element, event as CFString, nil) }
+        }
+        observation.elements = current
+        observations[processID] = observation
+    }
 
     func scan() -> SystemNotificationScan {
         candidates.removeAll()
         var result = SystemNotificationScan()
+        var runningProcessIDs: Set<Int32> = []
         for bundleID in ["com.apple.UserNotificationCenter", "com.apple.notificationcenterui"] {
             guard !Task.isCancelled else { break }
             guard let process = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else { continue }
+            runningProcessIDs.insert(process.processIdentifier)
             let root = AXUIElementCreateApplication(process.processIdentifier)
             AXUIElementSetMessagingTimeout(root, 0.15)
             var rawWindows: CFTypeRef?
@@ -41,6 +88,7 @@ actor SystemNotificationCapture {
                 result.unreadable = true
                 continue
             }
+            observe(processID: process.processIdentifier, elements: [root] + windows)
             let deadline = ProcessInfo.processInfo.systemUptime + 1.5
             for window in windows {
                 let snapshot = readTree(window, deadline: deadline)
@@ -58,6 +106,11 @@ actor SystemNotificationCapture {
                                                   processID: process.processIdentifier, content: content)
                     result.dismissalTokens[content.sourceID] = token
                 }
+            }
+        }
+        for processID in Array(observations.keys) where !runningProcessIDs.contains(processID) {
+            if let observation = observations.removeValue(forKey: processID) {
+                CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observation.observer), .commonModes)
             }
         }
         return result

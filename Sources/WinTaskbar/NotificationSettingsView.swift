@@ -392,7 +392,22 @@ private struct NotificationOutputsEditor: View {
                     }
                 }
             }
-            Toggle("Automatically close original macOS notification", isOn: $outputs.dismissSystemNotification)
+            Toggle(isOn: $outputs.dismissSystemNotification) {
+                HStack(spacing: 6) {
+                    Text("Automatically close original macOS notification")
+                    if outputs.warnsAboutHiddenNotification(defaults: defaults) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                            .accessibilityLabel(Text("Warning: notifications may be missed"))
+                    }
+                }
+            }
+            if outputs.warnsAboutHiddenNotification(defaults: defaults) {
+                Label("No bottom-right card will be shown, but the original macOS notification will be closed. You may miss this message.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.red)
+            }
             Text("After reading it, close this system notification. It may also leave Notification Center, and its banner may appear briefly. If it cannot be closed safely, keep the system notification.")
                 .font(.caption).foregroundStyle(.secondary)
             if !outputs.enabled.isEmpty {

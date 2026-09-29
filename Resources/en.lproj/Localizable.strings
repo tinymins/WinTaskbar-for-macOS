@@ -910,5 +910,9 @@
 	<string>Some original macOS notifications could not be closed. They have been left visible.</string>
 	<key>Height rounds up to a complete message from this default each time. Fewer messages shrink the list; an empty list hides its frame.</key>
 	<string>Height rounds up to a complete message from this default each time. Fewer messages shrink the list; an empty list hides its frame.</string>
+	<key>Warning: notifications may be missed</key>
+	<string>Warning: notifications may be missed</string>
+	<key>No bottom-right card will be shown, but the original macOS notification will be closed. You may miss this message.</key>
+	<string>No bottom-right card will be shown, but the original macOS notification will be closed. You may miss this message.</string>
 </dict>
 </plist>

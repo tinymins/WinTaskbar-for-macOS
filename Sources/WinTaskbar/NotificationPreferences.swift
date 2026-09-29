@@ -78,6 +78,11 @@ struct NotificationOutputs: Codable, Equatable {
     var cooldownSeconds: Double = 0
     var dismissSystemNotification = false
 
+    func warnsAboutHiddenNotification(defaults: [NotificationOutputKind: NotificationOutputSettings]) -> Bool {
+        let card = overrides[.card] ?? defaults[.card] ?? NotificationOutputSettings()
+        return dismissSystemNotification && (!enabled.contains(.card) || card.card.mode == .hidden)
+    }
+
     // Every key is present after NotificationPreferences resolves the rule against defaults.
     func settings(for kind: NotificationOutputKind) -> NotificationOutputSettings {
         overrides[kind] ?? NotificationOutputSettings()
@@ -184,9 +189,9 @@ struct NotificationAlertPlan {
 }
 
 struct NotificationPreferences: Codable, Equatable {
-    var enabled = false
+    var enabled = true
     var rules: [NotificationCaptureRule] = []
-    var fallback = NotificationOutputs()
+    var fallback = NotificationOutputs(dismissSystemNotification: true)
     var outputDefaults: [NotificationOutputKind: NotificationOutputSettings] = Dictionary(
         uniqueKeysWithValues: NotificationOutputKind.allCases.map { ($0, NotificationOutputSettings()) }
     )
