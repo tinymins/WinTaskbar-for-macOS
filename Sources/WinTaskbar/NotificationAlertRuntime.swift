@@ -5,7 +5,7 @@ struct ImportantMessage: Identifiable {
     var content: SystemNotificationContent
     var text: String
     var colorHex: String
-    let createdAt: TimeInterval
+    let receivedAt: Date
 }
 
 struct NotificationCountdown: Identifiable {
@@ -26,21 +26,16 @@ final class NotificationAlertRuntime {
 
     // Returns whether transient outputs should fire. Important entries still track content
     // changes during a rule's cooldown, while countdowns start only for accepted alerts.
-    func ingest(_ plan: NotificationAlertPlan, now: TimeInterval) -> Bool {
+    func ingest(_ plan: NotificationAlertPlan, now: TimeInterval, receivedAt: Date = Date()) -> Bool {
         let id = plan.content.sourceID
         if plan.outputs.enabled.contains(.important) {
             let settings = plan.outputs.settings(for: .important)
             let body = settings.textTemplate.isEmpty ? plan.content.body : plan.text(for: .important)
-            if let index = important.firstIndex(where: { $0.id == id }) {
-                important[index].content = plan.content
-                important[index].text = body
-                important[index].colorHex = settings.colorHex
-            } else {
-                important.append(ImportantMessage(
-                    id: id, content: plan.content, text: body,
-                    colorHex: settings.colorHex, createdAt: now
-                ))
-            }
+            important.removeAll { $0.id == id }
+            important.insert(ImportantMessage(
+                id: id, content: plan.content, text: body,
+                colorHex: settings.colorHex, receivedAt: receivedAt
+            ), at: 0)
         }
 
         let cooldown = plan.outputs.cooldownSeconds

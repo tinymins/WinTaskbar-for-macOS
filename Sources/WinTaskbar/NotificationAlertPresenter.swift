@@ -9,6 +9,7 @@ final class NotificationAlertPresenter {
         let appName: String
         let title: String
         let body: String
+        let receivedAt: Date
     }
 
     struct CountdownRow: Identifiable {
@@ -211,7 +212,7 @@ final class NotificationAlertPresenter {
         }
         let panel = importantPanel ?? makePanel(size: NSSize(width: preferences.importantWidth, height: preferences.importantHeight), interactive: true)
         let rows = importantRows.isEmpty && layoutEditing
-            ? [ImportantRow(id: "preview", appName: "WinTaskbar", title: NSLocalizedString("Important message", comment: "Layout preview"), body: NSLocalizedString("Messages appear here.", comment: "Layout preview"))]
+            ? [ImportantRow(id: "preview", appName: "WinTaskbar", title: NSLocalizedString("Important message", comment: "Layout preview"), body: NSLocalizedString("Messages appear here.", comment: "Layout preview"), receivedAt: Date())]
             : importantRows
         let view = NotificationImportantOverlay(rows: rows, icons: rows.map { appIcon($0.appName) },
             editing: layoutEditing, onOpen: { [weak self] name in self?.openSourceApplication(name) },
@@ -526,7 +527,15 @@ private struct NotificationImportantOverlay: View {
                         HStack(alignment: .top, spacing: 10) {
                             Image(nsImage: icons[index]).resizable().frame(width: 28, height: 28)
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(row.title.isEmpty ? row.appName : row.title).font(.system(size: 13, weight: .semibold)).lineLimit(2)
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    Text(row.title.isEmpty ? row.appName : row.title)
+                                        .font(.system(size: 13, weight: .semibold)).lineLimit(2)
+                                    Spacer(minLength: 0)
+                                    Text(row.receivedAt, format: .dateTime.hour().minute().second())
+                                        .font(.system(size: 10)).monospacedDigit().foregroundStyle(.secondary)
+                                        .fixedSize()
+                                        .help(row.receivedAt.formatted(date: .complete, time: .standard))
+                                }
                                 if !row.body.isEmpty { Text(row.body).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) }
                             }
                             Spacer(minLength: 0)

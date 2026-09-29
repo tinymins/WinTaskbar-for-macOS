@@ -150,7 +150,7 @@ final class NotificationAlertSelfTest {
         let second = settings.plan(for: content("two", body: "Second"))
         check(runtime.ingest(first, now: 100))
         check(!runtime.ingest(second, now: 101), "A different source under the same rule is cooled down")
-        checkEqual(runtime.important.map(\.text), ["First", "Second"])
+        checkEqual(runtime.important.map(\.text), ["Second", "First"])
         check(runtime.ingest(second, now: 110))
     }
 

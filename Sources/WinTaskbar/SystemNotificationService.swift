@@ -327,7 +327,7 @@ final class SystemNotificationService: ObservableObject {
     private func syncAlertLists() {
         presenter.setImportant(runtime.important.map {
             NotificationAlertPresenter.ImportantRow(id: $0.id, appName: $0.content.appName,
-                                                     title: $0.content.title, body: $0.text)
+                                                     title: $0.content.title, body: $0.text, receivedAt: $0.receivedAt)
         })
         presenter.setCountdown(runtime.countdowns.map {
             NotificationAlertPresenter.CountdownRow(id: $0.id, title: $0.text, deadline: $0.deadline, duration: $0.duration,
