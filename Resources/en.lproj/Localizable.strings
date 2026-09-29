@@ -920,5 +920,9 @@
 	<string>Could not open the source app</string>
 	<key>The source app is unavailable or its name matches more than one app. Open it manually.</key>
 	<string>The source app is unavailable or its name matches more than one app. Open it manually.</string>
+	<key>Maximum width</key>
+	<string>Maximum width</string>
+	<key>Drag either edge in Edit layout to set the maximum width. Short messages shrink automatically.</key>
+	<string>Drag either edge in Edit layout to set the maximum width. Short messages shrink automatically.</string>
 </dict>
 </plist>

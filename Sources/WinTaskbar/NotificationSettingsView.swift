@@ -179,11 +179,19 @@ struct NotificationSettingsView: View {
         case .centerText:
             NotificationPositionSettings("Center reminder", x: $preferences.notifications.presentation.centerX,
                                          y: $preferences.notifications.presentation.centerY)
+            NotificationNumberSetting("Maximum width", value: $preferences.notifications.presentation.centerMaximumWidth,
+                                      range: 240...max(240, NSScreen.screens.first?.visibleFrame.width ?? 1600), suffix: "pt")
+            Text("Drag either edge in Edit layout to set the maximum width. Short messages shrink automatically.")
+                .font(.caption).foregroundStyle(.secondary)
             NotificationNumberSetting("Center text size", value: $preferences.notifications.presentation.centerFontSize,
                                       range: 12...72, suffix: "pt")
         case .largeText:
             NotificationPositionSettings("Large text", x: $preferences.notifications.presentation.largeX,
                                          y: $preferences.notifications.presentation.largeY)
+            NotificationNumberSetting("Maximum width", value: $preferences.notifications.presentation.largeMaximumWidth,
+                                      range: 320...max(320, NSScreen.screens.first?.visibleFrame.width ?? 1600), suffix: "pt")
+            Text("Drag either edge in Edit layout to set the maximum width. Short messages shrink automatically.")
+                .font(.caption).foregroundStyle(.secondary)
             NotificationNumberSetting("Large text size", value: $preferences.notifications.presentation.largeFontSize,
                                       range: 24...160, suffix: "pt")
         case .countdown:

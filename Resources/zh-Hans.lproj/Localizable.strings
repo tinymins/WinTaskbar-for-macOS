@@ -926,5 +926,9 @@
 	<string>无法打开来源应用</string>
 	<key>The source app is unavailable or its name matches more than one app. Open it manually.</key>
 	<string>来源应用不可用或名称匹配了多个应用，请手动打开。</string>
+	<key>Maximum width</key>
+	<string>最大宽度</string>
+	<key>Drag either edge in Edit layout to set the maximum width. Short messages shrink automatically.</key>
+	<string>在编辑布局中拖拽左右边缘设置最大宽度。短消息会自动收缩。</string>
 </dict>
 </plist>

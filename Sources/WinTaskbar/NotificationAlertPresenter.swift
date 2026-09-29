@@ -67,9 +67,11 @@ final class NotificationAlertPresenter {
         let old = preferences
         preferences = value
         for (kind, panel) in textPanels {
-            if old.centerFontSize != value.centerFontSize || old.largeFontSize != value.largeFontSize,
-               let content = textContents[kind] {
-                panel.contentView = NSHostingView(rootView: textOverlay(content.text, color: content.color, kind: kind))
+            if let content = textContents[kind] {
+                if old.centerFontSize != value.centerFontSize || old.largeFontSize != value.largeFontSize {
+                    panel.contentView = NSHostingView(rootView: textOverlay(content.text, color: content.color, kind: kind))
+                }
+                panel.setContentSize(textSize(content.text, kind: kind))
             }
             position(panel, kind: kind == .center ? .center : .large)
             applyLevel(to: panel)
@@ -87,13 +89,13 @@ final class NotificationAlertPresenter {
     }
 
     func showText(_ text: String, large: Bool, color: NSColor, duration: TimeInterval) {
-        guard !suspended, let screen = NSScreen.screens.first else { return }
+        guard !suspended, NSScreen.screens.first != nil else { return }
         let kind: TextKind = large ? .large : .center
         textTasks[kind]?.cancel()
         textPanels[kind]?.close()
         textContents[kind] = (text, color)
         let view = textOverlay(text, color: color, kind: kind)
-        let size = NSSize(width: min(screen.visibleFrame.width * 0.8, large ? 900 : 620), height: large ? 170 : 90)
+        let size = textSize(text, kind: kind)
         let panel = makePanel(size: size, interactive: layoutEditing)
         panel.contentView = NSHostingView(rootView: view)
         textPanels[kind] = panel
@@ -386,11 +388,40 @@ final class NotificationAlertPresenter {
         }
     }
 
+    private func textSize(_ text: String, kind: TextKind) -> NSSize {
+        let large = kind == .large
+        let width = NotificationTextLayout.width(
+            text: NotificationTextPresentation.displayText(text),
+            fontSize: large ? preferences.largeFontSize : preferences.centerFontSize,
+            maximum: large ? preferences.largeMaximumWidth : preferences.centerMaximumWidth,
+            screenWidth: NSScreen.screens.first?.visibleFrame.width ?? 900,
+            large: large, editing: layoutEditing)
+        return NSSize(width: width, height: NotificationTextLayout.height(
+            fontSize: large ? preferences.largeFontSize : preferences.centerFontSize, large: large))
+    }
+
+    private func saveTextLayout(_ kind: TextKind, frame: NSRect) {
+        guard layoutEditing, let screen = NSScreen.screens.first else { return }
+        let bounds = screen.visibleFrame
+        let x = (frame.midX - bounds.minX) / bounds.width
+        let y = (frame.midY - bounds.minY) / bounds.height
+        if kind == .large {
+            preferences.largeMaximumWidth = frame.width
+            preferences.largeX = x
+            preferences.largeY = y
+        } else {
+            preferences.centerMaximumWidth = frame.width
+            preferences.centerX = x
+            preferences.centerY = y
+        }
+        onLayoutChanged?(preferences)
+    }
+
     private func textOverlay(_ text: String, color: NSColor, kind: TextKind) -> NotificationTextOverlay {
         NotificationTextOverlay(text: NotificationTextPresentation.displayText(text), color: Color(nsColor: color),
             fontSize: CGFloat(kind == .large ? preferences.largeFontSize : preferences.centerFontSize),
-            large: kind == .large, editing: layoutEditing, onMove: { [weak self] delta, ended in
-                self?.move(kind == .large ? .large : .center, delta: delta, ended: ended)
+            large: kind == .large, editing: layoutEditing, onLayoutCommit: { [weak self] frame in
+                self?.saveTextLayout(kind, frame: frame)
             })
     }
 
@@ -441,26 +472,93 @@ private struct NotificationTextOverlay: View {
     let fontSize: CGFloat
     let large: Bool
     let editing: Bool
-    let onMove: (CGSize, Bool) -> Void
+    let onLayoutCommit: (NSRect) -> Void
 
     var body: some View {
         Text(text)
-            .font(.system(size: fontSize, weight: .bold, design: .rounded))
+            .font(Font(NotificationTextLayout.font(size: fontSize)))
             .foregroundStyle(color)
             .lineLimit(1)
             .truncationMode(.tail)
             .padding(.horizontal, 24)
-            .padding(.vertical, 16)
+            .padding(.vertical, large ? 16 : 0)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .shadow(color: .black.opacity(0.8), radius: large ? 8 : 0)
             .background {
                 if !large { RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial) }
             }
             .padding(4)
-            .contentShape(Rectangle())
-            .gesture(editing ? DragGesture(minimumDistance: 1)
-                .onChanged { onMove($0.translation, false) }
-                .onEnded { onMove($0.translation, true) } : nil)
+            .overlay {
+                if editing {
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(.tint, style: StrokeStyle(lineWidth: 1, dash: [5, 3]))
+                        .padding(4)
+                        .overlay {
+                            HStack {
+                                Image(systemName: "arrow.left.and.right")
+                                Spacer()
+                                Image(systemName: "arrow.left.and.right")
+                            }
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.tint)
+                            .padding(.horizontal, 4)
+                        }
+                        .allowsHitTesting(false)
+                    NotificationTextFrameEditor(minimumWidth: NotificationTextLayout.minimumWidth(large: large),
+                                                onCommit: onLayoutCommit)
+                }
+            }
+    }
+}
+
+private struct NotificationTextFrameEditor: NSViewRepresentable {
+    let minimumWidth: CGFloat
+    let onCommit: (NSRect) -> Void
+
+    func makeNSView(context: Context) -> Editor { Editor() }
+
+    func updateNSView(_ view: Editor, context: Context) {
+        view.minimumWidth = minimumWidth
+        view.onCommit = onCommit
+    }
+
+    final class Editor: NSView {
+        var minimumWidth: CGFloat = 240
+        var onCommit: ((NSRect) -> Void)?
+        private var start: (frame: NSRect, mouse: NSPoint, mode: NotificationTextLayout.DragMode)?
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .openHand)
+            addCursorRect(NSRect(x: 0, y: 0, width: 16, height: bounds.height), cursor: .resizeLeftRight)
+            addCursorRect(NSRect(x: bounds.maxX - 16, y: 0, width: 16, height: bounds.height), cursor: .resizeLeftRight)
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            guard let window else { return }
+            let point = convert(event.locationInWindow, from: nil)
+            let mode: NotificationTextLayout.DragMode = point.x <= 16 ? .left
+                : point.x >= bounds.width - 16 ? .right : .move
+            start = (window.frame, window.convertPoint(toScreen: event.locationInWindow), mode)
+        }
+
+        override func mouseDragged(with event: NSEvent) { updateDrag(event) }
+
+        override func mouseUp(with event: NSEvent) {
+            guard start != nil, let window else { return }
+            updateDrag(event)
+            start = nil
+            onCommit?(window.frame)
+        }
+
+        private func updateDrag(_ event: NSEvent) {
+            guard let start, let window, let screen = window.screen else { return }
+            let point = window.convertPoint(toScreen: event.locationInWindow)
+            let delta = NSPoint(x: point.x - start.mouse.x, y: point.y - start.mouse.y)
+            window.setFrame(NotificationTextLayout.draggedFrame(start: start.frame, delta: delta, mode: start.mode,
+                                                                minimumWidth: minimumWidth, screen: screen.visibleFrame),
+                            display: true)
+        }
     }
 }
 

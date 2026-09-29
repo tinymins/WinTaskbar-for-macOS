@@ -148,6 +148,16 @@ struct NotificationPresentationPreferences: Codable, Equatable {
     var importantHeight: Double = 360
     var centerFontSize: Double = 22
     var largeFontSize: Double = 44
+    private var centerWidthOverride: Double?
+    private var largeWidthOverride: Double?
+    var centerMaximumWidth: Double {
+        get { centerWidthOverride ?? 620 }
+        set { centerWidthOverride = newValue }
+    }
+    var largeMaximumWidth: Double {
+        get { largeWidthOverride ?? 900 }
+        set { largeWidthOverride = newValue }
+    }
     var alwaysOnTop = true
     var showInFullscreen = true
 }
