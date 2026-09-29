@@ -466,6 +466,14 @@ private struct NotificationTextOverlay: View {
     }
 }
 
+private extension VerticalAlignment {
+    enum ImportantMessageHeader: AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat { context[VerticalAlignment.center] }
+    }
+
+    static let importantMessageHeader = VerticalAlignment(ImportantMessageHeader.self)
+}
+
 private struct NotificationImportantOverlay: View {
     let rows: [NotificationAlertPresenter.ImportantRow]
     let icons: [NSImage]
@@ -522,12 +530,12 @@ private struct NotificationImportantOverlay: View {
     private var messageList: some View {
         VStack(spacing: 0) {
             ForEach(Array(rows.prefix(measuredRowCount ?? rows.count).enumerated()), id: \.element.id) { index, row in
-                ZStack(alignment: .topTrailing) {
+                ZStack(alignment: Alignment(horizontal: .trailing, vertical: .importantMessageHeader)) {
                     Button { onOpen(row.appName) } label: {
                         HStack(alignment: .top, spacing: 10) {
                             Image(nsImage: icons[index]).resizable().frame(width: 28, height: 28)
                             VStack(alignment: .leading, spacing: 3) {
-                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                HStack(alignment: .center, spacing: 8) {
                                     Text(row.title.isEmpty ? row.appName : row.title)
                                         .font(.system(size: 13, weight: .semibold)).lineLimit(2)
                                     Spacer(minLength: 0)
@@ -536,6 +544,7 @@ private struct NotificationImportantOverlay: View {
                                         .fixedSize()
                                         .help(row.receivedAt.formatted(date: .complete, time: .standard))
                                 }
+                                .alignmentGuide(.importantMessageHeader) { $0[VerticalAlignment.center] }
                                 if !row.body.isEmpty { Text(row.body).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) }
                             }
                             Spacer(minLength: 0)
@@ -557,7 +566,8 @@ private struct NotificationImportantOverlay: View {
                         }
                         .buttonStyle(NotificationImportantButtonStyle())
                         .accessibilityLabel(NSLocalizedString("Remove message", comment: "Remove important message"))
-                        .padding(6)
+                        .padding(.horizontal, 6)
+                        .alignmentGuide(.importantMessageHeader) { $0[VerticalAlignment.center] }
                     }
                 }
                 if index < (measuredRowCount ?? rows.count) - 1 { Divider().padding(.leading, 50) }
