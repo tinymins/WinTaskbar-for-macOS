@@ -34,12 +34,11 @@ enum NotificationTextLayout {
             return NSRect(x: min(max(start.minX + delta.x, screen.minX), screen.maxX - start.width),
                           y: min(max(start.minY + delta.y, screen.minY), screen.maxY - start.height),
                           width: start.width, height: start.height)
-        case .left:
-            let width = min(start.maxX - screen.minX, max(minimumWidth, start.width - delta.x))
-            return NSRect(x: start.maxX - width, y: start.minY, width: width, height: start.height)
-        case .right:
-            let width = min(screen.maxX - start.minX, max(minimumWidth, start.width + delta.x))
-            return NSRect(x: start.minX, y: start.minY, width: width, height: start.height)
+        case .left, .right:
+            let available = 2 * min(start.midX - screen.minX, screen.maxX - start.midX)
+            let change = 2 * delta.x * (mode == .left ? -1 : 1)
+            let width = min(available, max(minimumWidth, start.width + change))
+            return NSRect(x: start.midX - width / 2, y: start.minY, width: width, height: start.height)
         }
     }
 }
