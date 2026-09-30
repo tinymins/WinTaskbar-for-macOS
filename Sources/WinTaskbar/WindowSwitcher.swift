@@ -132,10 +132,23 @@ final class WindowActivationHistory {
         workspaceObservers.removeAll()
     }
 
-    func orderedWindows(from frontToBackWindows: [WindowInfo]) -> [WindowInfo] {
-        if let frontmostPID = workspace.frontmostApplication?.processIdentifier,
-           let frontmostWindow = frontToBackWindows.first(where: { $0.ownerPID == frontmostPID }) {
-            activationOrder.record(frontmostWindow.windowID)
+    func currentFocusedWindowID() -> CGWindowID? {
+        focusedWindowCaptureTask?.cancel()
+        focusedWindowCaptureTask = nil
+        focusedWindowCaptureGeneration &+= 1
+        guard let pid = workspace.frontmostApplication?.processIdentifier,
+              let windowID = Self.focusedWindowID(forPID: pid),
+              workspace.frontmostApplication?.processIdentifier == pid else { return nil }
+        return windowID
+    }
+
+    func orderedWindows(
+        from frontToBackWindows: [WindowInfo],
+        focusedWindowID: CGWindowID?
+    ) -> [WindowInfo] {
+        if let focusedWindowID,
+           frontToBackWindows.contains(where: { $0.windowID == focusedWindowID }) {
+            activationOrder.record(focusedWindowID)
         }
         let windowIDs = frontToBackWindows.map(\.windowID)
         let orderedIDs = activationOrder.reconcile(
@@ -146,11 +159,8 @@ final class WindowActivationHistory {
         return orderedIDs.compactMap { windowsByID[$0] }
     }
 
-    func record(_ windowID: CGWindowID) {
-        activationOrder.record(windowID)
-    }
-
     fileprivate func recordFocusedWindow(forPID pid: pid_t) {
+        guard workspace.frontmostApplication?.processIdentifier == pid else { return }
         focusedWindowCaptureGeneration &+= 1
         let generation = focusedWindowCaptureGeneration
         focusedWindowCaptureTask?.cancel()
@@ -164,6 +174,7 @@ final class WindowActivationHistory {
             }
             guard !Task.isCancelled,
                   focusedWindowCaptureGeneration == generation,
+                  workspace.frontmostApplication?.processIdentifier == pid,
                   let windowID else { return }
             activationOrder.record(windowID)
         }
@@ -457,6 +468,15 @@ enum WindowSwitcherLayout {
 }
 
 enum WindowSwitcherSelection {
+    static func initialIndex(
+        windowIDs: [CGWindowID],
+        focusedWindowID: CGWindowID?,
+        reverse: Bool
+    ) -> Int {
+        let indices = reverse ? Array(windowIDs.indices.reversed()) : Array(windowIDs.indices)
+        return indices.first { windowIDs[$0] != focusedWindowID } ?? 0
+    }
+
     static func indexAfterRemoving(
         removedIndex: Int,
         selectedIndex: Int,
@@ -726,13 +746,21 @@ final class WindowSwitcherPanelController {
             forPIDs: applicationPIDs
         )
         needsWindowCacheRefresh = cachedFilter.hasUnclassifiedWindows
-        windows = activationHistory.orderedWindows(from: cachedFilter.windows)
+        let focusedWindowID = activationHistory.currentFocusedWindowID()
+        windows = activationHistory.orderedWindows(
+            from: cachedFilter.windows,
+            focusedWindowID: focusedWindowID
+        )
         guard !windows.isEmpty else {
             dismiss()
             refreshWindowCacheIfNeeded()
             return
         }
-        selectedIndex = reverse ? windows.count - 1 : min(1, windows.count - 1)
+        selectedIndex = WindowSwitcherSelection.initialIndex(
+            windowIDs: windows.map(\.windowID),
+            focusedWindowID: focusedWindowID,
+            reverse: reverse
+        )
         updateSelection(disablesAnimations: true)
         thumbnails = Dictionary(uniqueKeysWithValues: windows.compactMap { window in
             windowsService.cachedThumbnail(for: window).map { (window.windowID, $0) }
@@ -793,7 +821,6 @@ final class WindowSwitcherPanelController {
             return
         }
         let selectedWindow = windows[selectedIndex]
-        activationHistory.record(selectedWindow.windowID)
         dismiss()
         AltTabDiagnostics.logger.notice(
             "commit window=\(selectedWindow.windowID, privacy: .public) dismissMs=\(AltTabDiagnostics.milliseconds(since: startedAt), privacy: .public)"
