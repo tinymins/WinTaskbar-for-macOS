@@ -2,6 +2,27 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.31] - 2026-09-30
+
+### Added
+
+- Add ordered desktop notification rules matching application names and message regular expressions, with a fixed fallback for unmatched messages.
+- Add combinable notification cards, center text, large text, screen-edge glow, countdowns, sound or speech, and an important-message list, with shared defaults, per-rule styling, and cooldowns.
+- Add draggable alert positions, adjustable text-alert width limits and important-message list sizing, plus newest-first important messages with timestamps and individual dismiss controls.
+- Open alerts through the original notification action when available, falling back to the source application; allow rules to hide system banners without deleting messages from Notification Center.
+- Add automatic taskbar hiding in fullscreen and per-application options for complete hiding and shortcut suspension; separate Taskbar, System Tray, and Fullscreen & Apps settings into dedicated pages.
+
+### Fixed
+
+- Base Alt-Tab ordering on actual focus instead of window stacking order, skip the current window by default, and ignore background or stale focus callbacks so Chrome DevTools cannot repeatedly force a switch back to the current browser window.
+- Include windows from native fullscreen Spaces and other desktops in Alt-Tab and taskbar previews while excluding inactive window records.
+- Keep incomplete notification cards, neighboring notifications, and system control labels out of captured message content.
+- Correct important-message hover feedback and dismiss-button visibility after scrolling and layout changes, and improve long-text display and position stability during dragging and resizing.
+
+### Usage notes
+
+- Notification capture requires Accessibility permission and visible macOS notification banners; Focus and other system settings may prevent capture. Alerts and important messages remain in memory only and are cleared on exit.
+
 ## [0.0.30] - 2026-09-23
 
 ### Added
