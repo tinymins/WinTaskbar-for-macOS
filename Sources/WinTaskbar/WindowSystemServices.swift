@@ -16,13 +16,16 @@ struct TaskbarAppClickPolicy {
     static func action(
         windows: [WindowInfo],
         isApplicationActive: Bool,
-        isSingleWindowFocused: Bool
+        isSingleWindowFocused: Bool,
+        minimizeOnClick: Bool = true
     ) -> TaskbarAppClickAction {
         guard windows.count == 1, let window = windows.first else {
             return windows.isEmpty ? .activateApplication : .doNothing
         }
         if window.isMinimized { return .restoreWindow }
-        if isApplicationActive && isSingleWindowFocused { return .minimizeWindow }
+        if isApplicationActive && isSingleWindowFocused {
+            return minimizeOnClick ? .minimizeWindow : .doNothing
+        }
         return .bringWindowToFront
     }
 }
@@ -119,6 +122,7 @@ final class WindowActivationService {
 
     func activateOrMinimize(
         _ item: TaskbarItem,
+        minimizeOnClick: Bool,
         targetFrame: CGRect? = nil,
         reduceMotion: Bool = false,
         disableAnimationWhenRemote: Bool = false
@@ -145,7 +149,8 @@ final class WindowActivationService {
         switch TaskbarAppClickPolicy.action(
             windows: windows,
             isApplicationActive: application.isActive,
-            isSingleWindowFocused: isSingleWindowFocused
+            isSingleWindowFocused: isSingleWindowFocused,
+            minimizeOnClick: minimizeOnClick
         ) {
         case .activateApplication:
             application.activate(options: [.activateIgnoringOtherApps])

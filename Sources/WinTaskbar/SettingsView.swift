@@ -375,6 +375,10 @@ struct SettingsView: View {
             }
             SettingsSection("Window interactions") {
                 Toggle("Window Previews", isOn: $preferences.windowPreviewsEnabled)
+                Toggle("Minimize windows when clicking taskbar icons", isOn: $preferences.minimizeOnTaskbarClick)
+                Text("When disabled, clicking the taskbar icon of the focused window keeps it open.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("Show Desktop", isOn: $preferences.showDesktopEnabled)
                 Toggle(
                     "Disable minimize animation during remote sessions",

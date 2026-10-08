@@ -88,6 +88,7 @@ final class PreferencesStore: ObservableObject {
     @Published var taskbarEnabled: Bool { didSet { defaults.set(taskbarEnabled, forKey: "wintaskbar.feature.taskbar") } }
     @Published var launchAtLogin: Bool { didSet { defaults.set(launchAtLogin, forKey: "wintaskbar.launchAtLogin") } }
     @Published var windowPreviewsEnabled: Bool { didSet { defaults.set(windowPreviewsEnabled, forKey: "wintaskbar.feature.windowPreviews") } }
+    @Published var minimizeOnTaskbarClick: Bool { didSet { defaults.set(minimizeOnTaskbarClick, forKey: "wintaskbar.minimizeOnTaskbarClick") } }
     @Published var disableMinimizeAnimationDuringRemoteSession: Bool {
         didSet {
             defaults.set(
@@ -221,6 +222,7 @@ final class PreferencesStore: ObservableObject {
             : false
         launchAtLogin = defaults.object(forKey: "wintaskbar.launchAtLogin") as? Bool ?? false
         windowPreviewsEnabled = defaults.object(forKey: "wintaskbar.feature.windowPreviews") as? Bool ?? true
+        minimizeOnTaskbarClick = defaults.object(forKey: "wintaskbar.minimizeOnTaskbarClick") as? Bool ?? true
         disableMinimizeAnimationDuringRemoteSession = defaults.object(
             forKey: "wintaskbar.disableMinimizeAnimationDuringRemoteSession"
         ) as? Bool ?? true
@@ -350,6 +352,7 @@ final class PreferencesStore: ObservableObject {
         taskbarEnabled = false
         launchAtLogin = false
         windowPreviewsEnabled = true
+        minimizeOnTaskbarClick = true
         showDesktopEnabled = true
         globalHotkeysEnabled = true
         altTabSwitcherEnabled = false

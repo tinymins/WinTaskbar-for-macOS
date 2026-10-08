@@ -48,6 +48,10 @@
 	<string>Detects active macOS Screen Sharing and Remote Management connections.</string>
 	<key>Disable minimize animation during remote sessions</key>
 	<string>Disable minimize animation during remote sessions</string>
+	<key>Minimize windows when clicking taskbar icons</key>
+	<string>Minimize windows when clicking taskbar icons</string>
+	<key>When disabled, clicking the taskbar icon of the focused window keeps it open.</key>
+	<string>When disabled, clicking the taskbar icon of the focused window keeps it open.</string>
 	<key>System tray clock</key>
 	<string>System tray clock</string>
 	<key>Region</key>

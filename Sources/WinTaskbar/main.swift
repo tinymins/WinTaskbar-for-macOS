@@ -2223,6 +2223,46 @@ func runSelfTest() async -> Int32 {
         return 1
     }
 
+    guard preferences.minimizeOnTaskbarClick else {
+        fputs("SELF-TEST FAILED: taskbar click minimization default mismatch\n", stderr)
+        return 1
+    }
+    for minimizeOnClick in [false, true] {
+        guard TaskbarAppClickPolicy.action(
+            windows: [landscapePreviewWindow],
+            isApplicationActive: true,
+            isSingleWindowFocused: true,
+            minimizeOnClick: minimizeOnClick
+        ) == (minimizeOnClick ? .minimizeWindow : .doNothing),
+        TaskbarAppClickPolicy.action(
+            windows: [minimizedPreviewWindow],
+            isApplicationActive: false,
+            isSingleWindowFocused: false,
+            minimizeOnClick: minimizeOnClick
+        ) == .restoreWindow,
+        TaskbarAppClickPolicy.action(
+            windows: [landscapePreviewWindow],
+            isApplicationActive: false,
+            isSingleWindowFocused: false,
+            minimizeOnClick: minimizeOnClick
+        ) == .bringWindowToFront,
+        TaskbarAppClickPolicy.action(
+            windows: [],
+            isApplicationActive: false,
+            isSingleWindowFocused: false,
+            minimizeOnClick: minimizeOnClick
+        ) == .activateApplication,
+        TaskbarAppClickPolicy.action(
+            windows: [landscapePreviewWindow, portraitPreviewWindow],
+            isApplicationActive: true,
+            isSingleWindowFocused: true,
+            minimizeOnClick: minimizeOnClick
+        ) == .doNothing else {
+            fputs("SELF-TEST FAILED: configurable taskbar click minimization mismatch\n", stderr)
+            return 1
+        }
+    }
+
     let minimizeTarget = CGRect(x: 100, y: 20, width: 40, height: 40)
     let minimizeDestination = WindowMinimizeTransitionMotion.destinationFrame(for: minimizeTarget)
     guard WindowMinimizeTransitionMotion.duration == 0.167,
@@ -3395,6 +3435,7 @@ func runSelfTest() async -> Int32 {
     preferences.showFlashingOnTaskbarApps = false
     preferences.barHeight = 64
     preferences.trayWifiEnabled = false
+    preferences.minimizeOnTaskbarClick = false
     preferences.disableMinimizeAnimationDuringRemoteSession = false
     preferences.externalStatusItemsEnabled = true
     preferences.trayClockShowsSeconds = false
@@ -3428,6 +3469,8 @@ func runSelfTest() async -> Int32 {
           defaults.bool(forKey: "wintaskbar.showFlashingOnTaskbarApps") == false,
           defaults.double(forKey: "wintaskbar.barHeight") == 64,
           defaults.bool(forKey: "wintaskbar.feature.trayWifi") == false,
+          defaults.object(forKey: "wintaskbar.minimizeOnTaskbarClick") as? Bool == false,
+          !PreferencesStore(defaults: defaults).minimizeOnTaskbarClick,
           defaults.bool(forKey: "wintaskbar.disableMinimizeAnimationDuringRemoteSession") == false,
           PreferencesStore(defaults: defaults).externalStatusItemsEnabled,
           !PreferencesStore(defaults: defaults).trayClockShowsSeconds,
@@ -3447,6 +3490,13 @@ func runSelfTest() async -> Int32 {
           DockBadgeService.parseLSAppInfoOutput("\"StatusLabel\"={ \"label\"=\"124 notifications\" }") == "124",
           DockBadgeService.parseLSAppInfoOutput("\"StatusLabel\"=[ NULL ]") == nil else {
         fputs("SELF-TEST FAILED: preference keys did not persist\n", stderr)
+        return 1
+    }
+
+    preferences.reset()
+    guard preferences.minimizeOnTaskbarClick,
+          PreferencesStore(defaults: defaults).minimizeOnTaskbarClick else {
+        fputs("SELF-TEST FAILED: taskbar click minimization reset mismatch\n", stderr)
         return 1
     }
 

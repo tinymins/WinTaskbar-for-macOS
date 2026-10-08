@@ -401,7 +401,9 @@ struct TaskbarView: View {
     private func overflowButton(_ items: [TaskbarItem]) -> some View {
         Menu {
             ForEach(items) { item in
-                Button { windowActivator.activateOrMinimize(item) } label: {
+                Button {
+                    windowActivator.activateOrMinimize(item, minimizeOnClick: preferences.minimizeOnTaskbarClick)
+                } label: {
                     Label {
                         Text(item.name)
                     } icon: {
@@ -845,6 +847,7 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
             DispatchQueue.main.async {
                 windowActivator.activateOrMinimize(
                     item,
+                    minimizeOnClick: preferences.minimizeOnTaskbarClick,
                     targetFrame: transitionAnchor?.screenFrame,
                     reduceMotion: reduceMotion,
                     disableAnimationWhenRemote: preferences.disableMinimizeAnimationDuringRemoteSession
