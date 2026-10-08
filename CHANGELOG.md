@@ -2,6 +2,16 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.32] - 2026-10-08
+
+### Added
+
+- Add a Taskbar setting to control whether clicking the focused application's taskbar icon minimizes its window. The option is enabled by default; disabling it keeps the focused window open when its icon is clicked.
+
+### Fixed
+
+- Restore the status lines beneath taskbar app icons in Mac highlight style, including running, active, and attention indicators. Keep the lines visible independently of the icon's press animation while preserving their drag animations.
+
 ## [0.0.31] - 2026-09-30
 
 ### Added
