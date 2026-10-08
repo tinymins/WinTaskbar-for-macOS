@@ -861,17 +861,6 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
                     .opacity(isBeingDragged ? 0 : 1)
                     .animation(dragDecorationAnimation, value: isBeingDragged)
             }
-            .overlay(alignment: indicatorAlignment) {
-                if preferences.showRunningIndicators && !preferences.showAppLabels {
-                    runningIndicator
-                        .scaleEffect(
-                            x: preferences.position.isHorizontal && isBeingDragged ? 0 : 1,
-                            y: preferences.position.isHorizontal || !isBeingDragged ? 1 : 0
-                        )
-                        .opacity(isBeingDragged ? 0 : 1)
-                        .animation(dragDecorationAnimation, value: isBeingDragged)
-                }
-            }
             .overlay {
                 if preferences.activeIndicator == .border && item.isActive {
                     RoundedRectangle(cornerRadius: 6)
@@ -883,6 +872,18 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
             .contentShape(Rectangle())
         }
         .buttonStyle(TaskbarButtonStyle(contentPadding: 0, suppressPressFeedback: isBeingDragged))
+        .overlay(alignment: indicatorAlignment) {
+            if preferences.showRunningIndicators && !preferences.showAppLabels {
+                runningIndicator
+                    .scaleEffect(
+                        x: preferences.position.isHorizontal && isBeingDragged ? 0 : 1,
+                        y: preferences.position.isHorizontal || !isBeingDragged ? 1 : 0
+                    )
+                    .opacity(isBeingDragged ? 0 : 1)
+                    .animation(dragDecorationAnimation, value: isBeingDragged)
+                    .allowsHitTesting(false)
+            }
+        }
         .simultaneousGesture(reorderGesture)
         .overlay {
             TaskbarContextClickAnchor { anchorView in
