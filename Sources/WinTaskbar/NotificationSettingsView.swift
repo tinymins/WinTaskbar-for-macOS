@@ -9,7 +9,7 @@ struct NotificationSettingsView: View {
     @ObservedObject private var permissions = PermissionsService.shared
     @State private var editingRule: NotificationCaptureRule?
     @State private var editingFallback = false
-    @State private var expandedOutput: NotificationOutputKind? = .card
+    @State private var expandedOutput: NotificationOutputKind?
     @State private var settingsOpenFailed = false
 
     var body: some View {
@@ -37,36 +37,6 @@ struct NotificationSettingsView: View {
             }
 
             Group {
-                SettingsSection("Shared output settings") {
-                    Text("Rules use these settings unless Customize for this rule is checked. Changes apply to every rule that inherits the output, including the fallback.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    ForEach(NotificationOutputKind.allCases) { kind in
-                        DisclosureGroup(isExpanded: expansionBinding(kind)) {
-                            VStack(alignment: .leading, spacing: 14) {
-                                NotificationChannelSettingsEditor(
-                                    kind: kind, settings: defaultSettingsBinding(kind)
-                                )
-                                outputPlacement(kind)
-                                Button("Preview this output") { service.showOutputPreview(kind) }
-                            }
-                            .padding(.top, 10)
-                            .padding(.leading, 18)
-                            .padding(.bottom, 6)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(kind.label).font(.body.weight(.medium))
-                                Text((preferences.notifications.outputDefaults[kind] ?? NotificationOutputSettings())
-                                    .summary(for: kind))
-                                    .font(.caption).foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                            }
-                        }
-                        if kind != NotificationOutputKind.allCases.last { Divider() }
-                    }
-                    Text("Preview shows only WinTaskbar output and never closes a real system notification.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-
                 SettingsSection("Trigger rules") {
                     Text("Rules are checked from top to bottom. The first enabled match chooses the output combination. Unmatched notifications use the fallback.")
                         .font(.caption).foregroundStyle(.secondary)
@@ -110,6 +80,37 @@ struct NotificationSettingsView: View {
                     HStack {
                         Button("Edit fallback") { editingFallback = true }
                         Button("Preview fallback") { service.showPreview() }
+                    }
+                    Text("Preview shows only WinTaskbar output and never closes a real system notification.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
+                SettingsSection("Shared output settings") {
+                    Text("Rules use these settings unless Customize for this rule is checked. Changes apply to every rule that inherits the output, including the fallback.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    ForEach(NotificationOutputKind.allCases) { kind in
+                        DisclosureGroup(isExpanded: expansionBinding(kind)) {
+                            VStack(alignment: .leading, spacing: 14) {
+                                NotificationChannelSettingsEditor(
+                                    kind: kind, settings: defaultSettingsBinding(kind)
+                                )
+                                outputPlacement(kind)
+                                Button("Preview this output") { service.showOutputPreview(kind) }
+                            }
+                            .padding(.top, 10)
+                            .padding(.leading, 18)
+                            .padding(.bottom, 6)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(kind.label).font(.body.weight(.medium))
+                                Text((preferences.notifications.outputDefaults[kind] ?? NotificationOutputSettings())
+                                    .summary(for: kind))
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                        }
+                        .disclosureGroupStyle(NotificationOutputDisclosureStyle())
+                        if kind != NotificationOutputKind.allCases.last { Divider() }
                     }
                     Text("Preview shows only WinTaskbar output and never closes a real system notification.")
                         .font(.caption).foregroundStyle(.secondary)
@@ -250,6 +251,53 @@ struct NotificationSettingsView: View {
         return labels.isEmpty
             ? NSLocalizedString("Ignore notification", comment: "Notification output")
             : labels.joined(separator: " · ")
+    }
+}
+
+private struct NotificationOutputDisclosureStyle: DisclosureGroupStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    configuration.isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .rotationEffect(.degrees(configuration.isExpanded ? 90 : 0))
+                        .frame(width: 12)
+                        .foregroundStyle(.secondary)
+                    configuration.label
+                    Spacer(minLength: 0)
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(NotificationOutputHeaderButtonStyle())
+            .accessibilityValue(Text(configuration.isExpanded ? "Expanded" : "Collapsed"))
+            if configuration.isExpanded { configuration.content }
+        }
+    }
+}
+
+private struct NotificationOutputHeaderButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Feedback(configuration: configuration)
+    }
+
+    private struct Feedback: View {
+        let configuration: ButtonStyle.Configuration
+        @Environment(\.isEnabled) private var isEnabled
+        @State private var hovered = false
+
+        var body: some View {
+            configuration.label
+                .background(Color.primary.opacity(isEnabled ? (configuration.isPressed ? 0.12 : hovered ? 0.06 : 0) : 0),
+                            in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .onHover { hovered = $0 }
+        }
     }
 }
 

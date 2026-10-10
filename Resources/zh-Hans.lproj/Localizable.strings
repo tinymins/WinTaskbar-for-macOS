@@ -948,5 +948,9 @@
 	<string>倒计时正则：%@</string>
 	<key>Notification text</key>
 	<string>通知原文</string>
+	<key>Expanded</key>
+	<string>已展开</string>
+	<key>Collapsed</key>
+	<string>已折叠</string>
 </dict>
 </plist>

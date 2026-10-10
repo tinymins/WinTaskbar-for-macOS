@@ -942,5 +942,9 @@
 	<string>Countdown regex: %@</string>
 	<key>Notification text</key>
 	<string>Notification text</string>
+	<key>Expanded</key>
+	<string>Expanded</string>
+	<key>Collapsed</key>
+	<string>Collapsed</string>
 </dict>
 </plist>
