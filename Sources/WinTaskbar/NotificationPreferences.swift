@@ -50,11 +50,16 @@ struct NotificationOutputSettings: Codable, Equatable {
     var colorHex = "#FFCC05"
     var textTemplate = ""
     var durationSeconds: Double = 3
+    var glowFlashCount: Int?
     var countdownSeconds: Double = 60
     var countdownPattern = ""
     var completionOutputs: Set<NotificationOutputKind> = [.largeText, .glow]
     var soundName = "Glass"
     var speechEnabled = false
+
+    var effectiveGlowFlashCount: Int {
+        min(20, max(1, glowFlashCount ?? 2))
+    }
 
     func countdownDuration(message: String) -> TimeInterval? {
         let seconds: Double

@@ -946,5 +946,11 @@
 	<string>Expanded</string>
 	<key>Collapsed</key>
 	<string>Collapsed</string>
+	<key>Flash count</key>
+	<string>Flash count</string>
+	<key>Flash count: %ld</key>
+	<string>Flash count: %ld</string>
+	<key>Flashes finish within the effect duration. With Reduce Motion enabled, one gentle glow is shown instead.</key>
+	<string>Flashes finish within the effect duration. With Reduce Motion enabled, one gentle glow is shown instead.</string>
 </dict>
 </plist>

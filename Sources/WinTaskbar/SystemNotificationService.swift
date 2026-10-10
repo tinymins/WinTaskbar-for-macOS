@@ -300,7 +300,7 @@ final class SystemNotificationService: ObservableObject {
             let color = NSColor(hex: settings.colorHex) ?? NotificationGlow.defaultColor
             let duration = min(3600, max(0.5, settings.durationSeconds))
             if kind == .glow {
-                presenter.showGlow(color: color, duration: duration)
+                presenter.showGlow(color: color, duration: duration, flashCount: settings.effectiveGlowFlashCount)
             } else {
                 presenter.showText(plan.text(for: kind), large: kind == .largeText, color: color, duration: duration)
             }

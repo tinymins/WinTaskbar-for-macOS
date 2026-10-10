@@ -589,6 +589,18 @@ private struct NotificationChannelSettingsEditor: View {
                 NotificationNumberSetting("Effect duration", value: $settings.durationSeconds,
                                           range: 0.5...3600, suffix: "s")
             }
+            if kind == .glow {
+                Stepper(value: flashCountBinding, in: 1...20) {
+                    HStack {
+                        Text("Flash count")
+                        Spacer()
+                        Text("\(settings.effectiveGlowFlashCount)").monospacedDigit()
+                    }
+                }
+                .accessibilityLabel("Flash count")
+                Text("Flashes finish within the effect duration. With Reduce Motion enabled, one gentle glow is shown instead.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if [.centerText, .largeText, .glow, .countdown].contains(kind) {
                 ColorPicker("Alert color", selection: colorBinding, supportsOpacity: false)
             }
@@ -617,6 +629,13 @@ private struct NotificationChannelSettingsEditor: View {
                 Toggle("Speak the message", isOn: $settings.speechEnabled)
             }
         }
+    }
+
+    private var flashCountBinding: Binding<Int> {
+        Binding(
+            get: { settings.effectiveGlowFlashCount },
+            set: { settings.glowFlashCount = $0 }
+        )
     }
 
     private var colorBinding: Binding<Color> {
@@ -664,6 +683,10 @@ private extension NotificationOutputSettings {
             parts.append(speechEnabled ? NSLocalizedString("Speak the message", comment: "Notification output summary") : soundName)
         case .important:
             break
+        }
+        if kind == .glow {
+            parts.append(String(format: NSLocalizedString("Flash count: %ld", comment: "Notification output summary"),
+                                effectiveGlowFlashCount))
         }
         if [.centerText, .largeText, .glow, .countdown].contains(kind) { parts.append(colorHex) }
         if kind != .glow {

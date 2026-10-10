@@ -952,5 +952,11 @@
 	<string>已展开</string>
 	<key>Collapsed</key>
 	<string>已折叠</string>
+	<key>Flash count</key>
+	<string>闪烁次数</string>
+	<key>Flash count: %ld</key>
+	<string>闪烁次数：%ld</string>
+	<key>Flashes finish within the effect duration. With Reduce Motion enabled, one gentle glow is shown instead.</key>
+	<string>在效果总时长内完成指定次数的闪烁。启用系统“减少动态效果”时，改为一次柔和泛光。</string>
 </dict>
 </plist>

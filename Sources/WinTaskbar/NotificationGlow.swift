@@ -7,8 +7,8 @@ final class NotificationGlow {
     private var panel: NSPanel?
     private var completion: Task<Void, Never>?
 
-    func show(on screen: NSScreen, color: NSColor, duration: TimeInterval = 3, showInFullscreen: Bool = true, alwaysOnTop: Bool = true) {
-        // Coalesce a burst into one pulse instead of layering or restarting alarms.
+    func show(on screen: NSScreen, color: NSColor, duration: TimeInterval = 3, flashCount: Int, showInFullscreen: Bool = true, alwaysOnTop: Bool = true) {
+        // Coalesce a burst into one glow sequence instead of layering or restarting alarms.
         guard panel == nil else { return }
         let panel = NotificationGlowPanel(
             contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel],
@@ -31,16 +31,18 @@ final class NotificationGlow {
         self.panel = panel
         panel.orderFrontRegardless()
 
+        let interval = max(0.1, duration)
         let animation = CAKeyframeAnimation(keyPath: "opacity")
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             animation.values = [0, 0.59, 0.59, 0]
             animation.keyTimes = [0, 0.1, 0.45, 1]
+            animation.duration = interval
         } else {
-            animation.values = [0, 0.59, 0, 0.59, 0]
-            animation.keyTimes = [0, 0.25, 0.5, 0.75, 1]
+            animation.values = [0, 0.59, 0]
+            animation.keyTimes = [0, 0.5, 1]
+            animation.duration = interval / Double(flashCount)
+            animation.repeatCount = Float(flashCount)
         }
-        let interval = max(0.1, duration)
-        animation.duration = interval
         animation.calculationMode = .linear
         view.layer?.add(animation, forKey: "notificationGlow")
         completion = Task { [weak self] in
