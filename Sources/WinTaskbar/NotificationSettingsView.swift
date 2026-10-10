@@ -9,7 +9,7 @@ struct NotificationSettingsView: View {
     @ObservedObject private var permissions = PermissionsService.shared
     @State private var editingRule: NotificationCaptureRule?
     @State private var editingFallback = false
-    @State private var selectedOutput: NotificationOutputKind = .card
+    @State private var expandedOutput: NotificationOutputKind? = .card
     @State private var settingsOpenFailed = false
 
     var body: some View {
@@ -37,6 +37,36 @@ struct NotificationSettingsView: View {
             }
 
             Group {
+                SettingsSection("Shared output settings") {
+                    Text("Rules use these settings unless Customize for this rule is checked. Changes apply to every rule that inherits the output, including the fallback.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    ForEach(NotificationOutputKind.allCases) { kind in
+                        DisclosureGroup(isExpanded: expansionBinding(kind)) {
+                            VStack(alignment: .leading, spacing: 14) {
+                                NotificationChannelSettingsEditor(
+                                    kind: kind, settings: defaultSettingsBinding(kind)
+                                )
+                                outputPlacement(kind)
+                                Button("Preview this output") { service.showOutputPreview(kind) }
+                            }
+                            .padding(.top, 10)
+                            .padding(.leading, 18)
+                            .padding(.bottom, 6)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(kind.label).font(.body.weight(.medium))
+                                Text((preferences.notifications.outputDefaults[kind] ?? NotificationOutputSettings())
+                                    .summary(for: kind))
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                        }
+                        if kind != NotificationOutputKind.allCases.last { Divider() }
+                    }
+                    Text("Preview shows only WinTaskbar output and never closes a real system notification.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
                 SettingsSection("Trigger rules") {
                     Text("Rules are checked from top to bottom. The first enabled match chooses the output combination. Unmatched notifications use the fallback.")
                         .font(.caption).foregroundStyle(.secondary)
@@ -81,25 +111,6 @@ struct NotificationSettingsView: View {
                         Button("Edit fallback") { editingFallback = true }
                         Button("Preview fallback") { service.showPreview() }
                     }
-                    Text("Preview shows only WinTaskbar output and never closes a real system notification.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-
-                SettingsSection("Output settings") {
-                    Text("Choose one output to edit its shared defaults. Rules may inherit these settings or customize that output.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Picker("Output category", selection: $selectedOutput) {
-                        ForEach(NotificationOutputKind.allCases, id: \.self) { kind in
-                            Text(kind.label).tag(kind)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    NotificationChannelSettingsEditor(
-                        kind: selectedOutput,
-                        settings: defaultSettingsBinding(selectedOutput)
-                    )
-                    outputPlacement
-                    Button("Preview this output") { service.showOutputPreview(selectedOutput) }
                     Text("Preview shows only WinTaskbar output and never closes a real system notification.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -174,8 +185,8 @@ struct NotificationSettingsView: View {
     }
 
     @ViewBuilder
-    private var outputPlacement: some View {
-        switch selectedOutput {
+    private func outputPlacement(_ kind: NotificationOutputKind) -> some View {
+        switch kind {
         case .centerText:
             NotificationPositionSettings("Center reminder", x: $preferences.notifications.presentation.centerX,
                                          y: $preferences.notifications.presentation.centerY)
@@ -209,6 +220,13 @@ struct NotificationSettingsView: View {
         default:
             EmptyView()
         }
+    }
+
+    private func expansionBinding(_ kind: NotificationOutputKind) -> Binding<Bool> {
+        Binding(
+            get: { expandedOutput == kind },
+            set: { expandedOutput = $0 ? kind : nil }
+        )
     }
 
     private func defaultSettingsBinding(_ kind: NotificationOutputKind) -> Binding<NotificationOutputSettings> {
@@ -375,13 +393,7 @@ private struct NotificationOutputsEditor: View {
             Text("Each checkbox controls a WinTaskbar output for this rule.")
                 .font(.caption).foregroundStyle(.secondary)
             ForEach(NotificationOutputKind.allCases, id: \.self) { kind in
-                VStack(alignment: .leading, spacing: 6) {
-                    Toggle(kind.label, isOn: enabledBinding(kind))
-                    if outputs.enabled.contains(kind) {
-                        NotificationOverrideEditor(kind: kind, outputs: $outputs, defaults: defaults)
-                            .padding(.leading, 22)
-                    }
-                }
+                NotificationRuleOutputEditor(kind: kind, outputs: $outputs, defaults: defaults)
             }
             if outputs.enabled.contains(.countdown) {
                 let completion = outputs.overrides[.countdown]?.completionOutputs
@@ -391,15 +403,11 @@ private struct NotificationOutputsEditor: View {
                     completion.contains($0) && $0 != .countdown && !outputs.enabled.contains($0)
                 },
                         id: \.self) { kind in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(String(format: NSLocalizedString("%@ after countdown", comment: "Notification output"),
-                                    kind.label))
-                            .font(.caption.weight(.medium))
-                        NotificationOverrideEditor(kind: kind, outputs: $outputs, defaults: defaults)
-                            .padding(.leading, 22)
-                    }
+                    NotificationRuleOutputEditor(kind: kind, outputs: $outputs, defaults: defaults,
+                                                 afterCountdown: true)
                 }
             }
+            Divider()
             Toggle(isOn: $outputs.dismissSystemNotification) {
                 HStack(spacing: 6) {
                     Text("Hide original macOS banner (keep in Notification Center)")
@@ -424,32 +432,59 @@ private struct NotificationOutputsEditor: View {
             }
         }
     }
+}
 
-    private func enabledBinding(_ kind: NotificationOutputKind) -> Binding<Bool> {
+private struct NotificationRuleOutputEditor: View {
+    let kind: NotificationOutputKind
+    @Binding var outputs: NotificationOutputs
+    let defaults: [NotificationOutputKind: NotificationOutputSettings]
+    var afterCountdown = false
+
+    private var isActive: Bool { afterCountdown || outputs.enabled.contains(kind) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 16) {
+                if afterCountdown {
+                    Text(String(format: NSLocalizedString("%@ after countdown", comment: "Notification output"),
+                                kind.label))
+                        .font(.body.weight(.medium))
+                } else {
+                    Toggle(kind.label, isOn: enabledBinding)
+                }
+                Spacer(minLength: 12)
+                if isActive {
+                    Toggle("Customize for this rule", isOn: overrideBinding)
+                        .font(.caption)
+                }
+            }
+            if isActive {
+                if outputs.overrides[kind] != nil {
+                    NotificationChannelSettingsEditor(kind: kind, settings: settingsBinding)
+                        .padding(.leading, 18)
+                } else {
+                    Text(String(format: NSLocalizedString("Uses shared output settings: %@", comment: "Notification rule inheritance"),
+                                settingsBinding.wrappedValue.summary(for: kind)))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 18)
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var enabledBinding: Binding<Bool> {
         Binding(
             get: { outputs.enabled.contains(kind) },
             set: { enabled in
                 if enabled { outputs.enabled.insert(kind) } else { outputs.enabled.remove(kind) }
             }
         )
-    }
-}
-
-private struct NotificationOverrideEditor: View {
-    let kind: NotificationOutputKind
-    @Binding var outputs: NotificationOutputs
-    let defaults: [NotificationOutputKind: NotificationOutputSettings]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Toggle("Customize for this rule", isOn: overrideBinding)
-            if outputs.overrides[kind] != nil {
-                NotificationChannelSettingsEditor(kind: kind, settings: settingsBinding)
-                    .padding(.leading, 18)
-            } else {
-                Text("Uses shared output settings").font(.caption).foregroundStyle(.secondary)
-            }
-        }
     }
 
     private var overrideBinding: Binding<Bool> {
@@ -563,6 +598,33 @@ private struct NotificationChannelSettingsEditor: View {
 }
 
 private extension NotificationOutputSettings {
+    func summary(for kind: NotificationOutputKind) -> String {
+        var parts: [String] = []
+        switch kind {
+        case .card:
+            parts.append(card.summary)
+        case .centerText, .largeText, .glow:
+            parts.append(String(format: NSLocalizedString("Effect duration: %@ s", comment: "Notification output summary"),
+                                durationSeconds.formatted()))
+        case .countdown:
+            parts.append(countdownPattern.isEmpty
+                ? String(format: NSLocalizedString("Countdown duration: %@ s", comment: "Notification output summary"),
+                         countdownSeconds.formatted())
+                : String(format: NSLocalizedString("Countdown regex: %@", comment: "Notification output summary"),
+                         countdownPattern))
+        case .sound:
+            parts.append(speechEnabled ? NSLocalizedString("Speak the message", comment: "Notification output summary") : soundName)
+        case .important:
+            break
+        }
+        if [.centerText, .largeText, .glow, .countdown].contains(kind) { parts.append(colorHex) }
+        if kind != .glow {
+            parts.append(textTemplate.isEmpty
+                ? NSLocalizedString("Notification text", comment: "Notification output summary") : textTemplate)
+        }
+        return parts.joined(separator: " · ")
+    }
+
     var countdownPatternError: String? {
         guard !countdownPattern.isEmpty else { return nil }
         guard let expression = try? NSRegularExpression(pattern: countdownPattern) else {

@@ -934,5 +934,19 @@
 	<string>最大宽度</string>
 	<key>Drag either edge in Edit layout to set the maximum width. Short messages shrink automatically.</key>
 	<string>在编辑布局中拖拽左右边缘设置最大宽度。短消息会自动收缩。</string>
+	<key>Shared output settings</key>
+	<string>公共输出设置</string>
+	<key>Rules use these settings unless Customize for this rule is checked. Changes apply to every rule that inherits the output, including the fallback.</key>
+	<string>未勾选“为此规则自定义”时，使用这里的公共设置。修改后，所有继承该输出的规则（包括默认规则）都会跟随变化。</string>
+	<key>Uses shared output settings: %@</key>
+	<string>继承公共设置：%@</string>
+	<key>Effect duration: %@ s</key>
+	<string>效果时长：%@ 秒</string>
+	<key>Countdown duration: %@ s</key>
+	<string>倒计时时长：%@ 秒</string>
+	<key>Countdown regex: %@</key>
+	<string>倒计时正则：%@</string>
+	<key>Notification text</key>
+	<string>通知原文</string>
 </dict>
 </plist>

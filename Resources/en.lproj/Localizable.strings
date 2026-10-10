@@ -928,5 +928,19 @@
 	<string>Maximum width</string>
 	<key>Drag either edge in Edit layout to set the maximum width. Short messages shrink automatically.</key>
 	<string>Drag either edge in Edit layout to set the maximum width. Short messages shrink automatically.</string>
+	<key>Shared output settings</key>
+	<string>Shared output settings</string>
+	<key>Rules use these settings unless Customize for this rule is checked. Changes apply to every rule that inherits the output, including the fallback.</key>
+	<string>Rules use these settings unless Customize for this rule is checked. Changes apply to every rule that inherits the output, including the fallback.</string>
+	<key>Uses shared output settings: %@</key>
+	<string>Uses shared output settings: %@</string>
+	<key>Effect duration: %@ s</key>
+	<string>Effect duration: %@ s</string>
+	<key>Countdown duration: %@ s</key>
+	<string>Countdown duration: %@ s</string>
+	<key>Countdown regex: %@</key>
+	<string>Countdown regex: %@</string>
+	<key>Notification text</key>
+	<string>Notification text</string>
 </dict>
 </plist>
