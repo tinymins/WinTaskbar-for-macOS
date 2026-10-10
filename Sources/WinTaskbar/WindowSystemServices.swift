@@ -330,33 +330,36 @@ final class WindowActivationService {
 
 @MainActor
 final class WindowThumbnailCache {
-    private let images = NSCache<NSNumber, NSImage>()
-
-    init() {
-        images.countLimit = 32
-    }
+    private var images: [CGWindowID: NSImage] = [:]
 
     func cachedImage(for windowID: CGWindowID) -> NSImage? {
-        images.object(forKey: NSNumber(value: windowID))
+        images[windowID]
     }
 
     func store(_ image: NSImage, for windowID: CGWindowID) {
-        images.setObject(image, forKey: NSNumber(value: windowID))
+        images[windowID] = image
     }
 
     func image(for windowID: CGWindowID, capture: () -> NSImage?) -> NSImage? {
-        let key = NSNumber(value: windowID)
-        if let image = images.object(forKey: key) { return image }
+        if let image = images[windowID] { return image }
         return refreshImage(for: windowID, capture: capture)
     }
 
     func refreshImage(for windowID: CGWindowID, capture: () -> NSImage?) -> NSImage? {
-        let key = NSNumber(value: windowID)
         if let image = capture() {
-            images.setObject(image, forKey: key)
+            images[windowID] = image
             return image
         }
-        return images.object(forKey: key)
+        return images[windowID]
+    }
+
+    func removeClosedWindows() {
+        guard !images.isEmpty,
+              let windows = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID)
+                as? [[String: Any]] else { return }
+        // Off-screen windows include minimized windows and windows on other Spaces.
+        let liveWindowIDs = Set(windows.compactMap { $0[kCGWindowNumber as String] as? CGWindowID })
+        images = images.filter { liveWindowIDs.contains($0.key) }
     }
 }
 
@@ -512,6 +515,7 @@ final class WindowsService {
     }
 
     func switcherWindowSnapshot(forPIDs pids: [pid_t]) -> CachedWindowFilterResult {
+        thumbnailCache.removeClosedWindows()
         let candidates = Self.windowCandidates(
             forPIDs: pids,
             options: WindowPreviewWindowPolicy.listOptions
@@ -580,6 +584,7 @@ final class WindowsService {
     private func windowSnapshot(
         forPIDs pids: [pid_t]
     ) -> (windowsByPID: [pid_t: [WindowInfo]], frontToBackWindows: [WindowInfo]) {
+        thumbnailCache.removeClosedWindows()
         let requestedPIDs = Set(pids)
         guard !requestedPIDs.isEmpty else { return ([:], []) }
         let candidates = Self.windowCandidates(
