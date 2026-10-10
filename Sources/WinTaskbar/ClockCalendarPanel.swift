@@ -158,7 +158,7 @@ final class ClockCalendarPanelController: ObservableObject {
         )
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.title = "Clock and calendar"
+        panel.title = NSLocalizedString("Clock and calendar", comment: "")
         panel.titleVisibility = .hidden
         panel.hasShadow = true
         panel.hidesOnDeactivate = false

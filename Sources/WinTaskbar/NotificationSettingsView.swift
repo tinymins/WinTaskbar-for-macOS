@@ -622,7 +622,7 @@ private struct NotificationChannelSettingsEditor: View {
             if kind == .sound {
                 Picker("Alert sound", selection: $settings.soundName) {
                     ForEach(["Glass", "Hero", "Morse", "Ping", "Pop", "Submarine", "Tink"], id: \.self) { name in
-                        Text(name).tag(name)
+                        Text(LocalizedStringKey(name)).tag(name)
                     }
                 }
                 .disabled(settings.speechEnabled)
@@ -680,7 +680,7 @@ private extension NotificationOutputSettings {
                 : String(format: NSLocalizedString("Countdown regex: %@", comment: "Notification output summary"),
                          countdownPattern))
         case .sound:
-            parts.append(speechEnabled ? NSLocalizedString("Speak the message", comment: "Notification output summary") : soundName)
+            parts.append(speechEnabled ? NSLocalizedString("Speak the message", comment: "Notification output summary") : NSLocalizedString(soundName, comment: ""))
         case .important:
             break
         }
@@ -763,7 +763,7 @@ private struct NotificationNumberSetting: View {
                         value = newValue.isFinite ? min(range.upperBound, max(range.lowerBound, newValue)) : range.lowerBound
                     }
             }
-            Text("\(Int((value * scale).rounded()))\(suffix)")
+            Text("\(Int((value * scale).rounded()))\(NSLocalizedString(suffix, comment: ""))")
                 .monospacedDigit().frame(width: 58, alignment: .trailing)
         }
     }

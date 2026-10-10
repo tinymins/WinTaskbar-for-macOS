@@ -401,12 +401,12 @@ struct TaskbarJumpListView: View {
             }
 
             TaskbarJumpListRow(
-                title: "Manage Shortcuts…",
+                title: NSLocalizedString("Manage Shortcuts…", comment: ""),
                 systemImage: "slider.horizontal.3",
                 action: onManageShortcuts
             )
             TaskbarJumpListRow(
-                title: "Show in Finder",
+                title: NSLocalizedString("Show in Finder", comment: ""),
                 systemImage: "folder",
                 action: onShowInFinder
             )
@@ -415,12 +415,12 @@ struct TaskbarJumpListView: View {
 
             TaskbarJumpListRow(title: item.name, image: item.icon, action: onOpenApp)
             TaskbarJumpListRow(
-                title: model.isPinned ? "Unpin from taskbar" : "Pin to taskbar",
+                title: NSLocalizedString(model.isPinned ? "Unpin from taskbar" : "Pin to taskbar", comment: ""),
                 systemImage: model.isPinned ? "pin.slash" : "pin",
                 action: onTogglePin
             )
             TaskbarJumpListRow(
-                title: model.closeTitle,
+                title: NSLocalizedString(model.closeTitle, comment: ""),
                 systemImage: "xmark",
                 isEnabled: model.canClose,
                 action: onClose
@@ -429,7 +429,7 @@ struct TaskbarJumpListView: View {
             if item.isRunning {
                 sectionDivider
                 TaskbarJumpListRow(
-                    title: "Quit",
+                    title: NSLocalizedString("Quit", comment: ""),
                     systemImage: "power",
                     action: onQuit
                 )
@@ -440,7 +440,7 @@ struct TaskbarJumpListView: View {
     }
 
     private func sectionTitle(_ title: String) -> some View {
-        Text(title)
+        Text(LocalizedStringKey(title))
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)

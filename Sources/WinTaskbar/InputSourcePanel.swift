@@ -199,7 +199,7 @@ private struct InputSourcePanelView: View {
     }
 
     private func shortcutKey(_ title: String, width: CGFloat) -> some View {
-        Text(title)
+        Text(LocalizedStringKey(title))
             .font(.system(size: 10, weight: .medium))
             .foregroundStyle(.secondary)
             .frame(width: width, height: 19)

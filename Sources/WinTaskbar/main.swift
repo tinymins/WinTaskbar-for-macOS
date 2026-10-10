@@ -412,7 +412,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: "WinTaskbar",
             .applicationVersion: AppMetadata.version,
-            .credits: NSAttributedString(string: "A Windows-style taskbar for macOS.")
+            .credits: NSAttributedString(string: NSLocalizedString("A Windows-style taskbar for macOS.", comment: ""))
         ])
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -423,10 +423,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         let alert = NSAlert()
-        alert.messageText = action.rawValue
-        alert.informativeText = "Are you sure you want to \(action.rawValue.lowercased())?"
-        alert.addButton(withTitle: action.rawValue)
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = NSLocalizedString(action.rawValue, comment: "")
+        alert.informativeText = String(format: NSLocalizedString("Are you sure you want to %@?", comment: ""), NSLocalizedString(action.rawValue, comment: "").lowercased())
+        alert.addButton(withTitle: NSLocalizedString(action.rawValue, comment: ""))
+        alert.addButton(withTitle: NSLocalizedString("Cancel", comment: ""))
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn { powerService.perform(action) }
     }
@@ -435,10 +435,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let mainMenu = NSMenu()
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "About WinTaskbar", action: #selector(showAbout(_:)), keyEquivalent: "")
-        appMenu.addItem(withTitle: "Settings…", action: #selector(showSettings(_:)), keyEquivalent: ",")
+        appMenu.addItem(withTitle: NSLocalizedString("About WinTaskbar", comment: ""), action: #selector(showAbout(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: NSLocalizedString("Settings…", comment: ""), action: #selector(showSettings(_:)), keyEquivalent: ",")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Quit WinTaskbar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: NSLocalizedString("Quit WinTaskbar", comment: ""), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         mainMenu.addItem(appItem)
         NSApp.mainMenu = mainMenu

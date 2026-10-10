@@ -1903,7 +1903,7 @@ struct ExternalStatusOverflowButton: View {
 
     var body: some View {
         WindowsTrayIconButton(
-            title: "Show hidden icons",
+            title: NSLocalizedString("Show hidden icons", comment: ""),
             taskbarPosition: position,
             anchoredPrimaryAction: { anchorView in
                 panelController.toggle(

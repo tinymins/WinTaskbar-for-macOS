@@ -72,7 +72,7 @@ struct StartButtonContextMenuView: View {
             sectionDivider
 
             TaskbarJumpListRow(
-                title: "Power",
+                title: NSLocalizedString("Power", comment: ""),
                 trailingSystemImage: "chevron.right",
                 reservesIconSpace: false,
                 action: onShowPower
@@ -87,7 +87,7 @@ struct StartButtonContextMenuView: View {
     }
 
     private func commandRow(_ title: String, action: @escaping () -> Void) -> some View {
-        TaskbarJumpListRow(title: title, reservesIconSpace: false) {
+        TaskbarJumpListRow(title: NSLocalizedString(title, comment: ""), reservesIconSpace: false) {
             onDismiss()
             action()
         }
@@ -118,7 +118,7 @@ struct StartButtonPowerMenuView: View {
     }
 
     private func powerRow(_ action: PowerAction) -> some View {
-        TaskbarJumpListRow(title: action.rawValue, reservesIconSpace: false) {
+        TaskbarJumpListRow(title: NSLocalizedString(action.rawValue, comment: ""), reservesIconSpace: false) {
             onDismiss()
             actions.performPower(action)
         }

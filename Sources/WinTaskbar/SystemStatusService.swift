@@ -33,9 +33,9 @@ enum WiFiConnectionPresentation: Equatable {
 
     var title: String {
         switch self {
-        case .off: "Wi-Fi off"
-        case .locationAccessRequired: "Location access required"
-        case .notConnected: "Not connected"
+        case .off: NSLocalizedString("Wi-Fi off", comment: "")
+        case .locationAccessRequired: NSLocalizedString("Location access required", comment: "")
+        case .notConnected: NSLocalizedString("Not connected", comment: "")
         case let .connected(ssid): ssid
         }
     }

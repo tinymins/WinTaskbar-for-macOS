@@ -367,6 +367,13 @@ struct GlobalShortcutConfiguration: Codable, Hashable, Identifiable {
         return resolvedShortcut(mapping: mapping).displayValue
     }
 
+    var localizedTitle: String {
+        if id.hasPrefix("pinned-"), let pinnedIndex {
+            return String(format: NSLocalizedString("Pinned App %ld", comment: ""), pinnedIndex + 1)
+        }
+        return NSLocalizedString(title, comment: "")
+    }
+
     var validationIssue: String? {
         if action == .openApplication, applicationTarget == nil {
             return "Choose an application"
@@ -401,7 +408,7 @@ struct CustomShortcutConfiguration: Codable, Hashable, Identifiable {
         guard let shortcut else { return nil }
         return GlobalShortcutConfiguration(
             id: id,
-            title: "Custom: \(action.title)",
+            title: String(format: NSLocalizedString("Custom: %@", comment: ""), NSLocalizedString(action.title, comment: "")),
             windowsShortcutLabel: "Custom binding",
             isEnabled: isEnabled,
             shortcut: shortcut,

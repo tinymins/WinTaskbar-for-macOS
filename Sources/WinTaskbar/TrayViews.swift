@@ -137,7 +137,7 @@ struct VolumeTrayView: View {
 
     var body: some View {
         WindowsTrayIconButton(
-            title: "Volume",
+            title: NSLocalizedString("Volume", comment: ""),
             taskbarPosition: position,
             preservesTransientPanelOnMouseDown: true,
             primaryAction: presentPanelIfNeeded,
@@ -183,10 +183,10 @@ struct BatteryTrayView: View {
 
     var body: some View {
         if let level = service.batteryLevel {
-            let title = service.isCharging ? "Battery charging: \(level)%" : "Battery: \(level)%"
+            let title = String(format: NSLocalizedString(service.isCharging ? "Battery charging: %ld%%" : "Battery: %ld%%", comment: ""), level)
             WindowsTrayIconButton(
                 title: title,
-                accessibilityLabel: service.isCharging ? "Battery charging, \(level)%" : "Battery, \(level)%",
+                accessibilityLabel: String(format: NSLocalizedString(service.isCharging ? "Battery charging, %ld%%" : "Battery, %ld%%", comment: ""), level),
                 taskbarPosition: position,
                 preservesTransientPanelOnMouseDown: true,
                 primaryAction: presentPanelIfNeeded,
@@ -251,7 +251,7 @@ struct InputSourceTrayView: View {
     var body: some View {
         WindowsTrayIconButton(
             title: service.inputSource,
-            accessibilityLabel: "Keyboard layout: \(service.inputSource)",
+            accessibilityLabel: String(format: NSLocalizedString("Keyboard layout: %@", comment: ""), service.inputSource),
             taskbarPosition: position,
             primaryAction: togglePanel,
             dragIdentifier: dragConfiguration.identifier,
@@ -318,7 +318,7 @@ struct ClockTrayView: View {
         ) : nil
         return WindowsTrayIconButton(
             title: "",
-            accessibilityLabel: "Clock and calendar",
+            accessibilityLabel: NSLocalizedString("Clock and calendar", comment: ""),
             tooltip: { clockTooltip(at: Date()) },
             taskbarPosition: position,
             primaryAction: togglePanel
@@ -389,6 +389,6 @@ struct ClockTrayView: View {
             pattern: "EEE \(formatConfiguration.longTimePattern)",
             configuration: formatConfiguration
         )
-        return ([longDate, "", "\(localTime) (Local time)"] + clockLines).joined(separator: "\n")
+        return ([longDate, "", String(format: NSLocalizedString("%@ (Local time)", comment: ""), localTime)] + clockLines).joined(separator: "\n")
     }
 }

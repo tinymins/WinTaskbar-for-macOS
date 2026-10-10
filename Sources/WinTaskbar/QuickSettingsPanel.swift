@@ -282,7 +282,7 @@ private struct QuickSettingsPanelView: View {
                     showsInlineChevron: false
                 )
                 QuickSettingTile(
-                    label: "Not connected",
+                    label: NSLocalizedString("Not connected", comment: ""),
                     symbol: "bluetooth",
                     isActive: true,
                     primaryAction: onOpenBluetoothSettings,
@@ -290,7 +290,7 @@ private struct QuickSettingsPanelView: View {
                     showsInlineChevron: false
                 )
                 QuickSettingTile(
-                    label: "Airplane mode",
+                    label: NSLocalizedString("Airplane mode", comment: ""),
                     symbol: "airplane",
                     isActive: false,
                     primaryAction: {},
@@ -300,7 +300,7 @@ private struct QuickSettingsPanelView: View {
             }
             HStack(spacing: 12) {
                 QuickSettingTile(
-                    label: "Accessibility",
+                    label: NSLocalizedString("Accessibility", comment: ""),
                     symbol: "figure.arms.open",
                     isActive: false,
                     primaryAction: { page = .accessibility },
@@ -308,7 +308,7 @@ private struct QuickSettingsPanelView: View {
                     showsInlineChevron: true
                 )
                 QuickSettingTile(
-                    label: "Energy saver",
+                    label: NSLocalizedString("Energy saver", comment: ""),
                     symbol: "leaf",
                     isActive: service.isLowPowerModeEnabled,
                     primaryAction: onOpenBatterySettings,
@@ -316,7 +316,7 @@ private struct QuickSettingsPanelView: View {
                     showsInlineChevron: false
                 )
                 QuickSettingTile(
-                    label: "Live captions",
+                    label: NSLocalizedString("Live captions", comment: ""),
                     symbol: "captions.bubble",
                     isActive: false,
                     primaryAction: onOpenAccessibilitySettings,
@@ -332,7 +332,7 @@ private struct QuickSettingsPanelView: View {
         VStack(spacing: 25) {
             HStack(spacing: 12) {
                 QuickSettingTile(
-                    label: "Night light",
+                    label: NSLocalizedString("Night light", comment: ""),
                     symbol: "sun.max",
                     isActive: false,
                     primaryAction: {
@@ -342,7 +342,7 @@ private struct QuickSettingsPanelView: View {
                     showsInlineChevron: false
                 )
                 QuickSettingTile(
-                    label: "Mobile hotspot",
+                    label: NSLocalizedString("Mobile hotspot", comment: ""),
                     symbol: "antenna.radiowaves.left.and.right",
                     isActive: false,
                     primaryAction: {
@@ -352,7 +352,7 @@ private struct QuickSettingsPanelView: View {
                     showsInlineChevron: false
                 )
                 QuickSettingTile(
-                    label: "Nearby sharing",
+                    label: NSLocalizedString("Nearby sharing", comment: ""),
                     symbol: "square.and.arrow.up",
                     isActive: false,
                     primaryAction: {
@@ -364,7 +364,7 @@ private struct QuickSettingsPanelView: View {
             }
             HStack(spacing: 12) {
                 QuickSettingTile(
-                    label: "Wired display",
+                    label: NSLocalizedString("Wired display", comment: ""),
                     symbol: "rectangle.on.rectangle",
                     isActive: false,
                     primaryAction: {
@@ -374,7 +374,7 @@ private struct QuickSettingsPanelView: View {
                     showsInlineChevron: true
                 )
                 QuickSettingTile(
-                    label: "Project",
+                    label: NSLocalizedString("Project", comment: ""),
                     symbol: "rectangle.on.rectangle.angled",
                     isActive: false,
                     primaryAction: {
@@ -427,7 +427,7 @@ private struct QuickSettingsPanelView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(page == 0 ? "Previous quick settings page" : "Next quick settings page")
+        .accessibilityLabel(LocalizedStringKey(page == 0 ? "Previous quick settings page" : "Next quick settings page"))
     }
 
     private func handleQuickSettingsScroll(_ deltaY: CGFloat) {
@@ -498,8 +498,8 @@ private struct QuickSettingsPanelView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(service.isCharging ? "Battery charging" : "Battery")
-                .accessibilityLabel(service.isCharging ? "Battery charging, \(level)%" : "Battery, \(level)%")
+                .help(LocalizedStringKey(service.isCharging ? "Battery charging" : "Battery"))
+                .accessibilityLabel(String(format: NSLocalizedString(service.isCharging ? "Battery charging, %ld%%" : "Battery, %ld%%", comment: ""), level))
             }
             Spacer()
             Button(action: onOpenSystemSettings) {
@@ -749,7 +749,7 @@ private struct QuickSettingsPanelView: View {
                 )
                 .onHover { isDetailBackHovering = $0 }
                 .accessibilityLabel("Back")
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
                 if let trailing { trailing }
@@ -929,7 +929,7 @@ private struct QuickSettingTile: View {
                         }
                         .buttonStyle(.plain)
                         .onHover { isDetailHovering = $0 }
-                        .accessibilityLabel("\(label) details")
+                        .accessibilityLabel(String(format: NSLocalizedString("%@ details", comment: ""), label))
                     }
                 }
             }
@@ -962,8 +962,8 @@ private struct QuickSettingTile: View {
     }
 
     private var primaryAccessibilityLabel: String {
-        if showsInlineChevron { return "\(label) details" }
-        if detailAction != nil { return "\(label) toggle" }
+        if showsInlineChevron { return String(format: NSLocalizedString("%@ details", comment: ""), label) }
+        if detailAction != nil { return String(format: NSLocalizedString("%@ toggle", comment: ""), label) }
         return label
     }
 
@@ -1004,12 +1004,12 @@ private struct DetailEmptyState: View {
         VStack(spacing: 9) {
             Image(systemName: symbol)
                 .font(.system(size: 24))
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(.system(size: 13, weight: .semibold))
-            Text(detail)
+            Text(LocalizedStringKey(detail))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
-            Button(actionTitle, action: action)
+            Button(LocalizedStringKey(actionTitle), action: action)
                 .controlSize(.small)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1034,9 +1034,9 @@ private struct DetailActionList: View {
                         Image(systemName: row.symbol)
                             .frame(width: 24)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(row.title)
+                            Text(LocalizedStringKey(row.title))
                                 .font(.system(size: 12, weight: .medium))
-                            Text(row.detail)
+                            Text(LocalizedStringKey(row.detail))
                                 .font(.system(size: 10))
                                 .foregroundStyle(.secondary)
                         }
@@ -1141,7 +1141,7 @@ private struct AccessibilitySettingsList: View {
         ScrollView(.vertical) {
             LazyVStack(spacing: 0) {
                 ForEach(sections) { section in
-                    Text(section.title)
+                    Text(LocalizedStringKey(section.title))
                         .font(.system(size: 12, weight: .semibold))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .frame(height: 34, alignment: .bottom)
@@ -1168,9 +1168,9 @@ private struct AccessibilitySettingRow: View {
                     .font(.system(size: 13))
                     .frame(width: QuickSettingsPanelMetrics.accessibilityIconColumnWidth)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(row.title)
+                    Text(LocalizedStringKey(row.title))
                         .font(.system(size: 12, weight: .medium))
-                    Text(row.detail)
+                    Text(LocalizedStringKey(row.detail))
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -1196,7 +1196,7 @@ private struct AccessibilitySettingRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
-        .accessibilityLabel("\(row.title), Off, \(row.detail)")
+        .accessibilityLabel(String(format: NSLocalizedString("%@, Off, %@", comment: ""), NSLocalizedString(row.title, comment: ""), NSLocalizedString(row.detail, comment: "")))
         .help("Open Accessibility settings")
     }
 }

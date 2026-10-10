@@ -238,15 +238,15 @@ struct SettingsView: View {
     private var appearance: some View {
         SettingsSection("Visual style") {
             Picker("Theme", selection: $preferences.theme) {
-                ForEach(AppTheme.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(AppTheme.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
             }
             Toggle("Show running indicators", isOn: $preferences.showRunningIndicators)
             Picker("Active app indicator", selection: $preferences.activeIndicator) {
-                ForEach(ActiveIndicatorStyle.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(ActiveIndicatorStyle.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
             }
             .disabled(!preferences.showRunningIndicators)
             Picker("Highlight style", selection: $preferences.highlightStyle) {
-                ForEach(HighlightStyle.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(HighlightStyle.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
             }
             Toggle("Transparency", isOn: $preferences.transparencyEnabled)
             if preferences.transparencyEnabled {
@@ -266,7 +266,7 @@ struct SettingsView: View {
             HStack {
                 Text("Panel color")
                 Spacer()
-                Button(preferences.panelTintHex.isEmpty ? "Automatic" : preferences.panelTintHex.uppercased()) {
+                Button(LocalizedStringKey(preferences.panelTintHex.isEmpty ? "Automatic" : preferences.panelTintHex.uppercased())) {
                     preferences.panelTintHex = ""
                 }
                 .buttonStyle(.borderless)
@@ -300,22 +300,22 @@ struct SettingsView: View {
             .frame(width: 21, height: 21)
         }
         .buttonStyle(.plain)
-        .help(isNone ? "Clear color" : hex)
+        .help(LocalizedStringKey(isNone ? "Clear color" : hex))
     }
 
     private var startMenu: some View {
         SettingsSection("Behavior") {
             Picker("Windows style", selection: $preferences.menuWindowStyle) {
-                ForEach(HighlightStyle.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(HighlightStyle.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
             }
             Picker("Window height", selection: $preferences.menuHeightMode) {
-                ForEach(MenuHeightMode.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(MenuHeightMode.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
             }
             Picker("Search field", selection: $preferences.searchFieldPosition) {
-                ForEach(SearchFieldPosition.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(SearchFieldPosition.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
             }
             Picker("Actions panel", selection: $preferences.menuActionsSide) {
-                ForEach(MenuActionsSide.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(MenuActionsSide.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
             }
         }
     }
@@ -324,10 +324,10 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 22) {
             SettingsSection("Taskbar placement") {
                 Picker("Taskbar position", selection: $preferences.position) {
-                    ForEach(TaskbarPosition.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(TaskbarPosition.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
                 }
                 Picker("Show taskbar on", selection: $preferences.displayMode) {
-                    ForEach(DisplayMode.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(DisplayMode.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
                 }
                 Toggle("Automatically hide the taskbar", isOn: $preferences.autoHideTaskbar)
             }
@@ -365,11 +365,11 @@ struct SettingsView: View {
                     maximumValueLabel: { Image(systemName: "square.dashed") }
                 )
                 Picker("Menu button", selection: $preferences.menuButtonPlacement) {
-                    ForEach(MenuButtonPlacement.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(MenuButtonPlacement.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
                 }
                 Picker("Start button label", selection: $preferences.startButtonLabel) {
                     ForEach(["", "Start", "Menu"], id: \.self) { value in
-                        Text(value.isEmpty ? "None" : value).tag(value)
+                        Text(LocalizedStringKey(value.isEmpty ? "None" : value)).tag(value)
                     }
                 }
             }
@@ -478,8 +478,8 @@ struct SettingsView: View {
 
     private func addFullscreenRule() {
         let panel = NSOpenPanel()
-        panel.title = "Choose Application"
-        panel.prompt = "Choose"
+        panel.title = NSLocalizedString("Choose Application", comment: "")
+        panel.prompt = NSLocalizedString("Choose", comment: "")
         panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
         panel.allowedContentTypes = [.application]
         panel.canChooseFiles = true
@@ -930,7 +930,7 @@ struct SettingsView: View {
             SettingsSection("Alt+Tab window switcher") {
                 Picker("Alt+Tab modifier", selection: $preferences.altTabModifier) {
                     ForEach(AltTabModifier.allCases) { modifier in
-                        Text("\(modifier.shortcutGlyph) \(modifier.title)").tag(modifier)
+                        Text("\(modifier.shortcutGlyph) \(NSLocalizedString(modifier.title, comment: ""))").tag(modifier)
                     }
                 }
                 if karabinerIntegration.isEnabled {
@@ -954,7 +954,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                 if let issue = globalHotkeys.altTabIssue,
                    preferences.altTabSwitcherEnabled {
-                    Text(issue)
+                    Text(LocalizedStringKey(issue))
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
@@ -1018,10 +1018,10 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(mapping == nil ? "Not identified" : "Mapped")
+                Text(LocalizedStringKey(mapping == nil ? "Not identified" : "Mapped"))
                     .font(.caption.weight(.medium))
                     .foregroundStyle(mapping == nil ? Color.orange : Color.green)
-                Button(mapping == nil ? "Identify" : "Identify again") {
+                Button(LocalizedStringKey(mapping == nil ? "Identify" : "Identify again")) {
                     identifyingKeyboard = keyboard
                 }
                 .controlSize(.small)
@@ -1059,7 +1059,7 @@ struct SettingsView: View {
                 if let issue = globalHotkeys.windowsKeyIssue,
                    preferences.globalHotkeysEnabled,
                    preferences.windowsKeyOpensStart {
-                    Text(issue)
+                    Text(LocalizedStringKey(issue))
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
@@ -1141,7 +1141,7 @@ struct SettingsView: View {
                 }
             }
             HStack {
-                Button(dockToggle.isDockHidden ? "Restore system Dock" : "Hide system Dock") {
+                Button(LocalizedStringKey(dockToggle.isDockHidden ? "Restore system Dock" : "Hide system Dock")) {
                     dockToggle.isDockHidden ? dockToggle.restoreDock() : dockToggle.hideDock()
                 }
                 .disabled(!preferences.taskbarEnabled)
@@ -1159,13 +1159,13 @@ struct SettingsView: View {
 
     private func confirmExit() {
         let alert = NSAlert()
-        alert.messageText = "Exit WinTaskbar?"
-        alert.informativeText = "WinTaskbar will exit and restore the system Dock."
+        alert.messageText = NSLocalizedString("Exit WinTaskbar?", comment: "")
+        alert.informativeText = NSLocalizedString("WinTaskbar will exit and restore the system Dock.", comment: "")
         alert.alertStyle = .warning
 
-        let exitButton = alert.addButton(withTitle: "Exit")
+        let exitButton = alert.addButton(withTitle: NSLocalizedString("Exit", comment: ""))
         exitButton.hasDestructiveAction = true
-        let cancelButton = alert.addButton(withTitle: "Cancel")
+        let cancelButton = alert.addButton(withTitle: NSLocalizedString("Cancel", comment: ""))
         cancelButton.keyEquivalent = "\u{1b}"
 
         alert.window.level = .modalPanel
@@ -1213,8 +1213,8 @@ struct SettingsView: View {
 
     private func chooseApplication(for target: Binding<ShortcutApplicationTarget?>) {
         let panel = NSOpenPanel()
-        panel.title = "Choose Application"
-        panel.prompt = "Choose"
+        panel.title = NSLocalizedString("Choose Application", comment: "")
+        panel.prompt = NSLocalizedString("Choose", comment: "")
         panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
         panel.allowedContentTypes = [.application]
         panel.canChooseFiles = true
@@ -1644,7 +1644,7 @@ private struct GlobalShortcutRow: View {
                 Toggle("", isOn: $configuration.isEnabled)
                     .labelsHidden()
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(configuration.title)
+                    Text(configuration.localizedTitle)
                     Text(configuration.windowsShortcutLabel)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -1670,7 +1670,7 @@ private struct GlobalShortcutRow: View {
                         Button(applicationTargetTitle, action: onChooseApplication)
                             .contextMenu {
                                 if configuration.applicationTarget != nil {
-                                    Button(configuration.action.defaultApplicationName == nil ? "Clear Application" : "Use Default") {
+                                    Button(LocalizedStringKey(configuration.action.defaultApplicationName == nil ? "Clear Application" : "Use Default")) {
                                         configuration.applicationTarget = nil
                                     }
                                 }
@@ -1678,7 +1678,7 @@ private struct GlobalShortcutRow: View {
                     }
                     Spacer()
                     if let visibleIssue {
-                        Label(visibleIssue, systemImage: "exclamationmark.triangle.fill")
+                        Label(LocalizedStringKey(visibleIssue), systemImage: "exclamationmark.triangle.fill")
                             .font(.caption)
                             .foregroundStyle(.red)
                     }
@@ -1697,7 +1697,7 @@ private struct GlobalShortcutRow: View {
     private var applicationTargetTitle: String {
         configuration.applicationTarget?.name
             ?? configuration.action.defaultApplicationName
-            ?? "Choose Application…"
+            ?? NSLocalizedString("Choose Application…", comment: "")
     }
 }
 
@@ -1716,7 +1716,7 @@ private struct CustomShortcutRow: View {
                 Text("Custom binding")
                 Spacer()
                 GlobalHotkeyRecorder(
-                    displayValue: configuration.shortcut?.displayValue ?? "Set shortcut",
+                    displayValue: configuration.shortcut?.displayValue ?? NSLocalizedString("Set shortcut", comment: ""),
                     resetTitle: "Clear shortcut",
                     canReset: configuration.shortcut != nil,
                     onCapture: { configuration.shortcut = $0 },
@@ -1732,7 +1732,7 @@ private struct CustomShortcutRow: View {
             HStack(spacing: 8) {
                 Picker("Action", selection: actionBinding) {
                     ForEach(GlobalShortcutAction.allCases) { action in
-                        Text(action.title).tag(action)
+                        Text(LocalizedStringKey(action.title)).tag(action)
                     }
                 }
                 .frame(maxWidth: 330)
@@ -1741,7 +1741,7 @@ private struct CustomShortcutRow: View {
                     Button("Extra: \(applicationTargetTitle)", action: onChooseApplication)
                         .contextMenu {
                             if configuration.applicationTarget != nil {
-                                Button(configuration.action.defaultApplicationName == nil ? "Clear Application" : "Use Default") {
+                                Button(LocalizedStringKey(configuration.action.defaultApplicationName == nil ? "Clear Application" : "Use Default")) {
                                     configuration.applicationTarget = nil
                                 }
                             }
@@ -1760,7 +1760,7 @@ private struct CustomShortcutRow: View {
             .padding(.leading, 30)
 
             if let visibleIssue {
-                Label(visibleIssue, systemImage: "exclamationmark.triangle.fill")
+                Label(LocalizedStringKey(visibleIssue), systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(.red)
                     .padding(.leading, 30)
@@ -1795,14 +1795,14 @@ private struct CustomShortcutRow: View {
 
     private var visibleIssue: String? {
         guard globalEnabled, configuration.isEnabled else { return nil }
-        if configuration.shortcut == nil { return "Set a shortcut" }
+        if configuration.shortcut == nil { return NSLocalizedString("Set a shortcut", comment: "") }
         return registrationIssue
     }
 
     private var applicationTargetTitle: String {
         configuration.applicationTarget?.name
             ?? configuration.action.defaultApplicationName
-            ?? "Choose Application…"
+            ?? NSLocalizedString("Choose Application…", comment: "")
     }
 }
 
@@ -1818,10 +1818,10 @@ private struct GlobalHotkeyRecorder: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Button(isRecording ? "Type shortcut" : displayValue, action: beginRecording)
+            Button(isRecording ? NSLocalizedString("Type shortcut", comment: "") : displayValue, action: beginRecording)
                 .font(.system(.body, design: .monospaced))
                 .contextMenu {
-                    Button(resetTitle, action: onResetTrigger)
+                    Button(LocalizedStringKey(resetTitle), action: onResetTrigger)
                         .disabled(!canReset)
                 }
             Button(action: onResetTrigger) {
@@ -1829,7 +1829,7 @@ private struct GlobalHotkeyRecorder: View {
             }
             .buttonStyle(.borderless)
             .disabled(!canReset || isRecording)
-            .help(resetTitle)
+            .help(LocalizedStringKey(resetTitle))
         }
         .onDisappear {
             if isRecording {

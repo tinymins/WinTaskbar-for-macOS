@@ -1929,7 +1929,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "WinTaskbar Settings"
+        window.title = NSLocalizedString("WinTaskbar Settings", comment: "")
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 720, height: 540)
         window.contentView = NSHostingView(rootView: SettingsView(

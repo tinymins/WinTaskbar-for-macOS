@@ -61,7 +61,7 @@ struct CalendarEventEditorView: View {
             .buttonStyle(WindowsSubtleButtonStyle())
             .accessibilityLabel("Back")
 
-            Text(draft.identity == nil ? "New event" : "Edit event")
+            Text(LocalizedStringKey(draft.identity == nil ? "New event" : "Edit event"))
                 .font(.system(size: 15, weight: .semibold))
             Spacer()
             Button("Save") { onSave(draft, mutationScope) }

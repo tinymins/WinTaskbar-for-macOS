@@ -241,7 +241,7 @@
 	<key>Quit</key>
 	<string>退出</string>
 	<key>Recent</key>
-	<string>最近</string>
+	<string>最近使用</string>
 	<key>Remove</key>
 	<string>移除</string>
 	<key>Remove from folder</key>
@@ -565,7 +565,7 @@
 	<key>Karabiner keyboard discovery failed: %@</key>
 	<string>Karabiner 键盘发现失败：%@</string>
 	<key>WinTaskbar will replace %lld conflicting Karabiner mappings. The complete current configuration is backed up first.</key>
-	<string>WinTaskbar 将替换 %lld 条冲突的 Karabiner 映射；操作前会完整备份当前配置。</string>
+	<string>WinTaskbar 将替换 %lld 项冲突的 Karabiner 映射，并先备份当前完整配置。</string>
 	<key>Disable and restore previous configuration</key>
 	<string>停用并恢复原配置</string>
 	<key>Enable Windows keyboard mode</key>
@@ -723,7 +723,7 @@
 	<key>Move rule down</key>
 	<string>下移规则</string>
 	<key>Default rule (fallback)</key>
-	<string>默认规则（fallback）</string>
+	<string>默认规则（未匹配时使用）</string>
 	<key>Always applies when no rule matches. This rule stays last and cannot be disabled or deleted.</key>
 	<string>没有规则匹配时始终使用此规则。它固定在末尾，不可禁用或删除。</string>
 	<key>Display behavior</key>
@@ -958,5 +958,613 @@
 	<string>闪烁次数：%ld</string>
 	<key>Flashes finish within the effect duration. With Reduce Motion enabled, one gentle glow is shown instead.</key>
 	<string>在效果总时长内完成指定次数的闪烁。启用系统“减少动态效果”时，改为一次柔和泛光。</string>
+	<key>Activate</key>
+	<string>激活</string>
+	<key>Activation failed. Please try again.</key>
+	<string>激活失败，请重试。</string>
+	<key>Couldn’t reach the server. Check your connection.</key>
+	<string>无法连接服务器，请检查网络连接。</string>
+	<key>Later</key>
+	<string>稍后</string>
+	<key>This key has been revoked.</key>
+	<string>此密钥已被撤销。</string>
+	<key>This key is already used on another device.</key>
+	<string>此密钥已在另一台设备上使用。</string>
+	<key>Start Menu</key>
+	<string>开始菜单</string>
+	<key>Shortcut Mappings</key>
+	<string>快捷键映射</string>
+	<key>Turn on Taskbar in General to change these settings.</key>
+	<string>请先在“通用”中启用任务栏，再更改这些设置。</string>
+	<key>Windows-style window switching. Its modifier can be configured in Hotkeys.</key>
+	<string>Windows 风格的窗口切换，可在“快捷键”中设置修饰键。</string>
+	<key>Windows-style taskbar, Start menu, system tray, and taskbar shortcuts.</key>
+	<string>Windows 风格的任务栏、开始菜单、系统托盘和任务栏快捷键。</string>
+	<key>Startup</key>
+	<string>启动</string>
+	<key>Visual style</key>
+	<string>视觉样式</string>
+	<key>Transparency</key>
+	<string>透明度</string>
+	<key>Windows style</key>
+	<string>Windows 风格</string>
+	<key>Window height</key>
+	<string>窗口高度</string>
+	<key>Search field</key>
+	<string>搜索框</string>
+	<key>Actions panel</key>
+	<string>操作面板</string>
+	<key>Taskbar position</key>
+	<string>任务栏位置</string>
+	<key>Show taskbar on</key>
+	<string>显示任务栏的屏幕</string>
+	<key>Automatically hide the taskbar</key>
+	<string>自动隐藏任务栏</string>
+	<key>Show badges on taskbar apps</key>
+	<string>显示任务栏应用角标</string>
+	<key>Show flashing on taskbar apps</key>
+	<string>显示任务栏应用闪烁提示</string>
+	<key>Taskbar layout</key>
+	<string>任务栏布局</string>
+	<key>Taskbar menu</key>
+	<string>任务栏菜单</string>
+	<key>Recent items</key>
+	<string>最近使用的项目</string>
+	<key>Shortcuts</key>
+	<string>快捷方式</string>
+	<key>Choose Application</key>
+	<string>选择应用</string>
+	<key>Choose Application…</key>
+	<string>选择应用…</string>
+	<key>Global shortcuts</key>
+	<string>全局快捷键</string>
+	<key>Enable global shortcuts</key>
+	<string>启用全局快捷键</string>
+	<key>Enabled mappings override matching macOS and application shortcuts.</key>
+	<string>启用的映射会覆盖相同的 macOS 和应用快捷键。</string>
+	<key>Turn on Taskbar in General to configure Taskbar shortcuts.</key>
+	<string>请先在“通用”中启用任务栏，再配置任务栏快捷键。</string>
+	<key>Press Windows key alone to open Start</key>
+	<string>单独按 Windows 键打开开始菜单</string>
+	<key>Built-in Windows shortcuts</key>
+	<string>内置 Windows 快捷键</string>
+	<key>Custom bindings</key>
+	<string>自定义快捷键</string>
+	<key>Add a binding to assign any key combination to an action.</key>
+	<string>添加自定义快捷键，为操作指定任意按键组合。</string>
+	<key>Add Custom Binding</key>
+	<string>添加自定义快捷键</string>
+	<key>Check for Updates</key>
+	<string>检查更新</string>
+	<key>Exit</key>
+	<string>退出</string>
+	<key>Turn on Taskbar in General to change the system Dock.</key>
+	<string>请先在“通用”中启用任务栏，再更改系统程序坞。</string>
+	<key>Exit WinTaskbar?</key>
+	<string>退出 WinTaskbar？</string>
+	<key>WinTaskbar will exit and restore the system Dock.</key>
+	<string>WinTaskbar 将退出并恢复系统程序坞。</string>
+	<key>Keyboard input could not be intercepted. Allow Input Monitoring for WinTaskbar, then try again.</key>
+	<string>无法拦截键盘输入，请授予 WinTaskbar“输入监控”权限后重试。</string>
+	<key>Custom binding</key>
+	<string>自定义快捷键</string>
+	<key>Delete custom binding</key>
+	<string>删除自定义快捷键</string>
+	<key>Action</key>
+	<string>操作</string>
+	<key>Extra: %@</key>
+	<string>附加选项：%@</string>
+	<key>Extra</key>
+	<string>附加选项</string>
+	<key>Pinned app #%lld</key>
+	<string>固定应用 #%lld</string>
+	<key>Restore default shortcut</key>
+	<string>恢复默认快捷键</string>
+	<key>Clear Application</key>
+	<string>清除应用</string>
+	<key>Use Default</key>
+	<string>使用默认值</string>
+	<key>Set shortcut</key>
+	<string>设置快捷键</string>
+	<key>Set a shortcut</key>
+	<string>请设置快捷键</string>
+	<key>Clear shortcut</key>
+	<string>清除快捷键</string>
+	<key>Type shortcut</key>
+	<string>按下快捷键</string>
+	<key>Before tray</key>
+	<string>托盘前方</string>
+	<key>Full</key>
+	<string>完整</string>
+	<key>Close</key>
+	<string>关闭</string>
+	<key>Close window</key>
+	<string>关闭窗口</string>
+	<key>Close all windows</key>
+	<string>关闭所有窗口</string>
+	<key>Preview unavailable</key>
+	<string>预览不可用</string>
+	<key>Manage Shortcuts…</key>
+	<string>管理快捷方式…</string>
+	<key>Unpin from taskbar</key>
+	<string>从任务栏取消固定</string>
+	<key>Pin to taskbar</key>
+	<string>固定到任务栏</string>
+	<key>Pinned</key>
+	<string>已固定</string>
+	<key>Show desktop</key>
+	<string>显示桌面</string>
+	<key>Force Quit Applications…</key>
+	<string>强制退出应用…</string>
+	<key>WinTaskbar Settings…</key>
+	<string>WinTaskbar 设置…</string>
+	<key>Power</key>
+	<string>电源</string>
+	<key>Go To</key>
+	<string>前往</string>
+	<key>Go to Folder…</key>
+	<string>前往文件夹…</string>
+	<key>Connect to Server…</key>
+	<string>连接服务器…</string>
+	<key>Applications</key>
+	<string>应用程序</string>
+	<key>Utilities</key>
+	<string>实用工具</string>
+	<key>Activity Monitor</key>
+	<string>活动监视器</string>
+	<key>Disk Utility</key>
+	<string>磁盘工具</string>
+	<key>Console</key>
+	<string>控制台</string>
+	<key>System Information</key>
+	<string>系统信息</string>
+	<key>Cascade windows</key>
+	<string>层叠窗口</string>
+	<key>Show windows stacked</key>
+	<string>堆叠显示窗口</string>
+	<key>Show windows side by side</key>
+	<string>并排显示窗口</string>
+	<key>Minimize all windows</key>
+	<string>最小化所有窗口</string>
+	<key>Restore all windows</key>
+	<string>还原所有窗口</string>
+	<key>System</key>
+	<string>系统</string>
+	<key>Library</key>
+	<string>资源库</string>
+	<key>Users</key>
+	<string>用户</string>
+	<key>Home</key>
+	<string>个人目录</string>
+	<key>Desktop</key>
+	<string>桌面</string>
+	<key>Downloads</key>
+	<string>下载</string>
+	<key>Documents</key>
+	<string>文稿</string>
+	<key>Pictures</key>
+	<string>图片</string>
+	<key>Music</key>
+	<string>音乐</string>
+	<key>Movies</key>
+	<string>影片</string>
+	<key>User Library</key>
+	<string>用户资源库</string>
+	<key>Temporary</key>
+	<string>临时目录</string>
+	<key>Displays</key>
+	<string>显示器</string>
+	<key>Bluetooth</key>
+	<string>蓝牙</string>
+	<key>Keyboard</key>
+	<string>键盘</string>
+	<key>Privacy &amp; Security</key>
+	<string>隐私与安全性</string>
+	<key>Task Manager</key>
+	<string>任务管理器</string>
+	<key>Taskbar settings</key>
+	<string>任务栏设置</string>
+	<key>Battery / Energy</key>
+	<string>电池与节能</string>
+	<key>About This Mac</key>
+	<string>关于本机</string>
+	<key>Network Settings</key>
+	<string>网络设置</string>
+	<key>Login Items &amp; Extensions</key>
+	<string>登录项与扩展</string>
+	<key>System Settings…</key>
+	<string>系统设置…</string>
+	<key>Spotlight Search</key>
+	<string>聚焦搜索</string>
+	<key>Terminal</key>
+	<string>终端</string>
+	<key>Toggle Quick Link Menu</key>
+	<string>打开或关闭快捷链接菜单</string>
+	<key>Open File Manager</key>
+	<string>打开文件管理器</string>
+	<key>Open Search</key>
+	<string>打开搜索</string>
+	<key>Open Application</key>
+	<string>打开应用</string>
+	<key>Show Run Dialog</key>
+	<string>打开运行对话框</string>
+	<key>Toggle Quick Settings</key>
+	<string>打开或关闭快捷设置</string>
+	<key>Toggle Calendar</key>
+	<string>打开或关闭日历</string>
+	<key>Toggle Input Sources</key>
+	<string>打开或关闭输入源</string>
+	<key>Snap Window Left</key>
+	<string>将窗口贴靠到左侧</string>
+	<key>Snap Window Right</key>
+	<string>将窗口贴靠到右侧</string>
+	<key>Maximize Window</key>
+	<string>最大化窗口</string>
+	<key>Restore or Minimize Window</key>
+	<string>还原或最小化窗口</string>
+	<key>Toggle Snap Layouts</key>
+	<string>打开或关闭贴靠布局</string>
+	<key>Show Task View</key>
+	<string>显示任务视图</string>
+	<key>Move Window to Previous Display</key>
+	<string>将窗口移至上一显示器</string>
+	<key>Move Window to Next Display</key>
+	<string>将窗口移至下一显示器</string>
+	<key>Minimize All Windows</key>
+	<string>最小化所有窗口</string>
+	<key>Restore Minimized Windows</key>
+	<string>还原最小化的窗口</string>
+	<key>Cycle Taskbar Apps</key>
+	<string>循环切换任务栏应用</string>
+	<key>Focus System Tray</key>
+	<string>聚焦系统托盘</string>
+	<key>Show Clipboard History</key>
+	<string>显示剪贴板历史记录</string>
+	<key>Capture Screen Region</key>
+	<string>截取屏幕区域</string>
+	<key>Show Character Palette</key>
+	<string>显示字符面板</string>
+	<key>Open Accessibility Settings</key>
+	<string>打开辅助功能设置</string>
+	<key>Open Display Settings</key>
+	<string>打开显示器设置</string>
+	<key>Open Wireless Display Settings</key>
+	<string>打开无线显示设置</string>
+	<key>Minimize Other Windows</key>
+	<string>最小化其他窗口</string>
+	<key>Create Desktop</key>
+	<string>新建桌面</string>
+	<key>Switch Desktop Left</key>
+	<string>切换到左侧桌面</string>
+	<key>Switch Desktop Right</key>
+	<string>切换到右侧桌面</string>
+	<key>Close Desktop</key>
+	<string>关闭桌面</string>
+	<key>Launch Pinned App</key>
+	<string>启动固定应用</string>
+	<key>Choose an application</key>
+	<string>请选择应用</string>
+	<key>Application not found</key>
+	<string>未找到应用</string>
+	<key>Start Menu (alternate)</key>
+	<string>开始菜单（备用）</string>
+	<key>Quick Link Menu</key>
+	<string>快捷链接菜单</string>
+	<key>File Explorer</key>
+	<string>文件资源管理器</string>
+	<key>Quick Settings</key>
+	<string>快捷设置</string>
+	<key>Notifications and Calendar</key>
+	<string>通知与日历</string>
+	<key>Input Sources</key>
+	<string>输入源</string>
+	<key>Snap Layouts</key>
+	<string>贴靠布局</string>
+	<key>Task View</key>
+	<string>任务视图</string>
+	<key>Move to Previous Display</key>
+	<string>移至上一显示器</string>
+	<key>Move to Next Display</key>
+	<string>移至下一显示器</string>
+	<key>Clipboard History</key>
+	<string>剪贴板历史记录</string>
+	<key>Emoji and Symbols</key>
+	<string>表情与符号</string>
+	<key>Accessibility Settings</key>
+	<string>辅助功能设置</string>
+	<key>Display Settings</key>
+	<string>显示器设置</string>
+	<key>Wireless Display</key>
+	<string>无线显示</string>
+	<key>Pinned App %ld</key>
+	<string>固定应用 %ld</string>
+	<key>Conflicts with Alt+Tab Window Switcher</key>
+	<string>与 Alt+Tab 窗口切换快捷键冲突</string>
+	<key>Already in use by another application</key>
+	<string>已被其他应用占用</string>
+	<key>Unavailable (%d)</key>
+	<string>不可用（%d）</string>
+	<key>%@ is already in use by another application</key>
+	<string>%@ 已被其他应用占用</string>
+	<key>Conflicts with %@</key>
+	<string>与 %@ 冲突</string>
+	<key>Reverse shortcut %@</key>
+	<string>反向快捷键：%@</string>
+	<key>Event monitoring unavailable</key>
+	<string>无法监控键盘事件</string>
+	<key>WinTaskbar Settings</key>
+	<string>WinTaskbar 设置</string>
+	<key>Minimize or restore window</key>
+	<string>最小化或还原窗口</string>
+	<key>Enter or exit full screen</key>
+	<string>进入或退出全屏</string>
+	<key>Show hidden icons</key>
+	<string>显示隐藏图标</string>
+	<key>Preview message. Alerts stay in memory and disappear when WinTaskbar quits.</key>
+	<string>预览消息。提醒只保存在内存中，退出 WinTaskbar 后清空。</string>
+	<key>Run is unavailable.</key>
+	<string>运行功能不可用。</string>
+	<key>Browse</key>
+	<string>浏览</string>
+	<key>Type a program, folder, document, or Internet resource.</key>
+	<string>请输入程序、文件夹、文档或网络资源的名称。</string>
+	<key>The resource could not be opened.</key>
+	<string>无法打开此资源。</string>
+	<key>The item could not be opened.</key>
+	<string>无法打开此项目。</string>
+	<key>macOS cannot find “%@”.</key>
+	<string>macOS 找不到“%@”。</string>
+	<key>Type the name of a program, folder, document, or Internet resource, and WinTaskbar will open it for you.</key>
+	<string>输入程序、文件夹、文档或网络资源的名称，WinTaskbar 将为你打开它。</string>
+	<key>Open:</key>
+	<string>打开：</string>
+	<key>OK</key>
+	<string>确定</string>
+	<key>Browse…</key>
+	<string>浏览…</string>
+	<key>Snap layouts</key>
+	<string>贴靠布局</string>
+	<key>Clipboard history</key>
+	<string>剪贴板历史记录</string>
+	<key>Clear</key>
+	<string>清空</string>
+	<key>Copy text to add it to history.</key>
+	<string>复制文字以将其添加到历史记录。</string>
+	<key>Maximize</key>
+	<string>最大化</string>
+	<key>Top Left</key>
+	<string>左上角</string>
+	<key>Top Right</key>
+	<string>右上角</string>
+	<key>Bottom Left</key>
+	<string>左下角</string>
+	<key>Bottom Right</key>
+	<string>右下角</string>
+	<key>WinTaskbar Shortcuts</key>
+	<string>WinTaskbar 快捷方式</string>
+	<key>Shortcuts for %@</key>
+	<string>%@ 的快捷方式</string>
+	<key>Files, folders, or links (https://…) added to this app's right-click menu. They open with the app.</key>
+	<string>添加到此应用右键菜单的文件、文件夹或链接（https://…），会使用此应用打开。</string>
+	<key>No shortcuts yet — add one below.</key>
+	<string>尚无快捷方式，请在下方添加。</string>
+	<key>Name</key>
+	<string>名称</string>
+	<key>Path or URL</key>
+	<string>路径或网址</string>
+	<key>Choose…</key>
+	<string>选择…</string>
+	<key>Add</key>
+	<string>添加</string>
+	<key>Choose either feature, both, or neither. You can change this anytime in Settings.</key>
+	<string>可选择启用其中一项、两项都启用或都不启用，随时可在设置中更改。</string>
+	<key>Switch between open windows with a Windows-style Alt+Tab interface.</key>
+	<string>使用 Windows 风格的 Alt+Tab 界面切换已打开的窗口。</string>
+	<key>Show a Windows-style taskbar, Start menu, system tray, and taskbar shortcuts.</key>
+	<string>显示 Windows 风格的任务栏、开始菜单、系统托盘和任务栏快捷键。</string>
+	<key>Taskbar can hide the macOS Dock so only the Windows-style taskbar remains.</key>
+	<string>任务栏可以隐藏 macOS 程序坞，只保留 Windows 风格任务栏。</string>
+	<key>Enable Taskbar on the first step to configure the system Dock.</key>
+	<string>请在第一步启用任务栏，再配置系统程序坞。</string>
+	<key>Keyboard layout</key>
+	<string>键盘布局</string>
+	<key>No input sources</key>
+	<string>没有输入源</string>
+	<key>More keyboard settings</key>
+	<string>更多键盘设置</string>
+	<key>Search results</key>
+	<string>搜索结果</string>
+	<key>Location access required</key>
+	<string>需要定位权限</string>
+	<key>Airplane mode</key>
+	<string>飞行模式</string>
+	<key>Energy saver</key>
+	<string>节能模式</string>
+	<key>Live captions</key>
+	<string>实时字幕</string>
+	<key>Night light</key>
+	<string>夜间模式</string>
+	<key>Mobile hotspot</key>
+	<string>移动热点</string>
+	<key>Nearby sharing</key>
+	<string>就近共享</string>
+	<key>Wired display</key>
+	<string>有线显示</string>
+	<key>Project</key>
+	<string>投影</string>
+	<key>Quick settings page 1</key>
+	<string>快捷设置第 1 页</string>
+	<key>Quick settings page 2</key>
+	<string>快捷设置第 2 页</string>
+	<key>Previous quick settings page</key>
+	<string>上一页快捷设置</string>
+	<key>Next quick settings page</key>
+	<string>下一页快捷设置</string>
+	<key>Sound settings</key>
+	<string>声音设置</string>
+	<key>Battery charging</key>
+	<string>电池充电中</string>
+	<key>Battery charging, %ld%%</key>
+	<string>电池充电中，%ld%%</string>
+	<key>Battery, %ld%%</key>
+	<string>电池，%ld%%</string>
+	<key>Battery charging: %ld%%</key>
+	<string>电池充电中：%ld%%</string>
+	<key>Battery: %ld%%</key>
+	<string>电池：%ld%%</string>
+	<key>Keyboard layout: %@</key>
+	<string>键盘布局：%@</string>
+	<key>%@ (Local time)</key>
+	<string>%@（本地时间）</string>
+	<key>Wi-Fi is off</key>
+	<string>Wi-Fi 已关闭</string>
+	<key>Turn on Wi-Fi to see available networks.</key>
+	<string>打开 Wi-Fi 以查看可用网络。</string>
+	<key>Turn on</key>
+	<string>打开</string>
+	<key>Scan for networks</key>
+	<string>扫描网络</string>
+	<key>Allow location access</key>
+	<string>允许访问位置信息</string>
+	<key>macOS requires location access to list nearby Wi-Fi networks.</key>
+	<string>macOS 需要定位权限才能列出附近的 Wi-Fi 网络。</string>
+	<key>Request Access</key>
+	<string>请求权限</string>
+	<key>Location access is off</key>
+	<string>定位权限已关闭</string>
+	<key>Open Location Settings</key>
+	<string>打开定位设置</string>
+	<key>Could not scan for networks</key>
+	<string>无法扫描网络</string>
+	<key>Check Wi-Fi and location access, then try again.</key>
+	<string>请检查 Wi-Fi 和定位权限，然后重试。</string>
+	<key>Try again</key>
+	<string>重试</string>
+	<key>Network password</key>
+	<string>网络密码</string>
+	<key>Could not connect. Check the password and try again.</key>
+	<string>无法连接，请检查密码后重试。</string>
+	<key>Connect</key>
+	<string>连接</string>
+	<key>Nearby and paired devices</key>
+	<string>附近及已配对的设备</string>
+	<key>View and connect devices in System Settings.</key>
+	<string>在系统设置中查看并连接设备。</string>
+	<key>More Accessibility settings</key>
+	<string>更多辅助功能设置</string>
+	<key>Vision</key>
+	<string>视觉</string>
+	<key>Magnifier</key>
+	<string>放大镜</string>
+	<key>See words and images better</key>
+	<string>更清晰地查看文字和图像</string>
+	<key>Narrator</key>
+	<string>旁白</string>
+	<key>Your built-in screen reader</key>
+	<string>内置屏幕阅读器</string>
+	<key>Color filters</key>
+	<string>色彩滤镜</string>
+	<key>Distinguish among colors easily</key>
+	<string>更轻松地区分颜色</string>
+	<key>Hearing</key>
+	<string>听觉</string>
+	<key>Real time audio transcription</key>
+	<string>实时将音频转为文字</string>
+	<key>Mono audio</key>
+	<string>单声道音频</string>
+	<key>Combine left and right audio channels</key>
+	<string>合并左右声道</string>
+	<key>Motor and Mobility</key>
+	<string>动作与操作</string>
+	<key>Voice access</key>
+	<string>语音控制</string>
+	<key>Interact with your PC using voice</key>
+	<string>使用语音操作电脑</string>
+	<key>Sticky keys</key>
+	<string>粘滞键</string>
+	<key>Use shortcuts one key at a time</key>
+	<string>逐个按键使用快捷键</string>
+	<key>%@ details</key>
+	<string>%@ 详情</string>
+	<key>%@ toggle</key>
+	<string>切换%@</string>
+	<key>%@, Off, %@</key>
+	<string>%@，关闭，%@</string>
+	<key>Clock and calendar</key>
+	<string>时钟与日历</string>
+	<key>Collapse calendar</key>
+	<string>收起日历</string>
+	<key>Expand calendar</key>
+	<string>展开日历</string>
+	<key>Previous month</key>
+	<string>上个月</string>
+	<key>Next month</key>
+	<string>下个月</string>
+	<key>Reduce focus duration</key>
+	<string>缩短专注时长</string>
+	<key>Increase focus duration</key>
+	<string>延长专注时长</string>
+	<key>%lld mins</key>
+	<string>%lld 分钟</string>
+	<key>Focus</key>
+	<string>专注</string>
+	<key>Stop focus session</key>
+	<string>停止专注</string>
+	<key>Start focus session</key>
+	<string>开始专注</string>
+	<key>%@ holiday</key>
+	<string>%@假期</string>
+	<key>%@ makeup workday</key>
+	<string>%@补班</string>
+	<key>%ld events</key>
+	<string>%ld 个日程</string>
+	<key>Glass</key>
+	<string>玻璃</string>
+	<key>Hero</key>
+	<string>英雄</string>
+	<key>Morse</key>
+	<string>摩尔斯电码</string>
+	<key>Ping</key>
+	<string>叮咚</string>
+	<key>Pop</key>
+	<string>气泡</string>
+	<key>Submarine</key>
+	<string>潜艇</string>
+	<key>Tink</key>
+	<string>清脆铃声</string>
+	<key>s</key>
+	<string>秒</string>
+	<key>%@ cycles through open windows. Add Shift to move backward, then release the modifier to activate the selected window.</key>
+	<string>使用 %@ 循环切换已打开的窗口。加按 Shift 可反向切换，松开修饰键后激活选中的窗口。</string>
+	<key>Command+Tab is normally reserved by macOS. WinTaskbar will report a conflict here if the system does not release it.</key>
+	<string>Command+Tab 通常由 macOS 保留；如果系统未释放此快捷键，WinTaskbar 会在此显示冲突。</string>
+	<key>Choose</key>
+	<string>选择</string>
+	<key>Custom: %@</key>
+	<string>自定义：%@</string>
+	<key>AM</key>
+	<string>上午</string>
+	<key>PM</key>
+	<string>下午</string>
+	<key>Space</key>
+	<string>空格</string>
+	<key>Option (Alt)</key>
+	<string>Option（Alt 键）</string>
+	<key>A Windows-style taskbar for macOS.</key>
+	<string>适用于 macOS 的 Windows 风格任务栏。</string>
+	<key>Are you sure you want to %@?</key>
+	<string>确定要%@吗？</string>
+	<key>About WinTaskbar</key>
+	<string>关于 WinTaskbar</string>
+	<key>Quit WinTaskbar</key>
+	<string>退出 WinTaskbar</string>
+	<key>Run</key>
+	<string>运行</string>
+	<key>Settings…</key>
+	<string>设置…</string>
+	<key>Sound</key>
+	<string>声音</string>
+	<key>Finder</key>
+	<string>访达</string>
 </dict>
 </plist>

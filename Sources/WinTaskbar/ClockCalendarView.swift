@@ -458,8 +458,8 @@ struct ClockCalendarPanelView: View {
                             .frame(width: 24, height: 24)
                     }
                     .buttonStyle(ClockCalendarControlButtonStyle())
-                    .help(state.isExpanded ? "Collapse calendar" : "Expand calendar")
-                    .accessibilityLabel(state.isExpanded ? "Collapse calendar" : "Expand calendar")
+                    .help(LocalizedStringKey(state.isExpanded ? "Collapse calendar" : "Expand calendar"))
+                    .accessibilityLabel(LocalizedStringKey(state.isExpanded ? "Collapse calendar" : "Expand calendar"))
                 }
 
                 Text(DateTimeFormatter.longDateString(
@@ -775,7 +775,7 @@ struct ClockCalendarPanelView: View {
                 HStack(spacing: 6) {
                     Image(systemName: state.isFocusing ? "stop.fill" : "play.fill")
                         .font(.system(size: 10))
-                    Text(state.isFocusing ? focusRemainingText : "Focus")
+                    Text(state.isFocusing ? focusRemainingText : NSLocalizedString("Focus", comment: ""))
                         .monospacedDigit()
                 }
                 .font(.system(size: 12, weight: .semibold))
@@ -783,7 +783,7 @@ struct ClockCalendarPanelView: View {
                 .frame(height: 28)
             }
             .buttonStyle(ClockCalendarFocusButtonStyle())
-            .accessibilityLabel(state.isFocusing ? "Stop focus session" : "Start focus session")
+            .accessibilityLabel(LocalizedStringKey(state.isFocusing ? "Stop focus session" : "Start focus session"))
         }
         .padding(.horizontal, 16)
     }
@@ -797,8 +797,8 @@ struct ClockCalendarPanelView: View {
         }
         .buttonStyle(ClockCalendarControlButtonStyle())
         .foregroundStyle(secondaryText)
-        .help(label)
-        .accessibilityLabel(label)
+        .help(LocalizedStringKey(label))
+        .accessibilityLabel(LocalizedStringKey(label))
     }
 
     private func focusAdjustmentButton(systemName: String, offset: Int, label: String) -> some View {
@@ -809,8 +809,8 @@ struct ClockCalendarPanelView: View {
         }
         .buttonStyle(ClockCalendarControlButtonStyle())
         .disabled(state.isFocusing)
-        .help(label)
-        .accessibilityLabel(label)
+        .help(LocalizedStringKey(label))
+        .accessibilityLabel(LocalizedStringKey(label))
     }
 
     private var columns: [GridItem] {
@@ -947,11 +947,11 @@ private struct ClockCalendarDayButton: View {
         }
         if let workState = day.annotation.workState {
             switch workState {
-            case let .holiday(name): components.append("\(name) holiday")
-            case let .makeupWorkday(name): components.append("\(name) makeup workday")
+            case let .holiday(name): components.append(String(format: NSLocalizedString("%@ holiday", comment: ""), name))
+            case let .makeupWorkday(name): components.append(String(format: NSLocalizedString("%@ makeup workday", comment: ""), name))
             }
         }
-        if eventCount > 0 { components.append("\(eventCount) events") }
+        if eventCount > 0 { components.append(String(format: NSLocalizedString("%ld events", comment: ""), eventCount)) }
         return components.joined(separator: ", ")
     }
 

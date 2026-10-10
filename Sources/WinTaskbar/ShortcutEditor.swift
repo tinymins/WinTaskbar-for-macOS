@@ -34,7 +34,7 @@ final class ShortcutEditorController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "WinTaskbar Shortcuts"
+        window.title = NSLocalizedString("WinTaskbar Shortcuts", comment: "")
         window.isReleasedWhenClosed = false
         super.init(window: window)
     }

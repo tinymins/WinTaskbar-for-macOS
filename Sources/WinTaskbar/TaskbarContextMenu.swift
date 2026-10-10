@@ -283,7 +283,7 @@ struct TaskbarContextMenuView: View {
         VStack(spacing: 0) {
             ForEach(TaskbarContextMenuSection.allCases, id: \.self) { section in
                 TaskbarJumpListRow(
-                    title: section.title,
+                    title: NSLocalizedString(section.title, comment: ""),
                     systemImage: section.systemImage,
                     trailingSystemImage: "chevron.right",
                     layout: TaskbarContextMenuMetrics.rowLayout,
@@ -319,7 +319,7 @@ struct TaskbarContextMenuView: View {
         command: TaskbarContextMenuCommand
     ) -> some View {
         TaskbarJumpListRow(
-            title: title,
+            title: NSLocalizedString(title, comment: ""),
             systemImage: systemImage,
             layout: TaskbarContextMenuMetrics.rowLayout,
             onHoverChanged: { hovering in
@@ -409,7 +409,7 @@ struct TaskbarContextSubmenuView: View {
         action: @escaping () -> Void
     ) -> some View {
         TaskbarJumpListRow(
-            title: title,
+            title: NSLocalizedString(title, comment: ""),
             systemImage: systemImage,
             layout: TaskbarContextMenuMetrics.rowLayout,
             onHoverChanged: { hovering in
@@ -427,7 +427,7 @@ struct TaskbarContextSubmenuView: View {
         section: TaskbarContextNestedSection
     ) -> some View {
         TaskbarJumpListRow(
-            title: title,
+            title: NSLocalizedString(title, comment: ""),
             systemImage: systemImage,
             trailingSystemImage: "chevron.right",
             layout: TaskbarContextMenuMetrics.rowLayout,
@@ -444,7 +444,7 @@ struct TaskbarContextSubmenuView: View {
         command: TaskbarWindowMenuCommand
     ) -> some View {
         TaskbarJumpListRow(
-            title: title,
+            title: NSLocalizedString(title, comment: ""),
             systemImage: systemImage,
             layout: TaskbarContextMenuMetrics.rowLayout,
             onHoverChanged: { hovering in
@@ -522,7 +522,7 @@ struct TaskbarContextNestedMenuView: View {
 
     private func row(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         TaskbarJumpListRow(
-            title: title,
+            title: NSLocalizedString(title, comment: ""),
             systemImage: systemImage,
             layout: TaskbarContextMenuMetrics.rowLayout
         ) {

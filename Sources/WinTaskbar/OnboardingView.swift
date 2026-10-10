@@ -32,7 +32,7 @@ struct OnboardingView: View {
                 } else if step == 1 {
                     Text("Accessibility").font(.title.bold())
                     Text("Alt+Tab and Taskbar need Accessibility access to list and manage app windows.")
-                    Button(permissions.accessibilityTrusted ? "Granted" : "Grant Accessibility") {
+                    Button(LocalizedStringKey(permissions.accessibilityTrusted ? "Granted" : "Grant Accessibility")) {
                         permissions.promptForAccessibility()
                     }
                 } else {
@@ -52,7 +52,7 @@ struct OnboardingView: View {
             HStack {
                 if step > 0 { Button("Back") { step -= 1 } }
                 Spacer()
-                Button(step == 2 ? "Get Started" : "Next") {
+                Button(LocalizedStringKey(step == 2 ? "Get Started" : "Next")) {
                     if step == 2 {
                         onFinish(allTabEnabled, taskbarEnabled, hideSystemDock)
                     } else {
@@ -99,7 +99,7 @@ final class OnboardingWindowController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "Welcome to WinTaskbar"
+        window.title = NSLocalizedString("Welcome to WinTaskbar", comment: "")
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.contentView = NSHostingView(rootView: OnboardingView(

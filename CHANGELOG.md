@@ -2,6 +2,13 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.34] - 2026-10-10
+
+### Fixed
+
+- Complete Simplified Chinese translations across Settings, onboarding, taskbar and Start menus, quick settings, keyboard layouts, shortcut editing, Run, clipboard history, and calendar controls.
+- Localize option values, shortcut actions and conflicts, alert sound names, dynamic status messages, application menus, and confirmation dialogs while preserving stored configuration values and user-provided names.
+
 ## [0.0.33] - 2026-10-10
 
 ### Added

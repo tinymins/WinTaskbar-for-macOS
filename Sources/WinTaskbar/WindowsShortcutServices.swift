@@ -584,7 +584,7 @@ final class RunWindowController: NSWindowController, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Run"
+        window.title = NSLocalizedString("Run", comment: "")
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
@@ -598,7 +598,7 @@ final class RunWindowController: NSWindowController, NSWindowDelegate {
         window.contentView = NSHostingView(rootView: RunDialogView(
             model: model,
             onRun: { [weak self] command in
-                guard let self else { return "Run is unavailable." }
+                guard let self else { return NSLocalizedString("Run is unavailable.", comment: "") }
                 let error = executor.run(command)
                 if error == nil {
                     model.remember(command)
@@ -619,8 +619,8 @@ final class RunWindowController: NSWindowController, NSWindowDelegate {
 
     private static func chooseItem() -> String? {
         let panel = NSOpenPanel()
-        panel.title = "Browse"
-        panel.prompt = "Open"
+        panel.title = NSLocalizedString("Browse", comment: "")
+        panel.prompt = NSLocalizedString("Open", comment: "")
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
@@ -656,17 +656,17 @@ private final class RunDialogModel: ObservableObject {
 private final class RunCommandExecutor {
     func run(_ rawCommand: String) -> String? {
         let command = rawCommand.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !command.isEmpty else { return "Type a program, folder, document, or Internet resource." }
+        guard !command.isEmpty else { return NSLocalizedString("Type a program, folder, document, or Internet resource.", comment: "") }
 
         if let url = URL(string: command), let scheme = url.scheme, !scheme.isEmpty {
-            return NSWorkspace.shared.open(url) ? nil : "The resource could not be opened."
+            return NSWorkspace.shared.open(url) ? nil : NSLocalizedString("The resource could not be opened.", comment: "")
         }
 
         let expandedPath = NSString(string: command).expandingTildeInPath
         if FileManager.default.fileExists(atPath: expandedPath) {
             return NSWorkspace.shared.open(URL(fileURLWithPath: expandedPath))
                 ? nil
-                : "The item could not be opened."
+                : NSLocalizedString("The item could not be opened.", comment: "")
         }
 
         let process = Process()
@@ -677,9 +677,9 @@ private final class RunCommandExecutor {
             process.waitUntilExit()
             return process.terminationStatus == 0
                 ? nil
-                : "macOS cannot find “\(command)”."
+                : String(format: NSLocalizedString("macOS cannot find “%@”.", comment: ""), command)
         } catch {
-            return "macOS cannot find “\(command)”."
+            return String(format: NSLocalizedString("macOS cannot find “%@”.", comment: ""), command)
         }
     }
 }
@@ -780,7 +780,7 @@ struct SnapLayoutsView: View {
                         VStack(spacing: 5) {
                             Image(systemName: symbol(for: placement))
                                 .font(.system(size: 22))
-                            Text(placement.title).font(.caption2)
+                            Text(LocalizedStringKey(placement.title)).font(.caption2)
                         }
                         .frame(maxWidth: .infinity, minHeight: 52)
                     }

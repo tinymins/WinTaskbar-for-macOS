@@ -98,7 +98,7 @@ struct StartMenuView: View {
 
     private var appsHeader: some View {
         HStack {
-            Text(query.isEmpty ? "Apps" : "Search results")
+            Text(LocalizedStringKey(query.isEmpty ? "Apps" : "Search results"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
@@ -237,7 +237,7 @@ struct StartMenuView: View {
         Button {
             actions.performPower(action)
         } label: {
-            Label(action.rawValue, systemImage: systemName)
+            Label(LocalizedStringKey(action.rawValue), systemImage: systemName)
         }
     }
 

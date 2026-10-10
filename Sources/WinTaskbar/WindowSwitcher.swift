@@ -1477,8 +1477,8 @@ private struct WindowSwitcherControlButton: View {
         }
         .buttonStyle(WindowSwitcherControlButtonStyle())
         .onHover { isHovering = $0 }
-        .help(action.accessibilityLabel)
-        .accessibilityLabel(action.accessibilityLabel)
+        .help(LocalizedStringKey(action.accessibilityLabel))
+        .accessibilityLabel(LocalizedStringKey(action.accessibilityLabel))
     }
 }
 

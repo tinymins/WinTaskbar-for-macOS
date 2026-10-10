@@ -199,7 +199,7 @@ struct TaskbarView: View {
                 Image(systemName: "square.grid.2x2")
                     .font(.system(size: itemGeometry.cellSize * 0.52, weight: .medium))
                 if !preferences.startButtonLabel.isEmpty {
-                    Text(preferences.startButtonLabel)
+                    Text(LocalizedStringKey(preferences.startButtonLabel))
                         .font(.system(size: 12, weight: .medium))
                 }
             }
@@ -209,7 +209,7 @@ struct TaskbarView: View {
         .buttonStyle(TaskbarButtonStyle())
         .background {
             WindowsTaskbarTooltipRegion(
-                title: "Open menu",
+                title: NSLocalizedString("Open menu", comment: ""),
                 taskbarPosition: preferences.position
             )
         }
@@ -419,7 +419,7 @@ struct TaskbarView: View {
         .frame(width: itemGeometry.cellSize + 6)
         .background {
             WindowsTaskbarTooltipRegion(
-                title: "More apps",
+                title: NSLocalizedString("More apps", comment: ""),
                 taskbarPosition: preferences.position
             )
         }
@@ -589,8 +589,8 @@ struct TaskbarView: View {
 
     private func showDesktopStrip(horizontal: Bool) -> some View {
         WindowsTrayIconButton(
-            title: "Show desktop",
-            accessibilityLabel: "Show Desktop",
+            title: NSLocalizedString("Show desktop", comment: ""),
+            accessibilityLabel: NSLocalizedString("Show Desktop", comment: ""),
             taskbarPosition: preferences.position,
             visualStyle: .showDesktop(horizontal: horizontal),
             primaryAction: actions.showDesktop

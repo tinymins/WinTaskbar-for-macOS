@@ -445,7 +445,7 @@ final class GlobalHotkeysService: ObservableObject {
                     shortcut: reverseShortcut,
                     configuration: configuration
                 ) {
-                    issues[configuration.id] = "Reverse shortcut \(issue.lowercased())"
+                    issues[configuration.id] = String(format: NSLocalizedString("Reverse shortcut %@", comment: ""), issue.lowercased())
                 } else {
                     reverseWindowsSpaceHotKeyIDs.insert(reverseID)
                 }
@@ -454,7 +454,7 @@ final class GlobalHotkeysService: ObservableObject {
                 $0.isEnabled && $0.usesWindowsKey && $0.action == .toggleInputSources
             }
             if (windowsKeyOpensStart || tracksWindowsSpace), !installWindowsKeyEventTap() {
-                windowsKeyIssue = "Event monitoring unavailable"
+                windowsKeyIssue = NSLocalizedString("Event monitoring unavailable", comment: "")
             }
             windowsSpaceTrackingEnabled = tracksWindowsSpace && windowsKeyEventTap != nil
         }
@@ -481,9 +481,9 @@ final class GlobalHotkeysService: ObservableObject {
             for configuration in group {
                 let conflictingTitles = group
                     .filter { $0.id != configuration.id }
-                    .map(\.title)
+                    .map(\.localizedTitle)
                     .joined(separator: ", ")
-                issues[configuration.id] = "Conflicts with \(conflictingTitles)"
+                issues[configuration.id] = String(format: NSLocalizedString("Conflicts with %@", comment: ""), conflictingTitles)
             }
         }
         return issues
@@ -506,14 +506,14 @@ final class GlobalHotkeysService: ObservableObject {
             let shortcut = configuration.resolvedShortcut(mapping: mapping)
             let modifiers = shortcut.modifiers & ~UInt32(shiftKey)
             guard shortcut.keyCode == 48, modifiers == altTabModifier.carbonModifier else { return nil }
-            return (configuration.id, "Conflicts with Alt+Tab Window Switcher")
+            return (configuration.id, NSLocalizedString("Conflicts with Alt+Tab Window Switcher", comment: ""))
         })
     }
 
     static func registrationIssue(for status: OSStatus) -> String {
         status == OSStatus(eventHotKeyExistsErr)
-            ? "Already in use by another application"
-            : "Unavailable (\(status))"
+            ? NSLocalizedString("Already in use by another application", comment: "")
+            : String(format: NSLocalizedString("Unavailable (%d)", comment: ""), status)
     }
 
     static func shouldRetryRegistration(
@@ -710,7 +710,7 @@ final class GlobalHotkeysService: ObservableObject {
             )
             guard status == noErr, let reference else {
                 registered.forEach { _ = UnregisterEventHotKey($0) }
-                return "\(altTabModifier.shortcutLabel) is already in use by another application"
+                return String(format: NSLocalizedString("%@ is already in use by another application", comment: ""), altTabModifier.shortcutLabel)
             }
             registered.append(reference)
         }
