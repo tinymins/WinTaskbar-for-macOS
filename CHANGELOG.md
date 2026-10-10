@@ -2,6 +2,22 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.33] - 2026-10-10
+
+### Added
+
+- Add a full-screen glow flash count of 1–20 within the total effect duration, defaulting existing configurations to 2 flashes. Preserve one gentle pulse when the system's Reduce Motion setting is enabled.
+
+### Changed
+
+- Group shared notification output settings by type below trigger rules, and show the effective inherited parameters when a rule has no custom settings for that output.
+- Start all shared output sections collapsed, make the entire section header clickable with hover and pressed feedback, and place rule output and customization switches together with custom parameters shown when needed.
+
+### Fixed
+
+- Retain Alt-Tab thumbnails for all live windows, including minimized windows and windows on other desktops, instead of evicting them when many windows are open; remove entries only after their windows close.
+- Always dismiss the Start menu when opening Settings from it, including when the Settings window is already open.
+
 ## [0.0.32] - 2026-10-08
 
 ### Added
