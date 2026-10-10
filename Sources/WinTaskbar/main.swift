@@ -81,10 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         actions.openSettingsHandler = { [weak startMenu, weak settings] page, context in
             guard let settings else { return }
-            if SettingsOpeningPolicy.shouldDismissStartMenu(
-                context: context,
-                isSettingsOpen: settings.isOpen
-            ) {
+            if SettingsOpeningPolicy.shouldDismissStartMenu(context: context) {
                 startMenu?.hide()
             }
             settings.show(page: page)
@@ -686,18 +683,8 @@ func runSelfTest() async -> Int32 {
         "Shortcut Mappings",
         "About"
     ],
-          SettingsOpeningPolicy.shouldDismissStartMenu(
-              context: .startMenu,
-              isSettingsOpen: false
-          ),
-          !SettingsOpeningPolicy.shouldDismissStartMenu(
-              context: .startMenu,
-              isSettingsOpen: true
-          ),
-          !SettingsOpeningPolicy.shouldDismissStartMenu(
-              context: .standard,
-              isSettingsOpen: false
-          ),
+          SettingsOpeningPolicy.shouldDismissStartMenu(context: .startMenu),
+          !SettingsOpeningPolicy.shouldDismissStartMenu(context: .standard),
           TransientSurfaceDismissalPolicy.shouldDismissForOutsideInteraction(
               keepsVisibleForSettings: false
           ),

@@ -88,11 +88,8 @@ enum SettingsOpeningContext {
 }
 
 enum SettingsOpeningPolicy {
-    static func shouldDismissStartMenu(
-        context: SettingsOpeningContext,
-        isSettingsOpen: Bool
-    ) -> Bool {
-        context == .startMenu && !isSettingsOpen
+    static func shouldDismissStartMenu(context: SettingsOpeningContext) -> Bool {
+        context == .startMenu
     }
 }
 

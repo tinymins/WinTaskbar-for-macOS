@@ -1920,7 +1920,6 @@ enum StartMenuGeometry {
 @MainActor
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     var onVisibilityChanged: ((Bool) -> Void)?
-    private(set) var isOpen = false
     private let navigation = SettingsNavigationState()
 
     init(preferences: PreferencesStore, apps: AppDiscoveryService) {
@@ -1946,7 +1945,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     func show(page: SettingsPage? = nil) {
         if let page { navigation.selectedPage = page }
-        isOpen = true
         onVisibilityChanged?(true)
         NSApp.activate(ignoringOtherApps: true)
         window?.center()
@@ -1956,7 +1954,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        isOpen = false
         navigation.isWindowVisible = false
         onVisibilityChanged?(false)
     }
