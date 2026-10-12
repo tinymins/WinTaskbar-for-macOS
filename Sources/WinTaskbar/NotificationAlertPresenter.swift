@@ -123,8 +123,8 @@ final class NotificationAlertPresenter {
     }
 
     func showGlow(color: NSColor, duration: TimeInterval, flashCount: Int) {
-        guard !suspended, let screen = NSScreen.screens.first else { return }
-        glow.show(on: screen, color: color, duration: duration, flashCount: flashCount,
+        guard !suspended else { return }
+        glow.show(on: NSScreen.screens, color: color, duration: duration, flashCount: flashCount,
                   showInFullscreen: preferences.showInFullscreen, alwaysOnTop: preferences.alwaysOnTop)
     }
 

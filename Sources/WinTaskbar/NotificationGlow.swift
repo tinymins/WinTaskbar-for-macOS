@@ -4,32 +4,34 @@ import QuartzCore
 @MainActor
 final class NotificationGlow {
     static let defaultColor = NSColor(calibratedRed: 1, green: 0.8, blue: 5.0 / 255, alpha: 1)
-    private var panel: NSPanel?
+    private var panels: [NSPanel] = []
     private var completion: Task<Void, Never>?
 
-    func show(on screen: NSScreen, color: NSColor, duration: TimeInterval = 3, flashCount: Int, showInFullscreen: Bool = true, alwaysOnTop: Bool = true) {
+    func show(on screens: [NSScreen], color: NSColor, duration: TimeInterval = 3, flashCount: Int, showInFullscreen: Bool = true, alwaysOnTop: Bool = true) {
         // Coalesce a burst into one glow sequence instead of layering or restarting alarms.
-        guard panel == nil else { return }
-        let panel = NotificationGlowPanel(
-            contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered, defer: false
-        )
-        panel.isReleasedWhenClosed = false
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = false
-        panel.ignoresMouseEvents = true
-        panel.hidesOnDeactivate = false
-        panel.level = alwaysOnTop ? .statusBar : .normal
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        if showInFullscreen { panel.collectionBehavior.insert(.fullScreenAuxiliary) }
-        let view = NotificationGlowView(frame: NSRect(origin: .zero, size: screen.frame.size))
-        view.color = color
-        view.wantsLayer = true
-        panel.contentView = view
-        view.layer?.opacity = 0
-        self.panel = panel
-        panel.orderFrontRegardless()
+        guard panels.isEmpty, !screens.isEmpty else { return }
+        panels = screens.map { screen in
+            let panel = NotificationGlowPanel(
+                contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered, defer: false, screen: screen
+            )
+            panel.isReleasedWhenClosed = false
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = false
+            panel.ignoresMouseEvents = true
+            panel.hidesOnDeactivate = false
+            panel.level = alwaysOnTop ? .statusBar : .normal
+            panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+            if showInFullscreen { panel.collectionBehavior.insert(.fullScreenAuxiliary) }
+            let view = NotificationGlowView(frame: NSRect(origin: .zero, size: screen.frame.size))
+            view.color = color
+            view.wantsLayer = true
+            panel.contentView = view
+            view.layer?.opacity = 0
+            panel.setFrame(screen.frame, display: false)
+            return panel
+        }
 
         let interval = max(0.1, duration)
         let animation = CAKeyframeAnimation(keyPath: "opacity")
@@ -44,7 +46,10 @@ final class NotificationGlow {
             animation.repeatCount = Float(flashCount)
         }
         animation.calculationMode = .linear
-        view.layer?.add(animation, forKey: "notificationGlow")
+        for panel in panels {
+            panel.orderFrontRegardless()
+            panel.contentView?.layer?.add(animation, forKey: "notificationGlow")
+        }
         completion = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(interval)) } catch { return }
             self?.stop()
@@ -54,8 +59,8 @@ final class NotificationGlow {
     func stop() {
         completion?.cancel()
         completion = nil
-        panel?.close()
-        panel = nil
+        panels.forEach { $0.close() }
+        panels.removeAll()
     }
 }
 
