@@ -2,6 +2,14 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.35] - 2026-10-12
+
+### Fixed
+
+- Show notification screen-edge glow on every connected display and close all glow windows together when the effect ends or is suspended.
+- Limit the effect-duration slider for glow, center text, and large text to 0.50–5.00 seconds with 0.01-second steps and two decimal places. Allow longer durations through the input field without the previous one-hour cap.
+- Replace the glow flash-count stepper with a slider from 1 to 5 in steps of 1 and an input field for larger positive integers, removing the previous 20-flash cap.
+
 ## [0.0.34] - 2026-10-10
 
 ### Fixed
