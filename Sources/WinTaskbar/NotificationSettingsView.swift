@@ -589,14 +589,14 @@ private struct NotificationChannelSettingsEditor: View {
                 NotificationEffectDurationSetting(seconds: $settings.durationSeconds)
             }
             if kind == .glow {
-                Stepper(value: flashCountBinding, in: 1...20) {
-                    HStack {
-                        Text("Flash count")
-                        Spacer()
-                        Text("\(settings.effectiveGlowFlashCount)").monospacedDigit()
-                    }
+                HStack {
+                    Text("Flash count").frame(width: 180, alignment: .leading)
+                    Slider(value: flashCountSliderBinding, in: 1...5, step: 1)
+                        .accessibilityLabel("Flash count")
+                    TextField("Flash count", value: flashCountBinding, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 68)
                 }
-                .accessibilityLabel("Flash count")
                 Text("Flashes finish within the effect duration. With Reduce Motion enabled, one gentle glow is shown instead.")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -633,7 +633,14 @@ private struct NotificationChannelSettingsEditor: View {
     private var flashCountBinding: Binding<Int> {
         Binding(
             get: { settings.effectiveGlowFlashCount },
-            set: { settings.glowFlashCount = $0 }
+            set: { settings.glowFlashCount = max(1, $0) }
+        )
+    }
+
+    private var flashCountSliderBinding: Binding<Double> {
+        Binding(
+            get: { Double(min(5, settings.effectiveGlowFlashCount)) },
+            set: { settings.glowFlashCount = Int($0) }
         )
     }
 

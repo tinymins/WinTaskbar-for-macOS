@@ -58,7 +58,7 @@ struct NotificationOutputSettings: Codable, Equatable {
     var speechEnabled = false
 
     var effectiveGlowFlashCount: Int {
-        min(20, max(1, glowFlashCount ?? 2))
+        max(1, glowFlashCount ?? 2)
     }
 
     func countdownDuration(message: String) -> TimeInterval? {
