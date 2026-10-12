@@ -586,8 +586,7 @@ private struct NotificationChannelSettingsEditor: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             if [.centerText, .largeText, .glow].contains(kind) {
-                NotificationNumberSetting("Effect duration", value: $settings.durationSeconds,
-                                          range: 0.5...3600, suffix: "s")
+                NotificationEffectDurationSetting(seconds: $settings.durationSeconds)
             }
             if kind == .glow {
                 Stepper(value: flashCountBinding, in: 1...20) {
@@ -731,6 +730,32 @@ private struct NotificationPositionSettings: View {
             Text(title).font(.body.weight(.medium))
             NotificationNumberSetting("Horizontal position", value: $x, range: 0...1, suffix: "%", scale: 100)
             NotificationNumberSetting("Vertical position", value: $y, range: 0...1, suffix: "%", scale: 100)
+        }
+    }
+}
+
+private struct NotificationEffectDurationSetting: View {
+    @Binding var seconds: Double
+
+    private var sliderValue: Binding<Double> {
+        Binding(
+            get: { min(5, max(0.5, seconds)) },
+            set: { seconds = ($0 * 100).rounded() / 100 }
+        )
+    }
+
+    var body: some View {
+        HStack {
+            Text("Effect duration").frame(width: 180, alignment: .leading)
+            Slider(value: sliderValue, in: 0.5...5, step: 0.01)
+            TextField("Value", value: $seconds, format: .number.precision(.fractionLength(2)))
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 68)
+                .onChange(of: seconds) { newValue in
+                    seconds = newValue.isFinite ? max(0.5, newValue) : 0.5
+                }
+            Text("\(seconds.formatted(.number.precision(.fractionLength(2))))\(NSLocalizedString("s", comment: ""))")
+                .monospacedDigit().frame(width: 58, alignment: .trailing)
         }
     }
 }

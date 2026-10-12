@@ -298,7 +298,7 @@ final class SystemNotificationService: ObservableObject {
         for kind in [NotificationOutputKind.centerText, .largeText, .glow] where outputs.enabled.contains(kind) {
             let settings = outputs.settings(for: kind)
             let color = NSColor(hex: settings.colorHex) ?? NotificationGlow.defaultColor
-            let duration = min(3600, max(0.5, settings.durationSeconds))
+            let duration = settings.durationSeconds.isFinite ? max(0.5, settings.durationSeconds) : 0.5
             if kind == .glow {
                 presenter.showGlow(color: color, duration: duration, flashCount: settings.effectiveGlowFlashCount)
             } else {
