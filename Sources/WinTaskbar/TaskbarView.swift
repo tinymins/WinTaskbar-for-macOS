@@ -927,7 +927,7 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
                         WindowPreviewPopover(
                             windows: previewWindows,
                             position: preferences.position,
-                            service: windowsService,
+                            captureSession: windowPreviewPanelController.captureSession,
                             windowPeekController: windowPeekController,
                             onRefresh: { windows in
                                 if previewWindows != windows { previewWindows = windows }
@@ -1253,14 +1253,12 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
 private struct WindowPreviewPopover: View {
     let windows: [WindowInfo]
     let position: TaskbarPosition
-    let service: WindowsService
+    let captureSession: WindowCaptureSession
     let windowPeekController: WindowPeekController
     let onRefresh: ([WindowInfo]) -> Void
     let onSelect: (WindowInfo) -> Void
     let onClose: (WindowInfo) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var liveSnapshots: [CGWindowID: WindowLiveSnapshot] = [:]
-    @State private var reportedFrames: [CGWindowID: CGRect] = [:]
 
     @ViewBuilder
     var body: some View {
@@ -1284,67 +1282,39 @@ private struct WindowPreviewPopover: View {
             }
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: windows.map(\.id))
-        .task(id: windows.map(\.windowID)) {
-            await refreshLiveSnapshots()
-        }
+        .onAppear { startCapture() }
+        .onChange(of: windows) { _ in startCapture() }
     }
 
     private func previewButton(for window: WindowInfo) -> some View {
         WindowPreviewButton(
             window: window,
-            liveSnapshot: liveSnapshots[window.windowID],
-            service: service,
+            capturedFrame: captureSession.frame(for: window),
             windowPeekController: windowPeekController,
             action: { onSelect(window) },
             closeAction: { onClose(window) }
         )
     }
 
-    private func refreshLiveSnapshots() async {
-        let windowIDs = Array(windows.prefix(6).map(\.windowID))
-        let visibleWindowIDs = Set(windowIDs)
-        while !Task.isCancelled {
-            let captures = await Task.detached(priority: .userInitiated) {
-                windowIDs.compactMap {
-                    WindowLiveSnapshotCapture.capture(
-                        windowID: $0,
-                        imageOptions: [.boundsIgnoreFraming, .nominalResolution]
-                    )
-                }
-            }.value
-            guard !Task.isCancelled else { return }
-
-            var updatedSnapshots = liveSnapshots.filter { visibleWindowIDs.contains($0.key) }
-            for capture in captures {
-                updatedSnapshots[capture.windowID] = capture
+    private func startCapture() {
+        captureSession.start(windows: Array(windows.prefix(6)), demand: .thumbnail) { _ in
+            let refreshedWindows = windows.map { window in
+                guard let snapshot = captureSession.frame(for: window).snapshot,
+                      snapshot.frame != window.frame else { return window }
+                return WindowInfo(
+                    windowID: window.windowID, title: window.title, ownerPID: window.ownerPID,
+                    frame: snapshot.frame, isMinimized: window.isMinimized
+                )
             }
-            liveSnapshots = updatedSnapshots
-
-            let frames = updatedSnapshots.mapValues(\.frame)
-            if frames != reportedFrames {
-                reportedFrames = frames
-                let refreshedWindows = windows.map { window in
-                    guard let frame = frames[window.windowID], frame != window.frame else { return window }
-                    return WindowInfo(
-                        windowID: window.windowID,
-                        title: window.title,
-                        ownerPID: window.ownerPID,
-                        frame: frame,
-                        isMinimized: window.isMinimized
-                    )
-                }
-                if refreshedWindows != windows { onRefresh(refreshedWindows) }
-            }
-
-            try? await Task.sleep(nanoseconds: WindowLiveCaptureCadence.thumbnailIntervalNanoseconds)
+            if refreshedWindows != windows { onRefresh(refreshedWindows) }
         }
     }
 }
 
 private struct WindowPreviewButton: View {
     let window: WindowInfo
-    let liveSnapshot: WindowLiveSnapshot?
-    let service: WindowsService
+    @ObservedObject var capturedFrame: WindowCaptureFrame
+    private var liveSnapshot: WindowLiveSnapshot? { capturedFrame.snapshot }
     let windowPeekController: WindowPeekController
     let action: () -> Void
     let closeAction: () -> Void
@@ -1456,10 +1426,6 @@ private struct WindowPreviewButton: View {
         Group {
             if let liveSnapshot {
                 Image(decorative: liveSnapshot.image, scale: 1, orientation: .up)
-                    .resizable()
-                    .scaledToFit()
-            } else if let image = service.thumbnail(for: window) {
-                Image(nsImage: image)
                     .resizable()
                     .scaledToFit()
             } else {

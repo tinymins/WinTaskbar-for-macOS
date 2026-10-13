@@ -95,6 +95,10 @@ private final class WindowPeekContentView: NSView {
         needsDisplay = true
     }
 
+    func clearWindowImage() {
+        windowImage = nil
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         NSColor.black.setFill()
         NSBezierPath(rect: bounds).fill()
@@ -179,7 +183,7 @@ final class WindowPeekController {
     private var delayedShowTask: Task<Void, Never>?
     private var delayedHideTask: Task<Void, Never>?
     private var orderOutTask: Task<Void, Never>?
-    private var liveRefreshTask: Task<Void, Never>?
+    private var captureSubscriptionID: UUID?
 
     init(windowsService: WindowsService) {
         self.windowsService = windowsService
@@ -208,50 +212,35 @@ final class WindowPeekController {
     }
 
     private func present(window: WindowInfo) {
-        liveRefreshTask?.cancel()
+        stopCapture()
         currentWindowID = window.windowID
         let generation = refreshSession.begin(windowID: window.windowID)
-        liveRefreshTask = Task { @MainActor [weak self] in
-            var hasPresentedFrame = false
-            while !Task.isCancelled {
-                let snapshot = await Task.detached(priority: .userInitiated) {
-                    WindowLiveSnapshotCapture.capture(windowID: window.windowID)
-                }.value
-                guard let self,
-                      !Task.isCancelled,
-                      refreshSession.isCurrent(
-                          windowID: window.windowID,
-                          generation: generation
-                      ) else { return }
-
-                if let snapshot {
-                    let currentWindow = WindowInfo(
-                        windowID: window.windowID,
-                        title: window.title,
-                        ownerPID: window.ownerPID,
-                        frame: snapshot.frame,
-                        isMinimized: false
-                    )
-                    let image = NSImage(
-                        cgImage: snapshot.image,
-                        size: NSSize(width: snapshot.image.width, height: snapshot.image.height)
-                    )
-                    reconcilePanels(window: currentWindow, image: image)
-                    showPanels()
-                    hasPresentedFrame = true
-                } else if !hasPresentedFrame {
-                    guard let image = windowsService.thumbnail(for: window) else {
-                        hideImmediately()
-                        return
-                    }
-                    reconcilePanels(window: window, image: image)
-                    showPanels()
-                    hasPresentedFrame = true
-                }
-
-                try? await Task.sleep(nanoseconds: WindowPeekRefreshSession.intervalNanoseconds)
+        if windowsService.captureService.cachedSnapshot(for: window) == nil {
+            panels.values.forEach { panel in
+                panel.orderOut(nil)
+                (panel.contentView as? WindowPeekContentView)?.clearWindowImage()
             }
         }
+        captureSubscriptionID = windowsService.captureService.subscribe(windows: [window], demand: .peek) { [weak self] _, snapshot in
+            guard let self,
+                  self.refreshSession.isCurrent(windowID: window.windowID, generation: generation) else { return }
+            guard let snapshot else {
+                if self.windowsService.captureService.cachedSnapshot(for: window) == nil { self.hideImmediately() }
+                return
+            }
+            let currentWindow = WindowInfo(
+                windowID: window.windowID, title: window.title, ownerPID: window.ownerPID,
+                frame: snapshot.frame, isMinimized: window.isMinimized
+            )
+            let image = NSImage(cgImage: snapshot.image, size: NSSize(width: snapshot.image.width, height: snapshot.image.height))
+            self.reconcilePanels(window: currentWindow, image: image)
+            self.showPanels()
+        }
+    }
+
+    private func stopCapture() {
+        if let captureSubscriptionID { windowsService.captureService.unsubscribe(captureSubscriptionID) }
+        captureSubscriptionID = nil
     }
 
     private func showPanels() {
@@ -292,8 +281,7 @@ final class WindowPeekController {
         delayedHideTask?.cancel()
         delayedHideTask = nil
         hoverSession.end()
-        liveRefreshTask?.cancel()
-        liveRefreshTask = nil
+        stopCapture()
         refreshSession.end()
         currentWindowID = nil
         orderOutTask?.cancel()
@@ -311,6 +299,7 @@ final class WindowPeekController {
             self?.panels.values.forEach { panel in
                 panel.orderOut(nil)
                 panel.alphaValue = 1
+                (panel.contentView as? WindowPeekContentView)?.clearWindowImage()
             }
         }
     }
@@ -323,13 +312,13 @@ final class WindowPeekController {
         orderOutTask?.cancel()
         orderOutTask = nil
         hoverSession.end()
-        liveRefreshTask?.cancel()
-        liveRefreshTask = nil
+        stopCapture()
         refreshSession.end()
         currentWindowID = nil
         panels.values.forEach { panel in
             panel.orderOut(nil)
             panel.alphaValue = 1
+            (panel.contentView as? WindowPeekContentView)?.clearWindowImage()
         }
     }
 

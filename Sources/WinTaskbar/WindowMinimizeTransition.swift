@@ -50,6 +50,7 @@ final class WindowMinimizeTransitionAnimator {
 
     func minimize(
         window: WindowInfo,
+        snapshot: WindowLiveSnapshot?,
         targetFrame: CGRect?,
         reduceMotion: Bool,
         suppressAnimation: Bool,
@@ -68,7 +69,7 @@ final class WindowMinimizeTransitionAnimator {
         guard !reduceMotion,
               activePanels[window.ownerPID] == nil,
               let targetFrame,
-              let snapshot = WindowLiveSnapshotCapture.capture(windowID: window.windowID),
+              let snapshot,
               let panel = makePanel(snapshot: snapshot) else {
             fallback()
             return

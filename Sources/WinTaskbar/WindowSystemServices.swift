@@ -110,6 +110,7 @@ final class WindowActivationService {
     nonisolated private static let fullScreenAttribute = "AXFullScreen"
     private let windowsService: WindowsService
     private let minimizeTransitionAnimator = WindowMinimizeTransitionAnimator()
+    private var pendingMinimizations: [pid_t: Task<Void, Never>] = [:]
     private let isRemoteSessionActive: @MainActor () -> Bool
 
     init(
@@ -133,6 +134,7 @@ final class WindowActivationService {
             return
         }
 
+        pendingMinimizations.removeValue(forKey: pid)?.cancel()
         if minimizeTransitionAnimator.restore(ownerPID: pid, reveal: {
             application.unhide()
             application.activate(options: [.activateIgnoringOtherApps])
@@ -159,7 +161,6 @@ final class WindowActivationService {
         case .restoreWindow, .bringWindowToFront:
             raise(window: windows[0])
         case .minimizeWindow:
-            windowsService.cacheThumbnails(forPID: pid)
             minimize(
                 window: windows[0],
                 application: application,
@@ -171,6 +172,7 @@ final class WindowActivationService {
     }
 
     func raise(window: WindowInfo) {
+        pendingMinimizations.removeValue(forKey: window.ownerPID)?.cancel()
         if minimizeTransitionAnimator.restore(ownerPID: window.ownerPID, reveal: {
             let application = NSRunningApplication(processIdentifier: window.ownerPID)
             application?.unhide()
@@ -189,6 +191,7 @@ final class WindowActivationService {
     }
 
     func activateApplication(for window: WindowInfo) {
+        pendingMinimizations.removeValue(forKey: window.ownerPID)?.cancel()
         NSRunningApplication(processIdentifier: window.ownerPID)?.activate(options: [.activateIgnoringOtherApps])
     }
 
@@ -222,20 +225,26 @@ final class WindowActivationService {
         suppressAnimation: Bool
     ) {
         guard let match = matchingWindow(for: window) else { return }
-        minimizeTransitionAnimator.minimize(
-            window: window,
-            targetFrame: targetFrame,
-            reduceMotion: reduceMotion,
-            suppressAnimation: suppressAnimation,
-            hide: { _ = application.hide() },
-            fallback: {
-                _ = AXUIElementSetAttributeValue(
-                    match,
-                    kAXMinimizedAttribute as CFString,
-                    true as CFBoolean
-                )
-            }
-        )
+        pendingMinimizations[window.ownerPID] = Task { @MainActor in
+            let snapshot = await windowsService.captureService.captureOnce(for: window)
+            guard !Task.isCancelled else { return }
+            pendingMinimizations.removeValue(forKey: window.ownerPID)
+            minimizeTransitionAnimator.minimize(
+                window: window,
+                snapshot: snapshot,
+                targetFrame: targetFrame,
+                reduceMotion: reduceMotion,
+                suppressAnimation: suppressAnimation,
+                hide: { _ = application.hide() },
+                fallback: {
+                    _ = AXUIElementSetAttributeValue(
+                        match,
+                        kAXMinimizedAttribute as CFString,
+                        true as CFBoolean
+                    )
+                }
+            )
+        }
     }
 
     @discardableResult
@@ -328,41 +337,6 @@ final class WindowActivationService {
     }
 }
 
-@MainActor
-final class WindowThumbnailCache {
-    private var images: [CGWindowID: NSImage] = [:]
-
-    func cachedImage(for windowID: CGWindowID) -> NSImage? {
-        images[windowID]
-    }
-
-    func store(_ image: NSImage, for windowID: CGWindowID) {
-        images[windowID] = image
-    }
-
-    func image(for windowID: CGWindowID, capture: () -> NSImage?) -> NSImage? {
-        if let image = images[windowID] { return image }
-        return refreshImage(for: windowID, capture: capture)
-    }
-
-    func refreshImage(for windowID: CGWindowID, capture: () -> NSImage?) -> NSImage? {
-        if let image = capture() {
-            images[windowID] = image
-            return image
-        }
-        return images[windowID]
-    }
-
-    func removeClosedWindows() {
-        guard !images.isEmpty,
-              let windows = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID)
-                as? [[String: Any]] else { return }
-        // Off-screen windows include minimized windows and windows on other Spaces.
-        let liveWindowIDs = Set(windows.compactMap { $0[kCGWindowNumber as String] as? CGWindowID })
-        images = images.filter { liveWindowIDs.contains($0.key) }
-    }
-}
-
 enum WindowLiveCaptureCadence {
     static let thumbnailIntervalNanoseconds: UInt64 = 200_000_000
 }
@@ -376,6 +350,7 @@ struct WindowLiveSnapshot: @unchecked Sendable {
 enum WindowLiveSnapshotCapture {
     static func capture(
         windowID: CGWindowID,
+        ownerPID: pid_t,
         imageOptions: CGWindowImageOption = [.boundsIgnoreFraming, .bestResolution]
     ) -> WindowLiveSnapshot? {
         guard let image = CGWindowListCreateImage(
@@ -389,6 +364,7 @@ enum WindowLiveSnapshotCapture {
             windowID
         ) as? [[String: Any]],
         let info = raw.first(where: { $0[kCGWindowNumber as String] as? CGWindowID == windowID }),
+        (info[kCGWindowOwnerPID as String] as? pid_t) == ownerPID,
         (info[kCGWindowLayer as String] as? Int ?? 0) == 0,
         let bounds = info[kCGWindowBounds as String] as? NSDictionary,
         let frame = CGRect(dictionaryRepresentation: bounds),
@@ -497,7 +473,7 @@ struct WindowSwitcherEligibilityCache {
 
 @MainActor
 final class WindowsService {
-    private let thumbnailCache = WindowThumbnailCache()
+    let captureService = WindowCaptureService()
     private var appearanceOrder = WindowAppearanceOrder()
     private var accessibilitySnapshotsByPID: [pid_t: AccessibilityWindowSnapshot] = [:]
     private var switcherEligibilityCache = WindowSwitcherEligibilityCache()
@@ -515,7 +491,7 @@ final class WindowsService {
     }
 
     func switcherWindowSnapshot(forPIDs pids: [pid_t]) -> CachedWindowFilterResult {
-        thumbnailCache.removeClosedWindows()
+        captureService.removeClosedWindows()
         let candidates = Self.windowCandidates(
             forPIDs: pids,
             options: WindowPreviewWindowPolicy.listOptions
@@ -584,7 +560,7 @@ final class WindowsService {
     private func windowSnapshot(
         forPIDs pids: [pid_t]
     ) -> (windowsByPID: [pid_t: [WindowInfo]], frontToBackWindows: [WindowInfo]) {
-        thumbnailCache.removeClosedWindows()
+        captureService.removeClosedWindows()
         let requestedPIDs = Set(pids)
         guard !requestedPIDs.isEmpty else { return ([:], []) }
         let candidates = Self.windowCandidates(
@@ -635,43 +611,6 @@ final class WindowsService {
             }
         }
         return (windowsByPID, frontToBackWindows)
-    }
-
-    func cacheThumbnails(forPID pid: pid_t) {
-        for window in windows(forPID: pid) {
-            _ = thumbnailCache.refreshImage(for: window.windowID) {
-                captureThumbnail(for: window)
-            }
-        }
-    }
-
-    func thumbnail(for window: WindowInfo) -> NSImage? {
-        thumbnailCache.image(for: window.windowID) {
-            captureThumbnail(for: window)
-        }
-    }
-
-    func cachedThumbnail(for window: WindowInfo) -> NSImage? {
-        thumbnailCache.cachedImage(for: window.windowID)
-    }
-
-    func storeThumbnail(_ image: NSImage, for windowID: CGWindowID) {
-        thumbnailCache.store(image, for: windowID)
-    }
-
-    nonisolated static func captureThumbnailImage(for window: WindowInfo) -> CGImage? {
-        guard !window.isMinimized else { return nil }
-        return CGWindowListCreateImage(
-            .null,
-            .optionIncludingWindow,
-            window.windowID,
-            [.boundsIgnoreFraming, .bestResolution]
-        )
-    }
-
-    private func captureThumbnail(for window: WindowInfo) -> NSImage? {
-        guard let image = Self.captureThumbnailImage(for: window) else { return nil }
-        return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
     }
 
     nonisolated private static func windowCandidates(
