@@ -1,5 +1,13 @@
 import AppKit
+import Combine
 import OSLog
+
+struct WindowCaptureUpdate {
+    let ownerPID: pid_t
+    let snapshot: WindowLiveSnapshot
+    let image: NSImage
+    let bestResolution: Bool
+}
 
 /// Callers keep their own refresh cadence. This service only shares capture work and results.
 @MainActor
@@ -26,14 +34,24 @@ final class WindowCaptureService {
         let task: Task<WindowLiveSnapshot?, Never>
     }
 
+    private let captureUpdates = PassthroughSubject<WindowCaptureUpdate, Never>()
+    var updates: AnyPublisher<WindowCaptureUpdate, Never> { captureUpdates.eraseToAnyPublisher() }
+
     private let images = WindowThumbnailCache()
     private var captures: [Key: CachedCapture] = [:]
     private var pending: [Key: PendingCapture] = [:]
     private let logger = Logger(subsystem: "io.github.tinymins.WinTaskbar", category: "WindowCapture")
 
     func cachedImage(for window: WindowInfo) -> NSImage? {
-        guard captures[Key(window)] != nil else { return nil }
-        return images.cachedImage(for: window.windowID)
+        cachedUpdate(for: window)?.image
+    }
+
+    func cachedUpdate(for window: WindowInfo) -> WindowCaptureUpdate? {
+        guard let capture = captures[Key(window)],
+              let image = images.cachedImage(for: window.windowID) else { return nil }
+        return WindowCaptureUpdate(
+            ownerPID: window.ownerPID, snapshot: capture.snapshot, image: image, bestResolution: capture.bestResolution
+        )
     }
 
     func capture(
@@ -78,10 +96,13 @@ final class WindowCaptureService {
                     snapshot: snapshot, bestResolution: bestResolution,
                     capturedAt: ProcessInfo.processInfo.systemUptime
                 )
-                self.images.store(
-                    NSImage(cgImage: snapshot.image, size: NSSize(width: snapshot.image.width, height: snapshot.image.height)),
-                    for: window.windowID
+                let image = NSImage(
+                    cgImage: snapshot.image, size: NSSize(width: snapshot.image.width, height: snapshot.image.height)
                 )
+                self.images.store(image, for: window.windowID)
+                self.captureUpdates.send(WindowCaptureUpdate(
+                    ownerPID: window.ownerPID, snapshot: snapshot, image: image, bestResolution: bestResolution
+                ))
             }
             self.logger.debug("capture-finished window=\(window.windowID) success=\(snapshot != nil)")
             return snapshot

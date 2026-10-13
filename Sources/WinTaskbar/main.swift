@@ -2857,8 +2857,8 @@ func runSelfTest() async -> Int32 {
     var peekRefreshSession = WindowPeekRefreshSession()
     let firstPeekGeneration = peekRefreshSession.begin(windowID: firstPeekWindowID)
     let secondPeekGeneration = peekRefreshSession.begin(windowID: secondPeekWindowID)
-    guard WindowLiveCaptureCadence.thumbnailIntervalNanoseconds == 200_000_000,
-          WindowPeekRefreshSession.intervalNanoseconds == 40_000_000,
+    guard WindowLiveCaptureCadence.thumbnailIntervalNanoseconds == 100_000_000,
+          WindowPeekRefreshSession.intervalNanoseconds == 20_000_000,
           !peekRefreshSession.isCurrent(
               windowID: firstPeekWindowID,
               generation: firstPeekGeneration

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import CoreGraphics
 
 struct WindowPeekGeometry {
@@ -48,7 +49,7 @@ struct WindowPeekHoverSession {
 }
 
 struct WindowPeekRefreshSession {
-    static let intervalNanoseconds: UInt64 = 40_000_000
+    static let intervalNanoseconds: UInt64 = 20_000_000
 
     private var windowID: CGWindowID?
     private var generation: UInt64 = 0
@@ -180,6 +181,8 @@ final class WindowPeekController {
     private var delayedHideTask: Task<Void, Never>?
     private var orderOutTask: Task<Void, Never>?
     private var liveRefreshTask: Task<Void, Never>?
+    private var captureUpdates: AnyCancellable?
+    private var lastPresentedImage: NSImage?
 
     init(windowsService: WindowsService) {
         self.windowsService = windowsService
@@ -209,48 +212,44 @@ final class WindowPeekController {
 
     private func present(window: WindowInfo) {
         liveRefreshTask?.cancel()
+        captureUpdates?.cancel()
+        lastPresentedImage = nil
         currentWindowID = window.windowID
         let generation = refreshSession.begin(windowID: window.windowID)
         let captureService = windowsService.captureService
+        captureUpdates = captureService.updates.sink { [weak self] update in
+            self?.present(update: update, window: window, generation: generation)
+        }
         liveRefreshTask = Task { @MainActor [weak self] in
-            var hasPresentedFrame = false
             while !Task.isCancelled {
-                let snapshot = await captureService.capture(for: window)
+                _ = await captureService.capture(for: window)
                 guard let self,
                       !Task.isCancelled,
-                      refreshSession.isCurrent(
-                          windowID: window.windowID,
-                          generation: generation
-                      ) else { return }
-
-                if let snapshot {
-                    let currentWindow = WindowInfo(
-                        windowID: window.windowID,
-                        title: window.title,
-                        ownerPID: window.ownerPID,
-                        frame: snapshot.frame,
-                        isMinimized: false
-                    )
-                    let image = NSImage(
-                        cgImage: snapshot.image,
-                        size: NSSize(width: snapshot.image.width, height: snapshot.image.height)
-                    )
-                    reconcilePanels(window: currentWindow, image: image)
-                    showPanels()
-                    hasPresentedFrame = true
-                } else if !hasPresentedFrame {
-                    guard let image = windowsService.cachedThumbnail(for: window) else {
-                        hideImmediately()
-                        return
-                    }
-                    reconcilePanels(window: window, image: image)
-                    showPanels()
-                    hasPresentedFrame = true
+                      refreshSession.isCurrent(windowID: window.windowID, generation: generation) else { return }
+                if let update = captureService.cachedUpdate(for: window) {
+                    present(update: update, window: window, generation: generation)
+                } else if lastPresentedImage == nil {
+                    hideImmediately()
+                    return
                 }
-
                 try? await Task.sleep(nanoseconds: WindowPeekRefreshSession.intervalNanoseconds)
             }
         }
+    }
+
+    private func present(update: WindowCaptureUpdate, window: WindowInfo, generation: UInt64) {
+        guard update.ownerPID == window.ownerPID,
+              update.snapshot.windowID == window.windowID,
+              refreshSession.isCurrent(windowID: window.windowID, generation: generation),
+              lastPresentedImage !== update.image,
+              update.bestResolution || lastPresentedImage == nil || window.isMinimized else { return }
+        lastPresentedImage = update.image
+        let currentWindow = WindowInfo(
+            windowID: window.windowID, title: window.title, ownerPID: window.ownerPID,
+            frame: update.snapshot.frame, isMinimized: window.isMinimized
+        )
+        reconcilePanels(window: currentWindow, image: update.image)
+        showPanels()
     }
 
     private func showPanels() {
@@ -293,6 +292,9 @@ final class WindowPeekController {
         hoverSession.end()
         liveRefreshTask?.cancel()
         liveRefreshTask = nil
+        captureUpdates?.cancel()
+        captureUpdates = nil
+        lastPresentedImage = nil
         refreshSession.end()
         currentWindowID = nil
         orderOutTask?.cancel()
@@ -324,6 +326,9 @@ final class WindowPeekController {
         hoverSession.end()
         liveRefreshTask?.cancel()
         liveRefreshTask = nil
+        captureUpdates?.cancel()
+        captureUpdates = nil
+        lastPresentedImage = nil
         refreshSession.end()
         currentWindowID = nil
         panels.values.forEach { panel in

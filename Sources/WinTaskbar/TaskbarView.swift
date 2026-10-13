@@ -1284,6 +1284,9 @@ private struct WindowPreviewPopover: View {
             }
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: windows.map(\.id))
+        .onReceive(service.captureService.updates) { update in
+            apply(update: update)
+        }
         .task(id: windows.map(\.windowID)) {
             await refreshLiveSnapshots()
         }
@@ -1302,52 +1305,51 @@ private struct WindowPreviewPopover: View {
 
     private func refreshLiveSnapshots() async {
         let capturedWindows = Array(windows.prefix(6))
-        let visibleWindowIDs = Set(capturedWindows.map(\.windowID))
         let captureService = service.captureService
         while !Task.isCancelled {
             let worker = Task.detached(priority: .userInitiated) {
-                var captures: [WindowLiveSnapshot] = []
                 for window in capturedWindows {
                     guard !Task.isCancelled else { break }
-                    if let snapshot = await captureService.capture(
+                    _ = await captureService.capture(
                         for: window,
                         imageOptions: [.boundsIgnoreFraming, .nominalResolution]
-                    ) {
-                        captures.append(snapshot)
-                    }
+                    )
                 }
-                return captures
             }
-            let captures = await withTaskCancellationHandler {
+            await withTaskCancellationHandler {
                 await worker.value
             } onCancel: {
                 worker.cancel()
             }
             guard !Task.isCancelled else { return }
 
-            var updatedSnapshots = liveSnapshots.filter { visibleWindowIDs.contains($0.key) }
-            for capture in captures {
-                updatedSnapshots[capture.windowID] = capture
-            }
-            liveSnapshots = updatedSnapshots
-
-            let frames = updatedSnapshots.mapValues(\.frame)
-            if frames != reportedFrames {
-                reportedFrames = frames
-                let refreshedWindows = windows.map { window in
-                    guard let frame = frames[window.windowID], frame != window.frame else { return window }
-                    return WindowInfo(
-                        windowID: window.windowID,
-                        title: window.title,
-                        ownerPID: window.ownerPID,
-                        frame: frame,
-                        isMinimized: window.isMinimized
-                    )
-                }
-                if refreshedWindows != windows { onRefresh(refreshedWindows) }
+            for window in capturedWindows {
+                if let update = captureService.cachedUpdate(for: window) { apply(update: update) }
             }
 
             try? await Task.sleep(nanoseconds: WindowLiveCaptureCadence.thumbnailIntervalNanoseconds)
+        }
+    }
+
+    private func apply(update: WindowCaptureUpdate) {
+        let windowID = update.snapshot.windowID
+        guard windows.prefix(6).contains(where: { $0.windowID == windowID && $0.ownerPID == update.ownerPID }),
+              liveSnapshots[windowID]?.image !== update.snapshot.image else { return }
+        let visibleWindowIDs = Set(windows.prefix(6).map(\.windowID))
+        var updatedSnapshots = liveSnapshots.filter { visibleWindowIDs.contains($0.key) }
+        updatedSnapshots[windowID] = update.snapshot
+        liveSnapshots = updatedSnapshots
+        let frames = updatedSnapshots.mapValues(\.frame)
+        if frames != reportedFrames {
+            reportedFrames = frames
+            let refreshedWindows = windows.map { window in
+                guard let frame = frames[window.windowID], frame != window.frame else { return window }
+                return WindowInfo(
+                    windowID: window.windowID, title: window.title, ownerPID: window.ownerPID,
+                    frame: frame, isMinimized: window.isMinimized
+                )
+            }
+            if refreshedWindows != windows { onRefresh(refreshedWindows) }
         }
     }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import ApplicationServices
 import SwiftUI
 
@@ -548,14 +549,16 @@ private final class WindowSwitcherPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-private struct WindowSwitcherCapturedThumbnail: @unchecked Sendable {
-    let windowID: CGWindowID
-    let image: CGImage
-}
+@MainActor
+private final class WindowSwitcherThumbnailModel: ObservableObject {
+    @Published private(set) var image: NSImage?
 
-private struct WindowSwitcherRefreshResult: @unchecked Sendable {
-    let thumbnails: [WindowSwitcherCapturedThumbnail]
-    let controlCapabilities: [CGWindowID: WindowControlCapabilities]
+    init(image: NSImage?) { self.image = image }
+
+    func update(_ image: NSImage) {
+        guard self.image !== image else { return }
+        self.image = image
+    }
 }
 
 struct WindowSwitcherRefreshPlan: Equatable {
@@ -594,7 +597,8 @@ final class WindowSwitcherPanelController {
     private let hostingView = NSHostingView(rootView: AnyView(EmptyView()))
     private let selection = WindowSwitcherSelectionModel()
     private var windows: [WindowInfo] = []
-    private var thumbnails: [CGWindowID: NSImage] = [:]
+    private var thumbnails: [CGWindowID: WindowSwitcherThumbnailModel] = [:]
+    private var thumbnailUpdates: AnyCancellable?
     private var controlCapabilities: [CGWindowID: WindowControlCapabilities] = [:]
     private var localMouseMonitor: Any?
     private var globalMouseMonitor: Any?
@@ -728,6 +732,8 @@ final class WindowSwitcherPanelController {
 
     private func present(reverse: Bool) {
         let startedAt = AltTabDiagnostics.timestamp()
+        thumbnailUpdates?.cancel()
+        thumbnailUpdates = nil
         activationGeneration &+= 1
         activationTask?.cancel()
         activationTask = nil
@@ -762,8 +768,8 @@ final class WindowSwitcherPanelController {
             reverse: reverse
         )
         updateSelection(disablesAnimations: true)
-        thumbnails = Dictionary(uniqueKeysWithValues: windows.compactMap { window in
-            windowsService.cachedThumbnail(for: window).map { (window.windowID, $0) }
+        thumbnails = Dictionary(uniqueKeysWithValues: windows.map { window in
+            (window.windowID, WindowSwitcherThumbnailModel(image: windowsService.cachedThumbnail(for: window)))
         })
         controlCapabilities = Dictionary(uniqueKeysWithValues: windows.compactMap { window in
             controlCapabilitiesCache[window.windowID].map { (window.windowID, $0) }
@@ -795,9 +801,22 @@ final class WindowSwitcherPanelController {
         guard let screen else { return }
         let targetFrame = panelFrame(on: screen)
         panel.setFrame(targetFrame, display: false)
+        for window in windows {
+            if let image = windowsService.cachedThumbnail(for: window) { thumbnails[window.windowID]?.update(image) }
+        }
         refreshContent(disablesAnimations: true)
         backdrop.layoutSubtreeIfNeeded()
         panel.orderFrontRegardless()
+        thumbnailUpdates = windowsService.captureService.updates.sink { [weak self] update in
+            guard let self, self.panel.isVisible, self.presentationID == presentationID,
+                  self.windows.contains(where: {
+                      $0.windowID == update.snapshot.windowID && $0.ownerPID == update.ownerPID
+                  }) else { return }
+            self.thumbnails[update.snapshot.windowID]?.update(update.image)
+            AltTabDiagnostics.logger.debug(
+                "presentation=\(presentationID, privacy: .public) thumbnail-notified window=\(update.snapshot.windowID, privacy: .public)"
+            )
+        }
         installMouseMonitors()
         AltTabDiagnostics.logger.notice(
             "presentation=\(presentationID, privacy: .public) panel-shown durationMs=\(AltTabDiagnostics.milliseconds(since: startedAt), privacy: .public)"
@@ -976,16 +995,13 @@ final class WindowSwitcherPanelController {
         refreshTask = Task { @MainActor [weak self] in
             let worker = Task.detached(priority: .userInitiated) {
                 let startedAt = AltTabDiagnostics.timestamp()
-                var capturedThumbnails: [WindowSwitcherCapturedThumbnail] = []
+                var thumbnailCount = 0
                 var capabilities: [CGWindowID: WindowControlCapabilities] = [:]
                 for window in presentedWindows {
                     guard !Task.isCancelled else { break }
                     if refreshPlan.thumbnailWindowIDs.contains(window.windowID),
-                       let snapshot = await captureService.capture(for: window) {
-                        capturedThumbnails.append(WindowSwitcherCapturedThumbnail(
-                            windowID: window.windowID,
-                            image: snapshot.image
-                        ))
+                       await captureService.capture(for: window) != nil {
+                        thumbnailCount += 1
                     }
                     guard !Task.isCancelled else { break }
                     if refreshPlan.capabilityWindowIDs.contains(window.windowID) {
@@ -993,12 +1009,9 @@ final class WindowSwitcherPanelController {
                     }
                 }
                 AltTabDiagnostics.logger.notice(
-                    "presentation=\(presentationID, privacy: .public) refresh-worker-finished thumbnails=\(capturedThumbnails.count, privacy: .public) durationMs=\(AltTabDiagnostics.milliseconds(since: startedAt), privacy: .public)"
+                    "presentation=\(presentationID, privacy: .public) refresh-worker-finished thumbnails=\(thumbnailCount, privacy: .public) durationMs=\(AltTabDiagnostics.milliseconds(since: startedAt), privacy: .public)"
                 )
-                return WindowSwitcherRefreshResult(
-                    thumbnails: capturedThumbnails,
-                    controlCapabilities: capabilities
-                )
+                return capabilities
             }
             let result = await withTaskCancellationHandler {
                 await worker.value
@@ -1010,23 +1023,17 @@ final class WindowSwitcherPanelController {
                 self.refreshTask = nil
                 return
             }
-            var refreshedImages: [CGWindowID: NSImage] = [:]
-            for capture in result.thumbnails {
-                let image = NSImage(
-                    cgImage: capture.image,
-                    size: NSSize(width: capture.image.width, height: capture.image.height)
-                )
-                refreshedImages[capture.windowID] = image
-            }
-            self.controlCapabilitiesCache.merge(result.controlCapabilities) { _, refreshed in refreshed }
+            self.controlCapabilitiesCache.merge(result) { _, refreshed in refreshed }
             self.refreshTask = nil
             guard self.panel.isVisible,
                   self.presentationID == presentationID else { return }
 
             let applyStartedAt = AltTabDiagnostics.timestamp()
             let currentWindowIDs = Set(self.windows.map(\.windowID))
-            for (windowID, image) in refreshedImages where currentWindowIDs.contains(windowID) {
-                self.thumbnails[windowID] = image
+            for window in self.windows {
+                if let image = self.windowsService.cachedThumbnail(for: window) {
+                    self.thumbnails[window.windowID]?.update(image)
+                }
             }
             self.controlCapabilities = self.controlCapabilitiesCache.filter {
                 currentWindowIDs.contains($0.key)
@@ -1043,6 +1050,8 @@ final class WindowSwitcherPanelController {
         presentationWorkItem?.cancel()
         presentationWorkItem = nil
         presentationID &+= 1
+        thumbnailUpdates?.cancel()
+        thumbnailUpdates = nil
         removeMouseMonitors()
         panel.orderOut(nil)
         windows = []
@@ -1127,7 +1136,7 @@ final class WindowSwitcherPanelController {
 
 private struct WindowSwitcherView: View {
     let windows: [WindowInfo]
-    let thumbnails: [CGWindowID: NSImage]
+    let thumbnails: [CGWindowID: WindowSwitcherThumbnailModel]
     let controlCapabilities: [CGWindowID: WindowControlCapabilities]
     @ObservedObject var selection: WindowSwitcherSelectionModel
     let previewHeight: CGFloat
@@ -1140,15 +1149,17 @@ private struct WindowSwitcherView: View {
         ScrollView(.vertical) {
             WindowSwitcherFlowLayout(spacing: WindowSwitcherLayout.spacing) {
                 ForEach(windows) { window in
-                    WindowSwitcherTile(
-                        window: window,
-                        thumbnail: thumbnails[window.windowID],
-                        controlCapabilities: controlCapabilities[window.windowID] ?? [],
-                        isSelected: selection.windowID == window.windowID,
-                        previewHeight: previewHeight,
-                        onWindowAction: { onWindowAction($0, window.windowID) },
-                        action: { onSelect(window.windowID) }
-                    )
+                    if let thumbnail = thumbnails[window.windowID] {
+                        WindowSwitcherTile(
+                            window: window,
+                            thumbnailModel: thumbnail,
+                            controlCapabilities: controlCapabilities[window.windowID] ?? [],
+                            isSelected: selection.windowID == window.windowID,
+                            previewHeight: previewHeight,
+                            onWindowAction: { onWindowAction($0, window.windowID) },
+                            action: { onSelect(window.windowID) }
+                        )
+                    }
                 }
             }
             .padding(WindowSwitcherLayout.panelPadding)
@@ -1300,7 +1311,8 @@ private struct WindowSwitcherFlowLayout: Layout {
 
 private struct WindowSwitcherTile: View {
     let window: WindowInfo
-    let thumbnail: NSImage?
+    @ObservedObject var thumbnailModel: WindowSwitcherThumbnailModel
+    private var thumbnail: NSImage? { thumbnailModel.image }
     let controlCapabilities: WindowControlCapabilities
     let isSelected: Bool
     let previewHeight: CGFloat

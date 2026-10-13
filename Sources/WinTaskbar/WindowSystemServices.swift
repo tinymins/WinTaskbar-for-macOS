@@ -373,7 +373,7 @@ final class WindowThumbnailCache {
 }
 
 enum WindowLiveCaptureCadence {
-    static let thumbnailIntervalNanoseconds: UInt64 = 200_000_000
+    static let thumbnailIntervalNanoseconds: UInt64 = 100_000_000
 }
 
 struct WindowLiveSnapshot: @unchecked Sendable {
