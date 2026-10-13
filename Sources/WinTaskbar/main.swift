@@ -1768,7 +1768,7 @@ func runSelfTest() async -> Int32 {
     let previewSize = CGSize(width: 340, height: 130)
     let firstPreviewOwner = WindowPreviewOwnerID(displayID: 1, bundleIdentifier: "com.example.first")
     let secondPreviewOwner = WindowPreviewOwnerID(displayID: 1, bundleIdentifier: "com.example.second")
-    let immediatePreviewController = WindowPreviewPanelController(captureService: WindowCaptureService())
+    let immediatePreviewController = WindowPreviewPanelController()
     immediatePreviewController.pin(ownerID: firstPreviewOwner)
     immediatePreviewController.activate(ownerID: secondPreviewOwner)
     var pinnedPreviewDismissed = false
@@ -2736,10 +2736,12 @@ func runSelfTest() async -> Int32 {
 
     let refreshPlan = WindowSwitcherRefreshPlan.make(
         windowIDs: [101, 202, 303],
+        excludedThumbnailWindowIDs: [101, 303],
         cachedCapabilityWindowIDs: [101, 202]
     )
-    guard refreshPlan.capabilityWindowIDs == [303] else {
-        fputs("SELF-TEST FAILED: cached Alt-Tab capabilities scheduled for refresh\n", stderr)
+    guard refreshPlan.thumbnailWindowIDs == [202],
+          refreshPlan.capabilityWindowIDs == [303] else {
+        fputs("SELF-TEST FAILED: excluded Alt-Tab windows scheduled for refresh\n", stderr)
         return 1
     }
 
@@ -2787,6 +2789,32 @@ func runSelfTest() async -> Int32 {
           windowAppearanceOrder.reconcile(observedWindowIDs: [303, 202], forPID: 42) == [202, 303],
           windowAppearanceOrder.reconcile(observedWindowIDs: [], forPID: 42).isEmpty else {
         fputs("SELF-TEST FAILED: window appearance order mismatch\n", stderr)
+        return 1
+    }
+
+    let thumbnailCache = WindowThumbnailCache()
+    let capturedThumbnail = NSImage(size: NSSize(width: 320, height: 180))
+    let refreshedThumbnail = NSImage(size: NSSize(width: 640, height: 360))
+    var thumbnailCaptureCount = 0
+    guard thumbnailCache.cachedImage(for: 101) == nil,
+          thumbnailCache.image(for: 101, capture: {
+        thumbnailCaptureCount += 1
+        return capturedThumbnail
+    }) === capturedThumbnail,
+          thumbnailCache.cachedImage(for: 101) === capturedThumbnail,
+          thumbnailCache.image(for: 101, capture: {
+              thumbnailCaptureCount += 1
+              return refreshedThumbnail
+          }) === capturedThumbnail,
+          thumbnailCaptureCount == 1,
+          thumbnailCache.refreshImage(for: 101, capture: {
+              thumbnailCaptureCount += 1
+              return refreshedThumbnail
+          }) === refreshedThumbnail,
+          thumbnailCaptureCount == 2,
+          thumbnailCache.image(for: 202, capture: { nil }) == nil,
+          thumbnailCache.cachedImage(for: 202) == nil else {
+        fputs("SELF-TEST FAILED: window thumbnail cache mismatch\n", stderr)
         return 1
     }
 

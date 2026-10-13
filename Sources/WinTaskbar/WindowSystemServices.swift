@@ -226,7 +226,7 @@ final class WindowActivationService {
     ) {
         guard let match = matchingWindow(for: window) else { return }
         pendingMinimizations[window.ownerPID] = Task { @MainActor in
-            let snapshot = await windowsService.captureService.captureOnce(for: window)
+            let snapshot = await windowsService.captureService.capture(for: window)
             guard !Task.isCancelled else { return }
             pendingMinimizations.removeValue(forKey: window.ownerPID)
             minimizeTransitionAnimator.minimize(
@@ -334,6 +334,41 @@ final class WindowActivationService {
         var result = DarwinBoolean(false)
         guard AXUIElementIsAttributeSettable(element, name as CFString, &result) == .success else { return false }
         return result.boolValue
+    }
+}
+
+@MainActor
+final class WindowThumbnailCache {
+    private var images: [CGWindowID: NSImage] = [:]
+
+    func cachedImage(for windowID: CGWindowID) -> NSImage? {
+        images[windowID]
+    }
+
+    func store(_ image: NSImage, for windowID: CGWindowID) {
+        images[windowID] = image
+    }
+
+    func image(for windowID: CGWindowID, capture: () -> NSImage?) -> NSImage? {
+        if let image = images[windowID] { return image }
+        return refreshImage(for: windowID, capture: capture)
+    }
+
+    func refreshImage(for windowID: CGWindowID, capture: () -> NSImage?) -> NSImage? {
+        if let image = capture() {
+            images[windowID] = image
+            return image
+        }
+        return images[windowID]
+    }
+
+    func removeClosedWindows() {
+        guard !images.isEmpty,
+              let windows = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID)
+                as? [[String: Any]] else { return }
+        // Off-screen windows include minimized windows and windows on other Spaces.
+        let liveWindowIDs = Set(windows.compactMap { $0[kCGWindowNumber as String] as? CGWindowID })
+        images = images.filter { liveWindowIDs.contains($0.key) }
     }
 }
 
@@ -611,6 +646,10 @@ final class WindowsService {
             }
         }
         return (windowsByPID, frontToBackWindows)
+    }
+
+    func cachedThumbnail(for window: WindowInfo) -> NSImage? {
+        captureService.cachedImage(for: window)
     }
 
     nonisolated private static func windowCandidates(

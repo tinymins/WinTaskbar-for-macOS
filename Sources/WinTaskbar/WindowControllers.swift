@@ -265,7 +265,6 @@ struct WindowPreviewPanelMotion {
 
 @MainActor
 final class WindowPreviewPanelController: ObservableObject {
-    let captureSession: WindowCaptureSession
     @Published private var selection = WindowPreviewSelection()
     private var hoverIntent = WindowPreviewHoverIntent()
     private var displayedOwnerID: WindowPreviewOwnerID?
@@ -282,8 +281,7 @@ final class WindowPreviewPanelController: ObservableObject {
     var activeOwnerID: WindowPreviewOwnerID? { selection.activeOwnerID }
     var isPinned: Bool { pinnedOwnerID != nil }
 
-    init(captureService: WindowCaptureService) {
-        captureSession = WindowCaptureSession(service: captureService)
+    init() {
         backdrop.material = .popover
         backdrop.blendingMode = .behindWindow
         backdrop.state = .active
@@ -515,7 +513,6 @@ final class WindowPreviewPanelController: ObservableObject {
     }
 
     private func hidePanel() {
-        captureSession.stop()
         displayedOwnerID = nil
         panel?.orderOut(nil)
         hostingView.alphaValue = 1
@@ -625,7 +622,7 @@ final class TaskbarWindowController {
     private let windowActivator: WindowActivationService
     private let windowsService: WindowsService
     private let windowPeekController: WindowPeekController
-    private let windowPreviewPanelController: WindowPreviewPanelController
+    private let windowPreviewPanelController = WindowPreviewPanelController()
     private let taskbarJumpListController = TaskbarJumpListController()
     private let startButtonContextMenuController = TaskbarJumpListController()
     private let startButtonPowerMenuController = TaskbarJumpListController()
@@ -695,7 +692,6 @@ final class TaskbarWindowController {
         shortcutEditorController = ShortcutEditorController(preferences: preferences)
         self.recentDocuments = recentDocuments
         windowPeekController = WindowPeekController(windowsService: windowsService)
-        windowPreviewPanelController = WindowPreviewPanelController(captureService: windowsService.captureService)
         self.dockBadges = dockBadges
         self.activeWindowShortcuts = activeWindowShortcuts
         self.clipboardHistory = clipboardHistory
