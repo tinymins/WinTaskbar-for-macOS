@@ -80,6 +80,7 @@ final class WindowCaptureService {
         }
 
         let id = UUID()
+        let captureStartedAt = ProcessInfo.processInfo.systemUptime
         let task = Task { @MainActor [weak self] in
             let snapshot = await Task.detached(priority: .userInitiated) {
                 WindowLiveSnapshotCapture.capture(
@@ -94,7 +95,7 @@ final class WindowCaptureService {
                 self.captures = self.captures.filter { $0.key.windowID != key.windowID || $0.key == key }
                 self.captures[key] = CachedCapture(
                     snapshot: snapshot, bestResolution: bestResolution,
-                    capturedAt: ProcessInfo.processInfo.systemUptime
+                    capturedAt: captureStartedAt
                 )
                 let image = NSImage(
                     cgImage: snapshot.image, size: NSSize(width: snapshot.image.width, height: snapshot.image.height)
