@@ -1306,7 +1306,9 @@ private struct WindowPreviewPopover: View {
     private func refreshLiveSnapshots() async {
         let capturedWindows = Array(windows.prefix(6))
         let captureService = service.captureService
+        let clock = ContinuousClock()
         while !Task.isCancelled {
+            let deadline = clock.now.advanced(by: .nanoseconds(Int64(WindowLiveCaptureCadence.thumbnailIntervalNanoseconds)))
             let worker = Task.detached(priority: .userInitiated) {
                 for window in capturedWindows {
                     guard !Task.isCancelled else { break }
@@ -1327,7 +1329,9 @@ private struct WindowPreviewPopover: View {
                 if let update = captureService.cachedUpdate(for: window) { apply(update: update) }
             }
 
-            try? await Task.sleep(nanoseconds: WindowLiveCaptureCadence.thumbnailIntervalNanoseconds)
+            if clock.now < deadline {
+                try? await clock.sleep(until: deadline)
+            }
         }
     }
 
