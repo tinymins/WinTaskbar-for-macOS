@@ -992,5 +992,15 @@
 	<string>Could not disconnect the Bluetooth device (error %d).</string>
 	<key>Bluetooth is unavailable. Check Bluetooth in System Settings.</key>
 	<string>Bluetooth is unavailable. Check Bluetooth in System Settings.</string>
+	<key>Turning on…</key>
+	<string>Turning on…</string>
+	<key>Turning off…</key>
+	<string>Turning off…</string>
+	<key>Bluetooth error</key>
+	<string>Bluetooth error</string>
+	<key>Bluetooth power did not change. Check Bluetooth in System Settings.</key>
+	<string>Bluetooth power did not change. Check Bluetooth in System Settings.</string>
+	<key>Could not change Bluetooth power on this system.</key>
+	<string>Could not change Bluetooth power on this system.</string>
 </dict>
 </plist>

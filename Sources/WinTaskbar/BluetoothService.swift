@@ -1,5 +1,6 @@
 import Combine
 import CoreBluetooth
+import Darwin
 import Foundation
 import IOBluetooth
 
@@ -120,6 +121,22 @@ private final class BluetoothWorker: @unchecked Sendable {
             return device.isConnected() ? device.closeConnection() : kIOReturnSuccess
         }
     }
+
+    func setPower(_ enabled: Bool, deadline: Date) async -> IOReturn {
+        await perform { _ in
+            guard Date() < deadline else { return kIOReturnTimeout }
+            guard let handle = dlopen(nil, RTLD_LAZY) else { return kIOReturnUnsupported }
+            defer { dlclose(handle) }
+            // The public controller exposes read-only power state. This SPI only
+            // issues the request; the controller getter confirms the actual state.
+            guard let symbol = dlsym(handle, "IOBluetoothPreferenceSetControllerPowerState") else {
+                return kIOReturnUnsupported
+            }
+            let setPower = unsafeBitCast(symbol, to: (@convention(c) (Int32) -> Void).self)
+            setPower(enabled ? 1 : 0)
+            return kIOReturnSuccess
+        }
+    }
 }
 
 @MainActor
@@ -134,15 +151,26 @@ final class BluetoothService: NSObject, ObservableObject, CBCentralManagerDelega
     @Published private(set) var pendingConnect = false
     @Published private(set) var operationError: String?
     @Published private(set) var isOperationBusy = false
+    @Published private(set) var isPowerBusy = false
+    @Published private(set) var powerError: String?
+    @Published private var powerTarget: Bool?
+
+    var canTogglePower: Bool {
+        (availability == .on || availability == .off) && !isOperationBusy && !isPowerBusy
+    }
 
     var tileTitle: String {
+        if let powerTarget {
+            return NSLocalizedString(powerTarget ? "Turning on…" : "Turning off…", comment: "")
+        }
+        if powerError != nil { return NSLocalizedString("Bluetooth error", comment: "") }
         switch availability {
-        case .accessRequired: NSLocalizedString("Bluetooth access required", comment: "")
-        case .denied: NSLocalizedString("Bluetooth access is off", comment: "")
-        case .checking: NSLocalizedString("Checking Bluetooth…", comment: "")
-        case .off: NSLocalizedString("Bluetooth off", comment: "")
-        case .unavailable: NSLocalizedString("Bluetooth unavailable", comment: "")
-        case .on: devices.first(where: \.isConnected)?.name ?? NSLocalizedString("Not connected", comment: "")
+        case .accessRequired: return NSLocalizedString("Bluetooth access required", comment: "")
+        case .denied: return NSLocalizedString("Bluetooth access is off", comment: "")
+        case .checking: return NSLocalizedString("Checking Bluetooth…", comment: "")
+        case .off: return NSLocalizedString("Bluetooth off", comment: "")
+        case .unavailable: return NSLocalizedString("Bluetooth unavailable", comment: "")
+        case .on: return devices.first(where: \.isConnected)?.name ?? NSLocalizedString("Not connected", comment: "")
         }
     }
 
@@ -151,6 +179,9 @@ final class BluetoothService: NSObject, ObservableObject, CBCentralManagerDelega
     private var timeoutTask: Task<Void, Never>?
     private var operationID: UUID?
     private var nativeOperationID: UUID?
+    private var powerRequestID: UUID?
+    private var powerNativeBusy = false
+    private var powerTimeoutTask: Task<Void, Never>?
     private var isVisible = false
     private var visibilityGeneration = 0
     private var refreshInProgress = false
@@ -185,8 +216,9 @@ final class BluetoothService: NSObject, ObservableObject, CBCentralManagerDelega
 
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
         MainActor.assumeIsolated {
-            guard isVisible else { return }
-            Task { await refresh() }
+            guard isVisible || powerRequestID != nil else { return }
+            let allowHidden = powerRequestID != nil
+            Task { await refresh(allowHidden: allowHidden) }
         }
     }
 
@@ -231,7 +263,7 @@ final class BluetoothService: NSObject, ObservableObject, CBCentralManagerDelega
     }
 
     func toggleConnection(_ device: BluetoothDeviceInfo) {
-        guard availability == .on, !isOperationBusy else { return }
+        guard availability == .on, !isOperationBusy, !isPowerBusy else { return }
         let id = UUID()
         operationID = id
         nativeOperationID = id
@@ -295,6 +327,7 @@ final class BluetoothService: NSObject, ObservableObject, CBCentralManagerDelega
     }
 
     private func reconcileOperation() {
+        reconcilePower()
         guard let pendingDeviceID else { return }
         if let device = devices.first(where: { $0.id == pendingDeviceID }), device.isConnected == pendingConnect {
             finishOperation(error: nil)
@@ -310,5 +343,51 @@ final class BluetoothService: NSObject, ObservableObject, CBCentralManagerDelega
         isOperationBusy = nativeOperationID != nil
         pendingDeviceID = nil
         operationError = error
+    }
+
+    func togglePower() {
+        guard canTogglePower else { return }
+        let target = availability != .on
+        let id = UUID()
+        let deadline = Date().addingTimeInterval(10)
+        powerRequestID = id
+        powerTarget = target
+        powerNativeBusy = true
+        isPowerBusy = true
+        powerError = nil
+        requestAccess()
+        powerTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            guard !Task.isCancelled, let self, powerRequestID == id else { return }
+            finishPower(error: NSLocalizedString("Bluetooth power did not change. Check Bluetooth in System Settings.", comment: ""))
+        }
+        Task { [weak self, worker] in
+            let result = await worker.setPower(target, deadline: deadline)
+            guard let self else { return }
+            powerNativeBusy = false
+            isPowerBusy = powerRequestID != nil
+            if powerRequestID == id, result != kIOReturnSuccess {
+                finishPower(error: NSLocalizedString("Could not change Bluetooth power on this system.", comment: ""))
+            }
+            await refresh(allowHidden: true)
+        }
+    }
+
+    private func reconcilePower() {
+        guard let powerTarget else { return }
+        if availability == (powerTarget ? .on : .off) {
+            finishPower(error: nil)
+        } else if availability != .on && availability != .off {
+            finishPower(error: NSLocalizedString("Bluetooth is unavailable. Check Bluetooth in System Settings.", comment: ""))
+        }
+    }
+
+    private func finishPower(error: String?) {
+        powerTimeoutTask?.cancel()
+        powerTimeoutTask = nil
+        powerRequestID = nil
+        powerTarget = nil
+        isPowerBusy = powerNativeBusy
+        powerError = error
     }
 }

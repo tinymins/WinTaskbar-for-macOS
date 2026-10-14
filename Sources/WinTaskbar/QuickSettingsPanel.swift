@@ -293,13 +293,15 @@ private struct QuickSettingsPanelView: View {
                     label: bluetoothService.tileTitle,
                     symbol: "bluetooth",
                     isActive: bluetoothService.availability == .on,
-                    primaryAction: {
+                    primaryAction: bluetoothService.togglePower,
+                    detailAction: {
                         page = .bluetooth
                         bluetoothService.requestAccess()
                     },
-                    detailAction: nil,
-                    showsInlineChevron: true
+                    showsInlineChevron: false,
+                    isPrimaryEnabled: bluetoothService.canTogglePower
                 )
+                .help(bluetoothService.powerError ?? bluetoothService.tileTitle)
                 QuickSettingTile(
                     label: NSLocalizedString("Airplane mode", comment: ""),
                     symbol: "airplane",
@@ -740,6 +742,12 @@ private struct QuickSettingsPanelView: View {
                         .foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if let error = bluetoothService.powerError {
+                    Text(error)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if bluetoothService.devices.isEmpty {
                     Text("No paired Bluetooth devices")
                         .font(.system(size: 12))
@@ -770,7 +778,7 @@ private struct QuickSettingsPanelView: View {
                                 bluetoothService.toggleConnection(device)
                             }
                             .controlSize(.small)
-                            .disabled(bluetoothService.isOperationBusy)
+                            .disabled(bluetoothService.isOperationBusy || bluetoothService.isPowerBusy)
                         }
                     }
                     .padding(10)
@@ -978,6 +986,7 @@ private struct QuickSettingTile: View {
     let primaryAction: () -> Void
     let detailAction: (() -> Void)?
     let showsInlineChevron: Bool
+    var isPrimaryEnabled = true
     @State private var isPrimaryHovering = false
     @State private var isDetailHovering = false
 
@@ -1017,6 +1026,7 @@ private struct QuickSettingTile: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .disabled(!isPrimaryEnabled)
                     .onHover { isPrimaryHovering = $0 }
                     .accessibilityLabel(primaryAccessibilityLabel)
                     if let detailAction {

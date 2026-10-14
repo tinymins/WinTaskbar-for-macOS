@@ -1606,5 +1606,15 @@
 	<string>无法断开蓝牙设备（错误 %d）。</string>
 	<key>Bluetooth is unavailable. Check Bluetooth in System Settings.</key>
 	<string>蓝牙不可用。请在系统设置中检查蓝牙。</string>
+	<key>Turning on…</key>
+	<string>正在开启…</string>
+	<key>Turning off…</key>
+	<string>正在关闭…</string>
+	<key>Bluetooth error</key>
+	<string>蓝牙错误</string>
+	<key>Bluetooth power did not change. Check Bluetooth in System Settings.</key>
+	<string>蓝牙开关状态未改变。请在系统设置中检查蓝牙。</string>
+	<key>Could not change Bluetooth power on this system.</key>
+	<string>无法在此系统上切换蓝牙开关。</string>
 </dict>
 </plist>
