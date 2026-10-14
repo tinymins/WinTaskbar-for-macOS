@@ -2,6 +2,26 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.36] - 2026-10-14
+
+### Added
+
+- Show real Bluetooth power and connection status, list paired devices, and connect or disconnect devices from quick settings.
+- Use the same split control as Wi-Fi: the left side toggles Bluetooth power and the right arrow opens the device list. Show permission, pending-operation, timeout, and error states.
+
+### Performance
+
+- Share window captures and fresh frames between taskbar previews, Peek, and Alt-Tab to avoid duplicate capture work.
+- Target a 40 fps taskbar-preview refresh cadence, accounting for capture time and preventing overlapping refreshes.
+
+### Fixed
+
+- Reject web addresses when collecting recent local documents instead of relying on system-dependent URL-to-file-path conversion.
+
+### Usage notes
+
+- Bluetooth access requires permission. Pair new devices in System Settings; some devices and audio connections still require system controls.
+
 ## [0.0.35] - 2026-10-12
 
 ### Fixed
