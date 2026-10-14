@@ -111,6 +111,11 @@ enum QuickSettingsPanelGeometry {
 @MainActor
 final class QuickSettingsPanelController: ObservableObject {
     private let panelController = TaskbarJumpListController()
+    private let bluetoothService = BluetoothService()
+
+    init() {
+        panelController.onDismiss = { [weak bluetoothService] in bluetoothService?.stop() }
+    }
 
     var isVisible: Bool { panelController.isVisible }
 
@@ -159,8 +164,10 @@ final class QuickSettingsPanelController: ObservableObject {
         screen: NSScreen
     ) {
         service.refresh()
+        bluetoothService.start()
         let rootView = QuickSettingsPanelView(
             service: service,
+            bluetoothService: bluetoothService,
             onOpenBatterySettings: { [weak self, weak actions] in
                 actions?.open(.battery)
                 self?.dismiss()
@@ -209,6 +216,7 @@ private enum QuickSettingsDestination {
 
 private struct QuickSettingsPanelView: View {
     @ObservedObject var service: SystemStatusService
+    @ObservedObject var bluetoothService: BluetoothService
     let onOpenBatterySettings: () -> Void
     let onOpenSystemSettings: () -> Void
     let onOpenBluetoothSettings: () -> Void
@@ -282,12 +290,15 @@ private struct QuickSettingsPanelView: View {
                     showsInlineChevron: false
                 )
                 QuickSettingTile(
-                    label: NSLocalizedString("Not connected", comment: ""),
+                    label: bluetoothService.tileTitle,
                     symbol: "bluetooth",
-                    isActive: true,
-                    primaryAction: onOpenBluetoothSettings,
-                    detailAction: { page = .bluetooth },
-                    showsInlineChevron: false
+                    isActive: bluetoothService.availability == .on,
+                    primaryAction: {
+                        page = .bluetooth
+                        bluetoothService.requestAccess()
+                    },
+                    detailAction: nil,
+                    showsInlineChevron: true
                 )
                 QuickSettingTile(
                     label: NSLocalizedString("Airplane mode", comment: ""),
@@ -685,18 +696,112 @@ private struct QuickSettingsPanelView: View {
     }
 
     private var bluetoothPage: some View {
-        detailPage(title: "Bluetooth") {
-            DetailActionList(
-                rows: [
-                    DetailActionRowData(
-                        symbol: "antenna.radiowaves.left.and.right",
-                        title: "Nearby and paired devices",
-                        detail: "View and connect devices in System Settings."
-                    )
-                ],
-                action: onOpenBluetoothSettings
-            )
+        detailPage(title: "Bluetooth", footerContent: AnyView(bluetoothFooter)) {
+            switch bluetoothService.availability {
+            case .accessRequired:
+                DetailEmptyState(
+                    symbol: "lock",
+                    title: "Allow Bluetooth access",
+                    detail: "Allow access to show paired Bluetooth devices and connect or disconnect them.",
+                    actionTitle: "Request Access",
+                    action: bluetoothService.requestAccess
+                )
+            case .denied:
+                DetailEmptyState(
+                    symbol: "lock.slash",
+                    title: "Bluetooth access is off",
+                    detail: "Allow WinTaskbar in Privacy & Security > Bluetooth.",
+                    actionTitle: "Open Bluetooth Privacy Settings",
+                    action: { QuickSettingsDestination.open("com.apple.preference.security?Privacy_Bluetooth") }
+                )
+            case .checking:
+                ProgressView("Checking Bluetooth…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .off, .unavailable:
+                DetailEmptyState(
+                    symbol: "antenna.radiowaves.left.and.right.slash",
+                    title: bluetoothService.availability == .off ? "Bluetooth off" : "Bluetooth unavailable",
+                    detail: "Check Bluetooth in System Settings to connect devices.",
+                    actionTitle: "Open Bluetooth Settings",
+                    action: onOpenBluetoothSettings
+                )
+            case .on:
+                bluetoothDeviceList
+            }
         }
+    }
+
+    private var bluetoothDeviceList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 6) {
+                if let error = bluetoothService.operationError {
+                    Text(error)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if bluetoothService.devices.isEmpty {
+                    Text("No paired Bluetooth devices")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 70)
+                }
+                ForEach(bluetoothService.devices) { device in
+                    HStack(spacing: 10) {
+                        BluetoothGlyph()
+                            .stroke(lineWidth: 1.2)
+                            .frame(width: 12, height: 17)
+                            .frame(width: 22)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(device.name)
+                                .font(.system(size: 12, weight: .medium))
+                                .lineLimit(1)
+                            Text(LocalizedStringKey(device.isConnected ? "Connected" : "Not connected"))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 4)
+                        if bluetoothService.pendingDeviceID == device.id {
+                            ProgressView()
+                                .controlSize(.small)
+                                .help(LocalizedStringKey(bluetoothService.pendingConnect ? "Connecting…" : "Disconnecting…"))
+                        } else {
+                            Button(LocalizedStringKey(device.isConnected ? "Disconnect" : "Connect")) {
+                                bluetoothService.toggleConnection(device)
+                            }
+                            .controlSize(.small)
+                            .disabled(bluetoothService.isOperationBusy)
+                        }
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
+                }
+                Text("Some devices and audio connections must be managed in System Settings.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private var bluetoothFooter: some View {
+        Button(action: onOpenBluetoothSettings) {
+            HStack {
+                Text("Pair devices and more Bluetooth settings")
+                    .font(.system(size: 11))
+                Spacer()
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 10))
+            }
+            .padding(.horizontal, 16)
+            .frame(height: QuickSettingsPanelMetrics.footerHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(Color.black.opacity(0.10))
     }
 
     private var accessibilityPage: some View {

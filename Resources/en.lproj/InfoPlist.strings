@@ -6,5 +6,7 @@
 	<string>WinTaskbar displays your calendar events and lets you create, edit, and delete events from the taskbar calendar.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>WinTaskbar displays your calendar events and lets you create, edit, and delete events from the taskbar calendar.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>WinTaskbar shows your paired Bluetooth devices and lets you connect or disconnect them from quick settings.</string>
 </dict>
 </plist>

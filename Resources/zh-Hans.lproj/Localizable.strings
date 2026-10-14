@@ -1566,5 +1566,45 @@
 	<string>声音</string>
 	<key>Finder</key>
 	<string>访达</string>
+	<key>Bluetooth access required</key>
+	<string>需要蓝牙访问权限</string>
+	<key>Bluetooth access is off</key>
+	<string>蓝牙访问权限已关闭</string>
+	<key>Checking Bluetooth…</key>
+	<string>正在检查蓝牙…</string>
+	<key>Bluetooth off</key>
+	<string>蓝牙已关闭</string>
+	<key>Bluetooth unavailable</key>
+	<string>蓝牙不可用</string>
+	<key>Allow Bluetooth access</key>
+	<string>允许蓝牙访问</string>
+	<key>Allow access to show paired Bluetooth devices and connect or disconnect them.</key>
+	<string>允许访问以显示已配对的蓝牙设备，并连接或断开设备。</string>
+	<key>Allow WinTaskbar in Privacy &amp; Security &gt; Bluetooth.</key>
+	<string>请在“隐私与安全性 &gt; 蓝牙”中允许 WinTaskbar 访问。</string>
+	<key>Open Bluetooth Privacy Settings</key>
+	<string>打开蓝牙隐私设置</string>
+	<key>Check Bluetooth in System Settings to connect devices.</key>
+	<string>请在系统设置中检查蓝牙，以连接设备。</string>
+	<key>Open Bluetooth Settings</key>
+	<string>打开蓝牙设置</string>
+	<key>No paired Bluetooth devices</key>
+	<string>没有已配对的蓝牙设备</string>
+	<key>Connecting…</key>
+	<string>正在连接…</string>
+	<key>Disconnecting…</key>
+	<string>正在断开…</string>
+	<key>Some devices and audio connections must be managed in System Settings.</key>
+	<string>部分设备和音频连接需要在系统设置中管理。</string>
+	<key>Pair devices and more Bluetooth settings</key>
+	<string>配对设备和更多蓝牙设置</string>
+	<key>Bluetooth operation timed out. Check the device in System Settings.</key>
+	<string>蓝牙操作超时。请在系统设置中检查设备。</string>
+	<key>Could not connect the Bluetooth device (error %d).</key>
+	<string>无法连接蓝牙设备（错误 %d）。</string>
+	<key>Could not disconnect the Bluetooth device (error %d).</key>
+	<string>无法断开蓝牙设备（错误 %d）。</string>
+	<key>Bluetooth is unavailable. Check Bluetooth in System Settings.</key>
+	<string>蓝牙不可用。请在系统设置中检查蓝牙。</string>
 </dict>
 </plist>

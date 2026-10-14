@@ -13,10 +13,12 @@ let package = Package(
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("CoreAudio"),
+                .linkedFramework("CoreBluetooth"),
                 .linkedFramework("CoreLocation"),
                 .linkedFramework("CoreWLAN"),
                 .linkedFramework("EventKit"),
-                .linkedFramework("IOKit")
+                .linkedFramework("IOKit"),
+                .linkedFramework("IOBluetooth")
             ]
         )
     ]

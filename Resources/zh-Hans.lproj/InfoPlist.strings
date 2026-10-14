@@ -6,5 +6,7 @@
 	<string>WinTaskbar 用于在任务栏日历中显示、创建、编辑和删除你的系统日程。</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>WinTaskbar 用于在任务栏日历中显示、创建、编辑和删除你的系统日程。</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>WinTaskbar 用于在快速设置中显示已配对的蓝牙设备，并连接或断开设备。</string>
 </dict>
 </plist>

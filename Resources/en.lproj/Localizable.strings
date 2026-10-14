@@ -952,5 +952,45 @@
 	<string>Flash count: %ld</string>
 	<key>Flashes finish within the effect duration. With Reduce Motion enabled, one gentle glow is shown instead.</key>
 	<string>Flashes finish within the effect duration. With Reduce Motion enabled, one gentle glow is shown instead.</string>
+	<key>Bluetooth access required</key>
+	<string>Bluetooth access required</string>
+	<key>Bluetooth access is off</key>
+	<string>Bluetooth access is off</string>
+	<key>Checking Bluetooth…</key>
+	<string>Checking Bluetooth…</string>
+	<key>Bluetooth off</key>
+	<string>Bluetooth off</string>
+	<key>Bluetooth unavailable</key>
+	<string>Bluetooth unavailable</string>
+	<key>Allow Bluetooth access</key>
+	<string>Allow Bluetooth access</string>
+	<key>Allow access to show paired Bluetooth devices and connect or disconnect them.</key>
+	<string>Allow access to show paired Bluetooth devices and connect or disconnect them.</string>
+	<key>Allow WinTaskbar in Privacy &amp; Security &gt; Bluetooth.</key>
+	<string>Allow WinTaskbar in Privacy &amp; Security &gt; Bluetooth.</string>
+	<key>Open Bluetooth Privacy Settings</key>
+	<string>Open Bluetooth Privacy Settings</string>
+	<key>Check Bluetooth in System Settings to connect devices.</key>
+	<string>Check Bluetooth in System Settings to connect devices.</string>
+	<key>Open Bluetooth Settings</key>
+	<string>Open Bluetooth Settings</string>
+	<key>No paired Bluetooth devices</key>
+	<string>No paired Bluetooth devices</string>
+	<key>Connecting…</key>
+	<string>Connecting…</string>
+	<key>Disconnecting…</key>
+	<string>Disconnecting…</string>
+	<key>Some devices and audio connections must be managed in System Settings.</key>
+	<string>Some devices and audio connections must be managed in System Settings.</string>
+	<key>Pair devices and more Bluetooth settings</key>
+	<string>Pair devices and more Bluetooth settings</string>
+	<key>Bluetooth operation timed out. Check the device in System Settings.</key>
+	<string>Bluetooth operation timed out. Check the device in System Settings.</string>
+	<key>Could not connect the Bluetooth device (error %d).</key>
+	<string>Could not connect the Bluetooth device (error %d).</string>
+	<key>Could not disconnect the Bluetooth device (error %d).</key>
+	<string>Could not disconnect the Bluetooth device (error %d).</string>
+	<key>Bluetooth is unavailable. Check Bluetooth in System Settings.</key>
+	<string>Bluetooth is unavailable. Check Bluetooth in System Settings.</string>
 </dict>
 </plist>
