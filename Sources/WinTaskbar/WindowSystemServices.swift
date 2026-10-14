@@ -915,6 +915,7 @@ final class RecentDocumentsService: ObservableObject {
             guard let url = URL(string: rawValue), url.isFileURL else { return nil }
             return url
         }
+        guard URL(string: rawValue)?.scheme == nil else { return nil }
         let url = URL(fileURLWithPath: rawValue)
         return url.isFileURL ? url : nil
     }

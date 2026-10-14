@@ -1966,7 +1966,7 @@ func runSelfTest() async -> Int32 {
           ) == CGPoint(x: 36, y: 16),
           RecentDocumentsService.documentURL(from: "file:///tmp/project/")
               == URL(string: "file:///tmp/project/"),
-          RecentDocumentsService.documentURL(from: "https://example.com/project/")?.isFileURL == true,
+          RecentDocumentsService.documentURL(from: "https://example.com/project/") == nil,
           TaskbarJumpListGeometry.frame(
               anchorFrame: CGRect(x: 500, y: 0, width: 40, height: 48),
               contentSize: jumpListSize,
