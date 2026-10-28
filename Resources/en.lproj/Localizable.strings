@@ -1002,5 +1002,51 @@
 	<string>Bluetooth power did not change. Check Bluetooth in System Settings.</string>
 	<key>Could not change Bluetooth power on this system.</key>
 	<string>Could not change Bluetooth power on this system.</string>
+	<key>Mouse Enhancement</key>
+	<string>Mouse Enhancement</string>
+	<key>Enable mouse enhancement</key>
+	<string>Enable mouse enhancement</string>
+	<key>Works independently of the taskbar. Trackpad and continuous scrolling keep their original behavior.</key>
+	<string>Works independently of the taskbar. Trackpad and continuous scrolling keep their original behavior.</string>
+	<key>Mouse enhancement is off.</key>
+	<string>Mouse enhancement is off.</string>
+	<key>Mouse enhancement is paused. Original scrolling is preserved.</key>
+	<string>Mouse enhancement is paused. Original scrolling is preserved.</string>
+	<key>Allow Accessibility access, then refresh to enable mouse enhancement.</key>
+	<string>Allow Accessibility access, then refresh to enable mouse enhancement.</string>
+	<key>Mouse enhancement is on. Identifiable injected and continuous input pass through.</key>
+	<string>Mouse enhancement is on. Identifiable injected and continuous input pass through.</string>
+	<key>Could not start mouse enhancement. Original scrolling is preserved.</key>
+	<string>Could not start mouse enhancement. Original scrolling is preserved.</string>
+	<key>Resume mouse enhancement</key>
+	<string>Resume mouse enhancement</string>
+	<key>Pause mouse enhancement</key>
+	<string>Pause mouse enhancement</string>
+	<key>Wheel behavior</key>
+	<string>Wheel behavior</string>
+	<key>Smooth mouse scrolling</key>
+	<string>Smooth mouse scrolling</string>
+	<key>Scroll speed</key>
+	<string>Scroll speed</string>
+	<key>Smoothing duration</key>
+	<string>Smoothing duration</string>
+	<key>Reverse vertical scrolling</key>
+	<string>Reverse vertical scrolling</string>
+	<key>Reverse horizontal scrolling</key>
+	<string>Reverse horizontal scrolling</string>
+	<key>Reversal is unavailable on axes already reversed by Karabiner, or when its configuration cannot be read. Existing Karabiner settings are kept. Refresh after changing them.</key>
+	<string>Reversal is unavailable on axes already reversed by Karabiner, or when its configuration cannot be read. Existing Karabiner settings are kept. Refresh after changing them.</string>
+	<key>Remote control</key>
+	<string>Remote control</string>
+	<key>Identifiable injected input, including ToDesk input, passes through without smoothing or reversal. Some remote tools hide its origin; pause mouse enhancement if scrolling changes while this Mac is remotely controlled.</key>
+	<string>Identifiable injected input, including ToDesk input, passes through without smoothing or reversal. Some remote tools hide its origin; pause mouse enhancement if scrolling changes while this Mac is remotely controlled.</string>
+	<key>Pause lasts until you resume or quit WinTaskbar. Avoid running another scrolling enhancer at the same time.</key>
+	<string>Pause lasts until you resume or quit WinTaskbar. Avoid running another scrolling enhancer at the same time.</string>
+	<key>Use original scrolling in these apps</key>
+	<string>Use original scrolling in these apps</string>
+	<key>Excluded apps receive unmodified scrolling. This list applies to the app being scrolled, not to the source of a remote-control connection.</key>
+	<string>Excluded apps receive unmodified scrolling. This list applies to the app being scrolled, not to the source of a remote-control connection.</string>
+	<key>Add application…</key>
+	<string>Add application…</string>
 </dict>
 </plist>

@@ -13,6 +13,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case dateTime = "Date & time"
     case fullscreenApps = "Fullscreen & Apps"
     case inputAdaptation = "Input Adaptation"
+    case mouseEnhancement = "Mouse Enhancement"
     case hotkeys = "Hotkeys"
     case shortcutMappings = "Shortcut Mappings"
     case about = "About"
@@ -30,6 +31,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .fullscreenApps: "arrow.up.left.and.arrow.down.right"
         case .dateTime: "clock"
         case .inputAdaptation: "keyboard.badge.ellipsis"
+        case .mouseEnhancement: "computermouse"
         case .hotkeys: "keyboard"
         case .shortcutMappings: "command"
         case .about: "info.circle"
@@ -157,6 +159,7 @@ struct SettingsView: View {
                 settingsPage(taskbarFeatureContent(dateTime))
             }
         case .inputAdaptation: settingsPage(inputAdaptationSettings)
+        case .mouseEnhancement: settingsPage(MouseEnhancementSettingsView(preferences: preferences))
         case .hotkeys: settingsPage(hotkeySettings)
         case .shortcutMappings: settingsPage(taskbarFeatureContent(shortcutMappings))
         case .about: settingsPage(about)

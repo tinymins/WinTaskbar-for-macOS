@@ -1616,5 +1616,51 @@
 	<string>蓝牙开关状态未改变。请在系统设置中检查蓝牙。</string>
 	<key>Could not change Bluetooth power on this system.</key>
 	<string>无法在此系统上切换蓝牙开关。</string>
+	<key>Mouse Enhancement</key>
+	<string>鼠标增强</string>
+	<key>Enable mouse enhancement</key>
+	<string>启用鼠标增强</string>
+	<key>Works independently of the taskbar. Trackpad and continuous scrolling keep their original behavior.</key>
+	<string>独立于任务栏运行，触控板和连续滚动保持原有行为。</string>
+	<key>Mouse enhancement is off.</key>
+	<string>鼠标增强已关闭。</string>
+	<key>Mouse enhancement is paused. Original scrolling is preserved.</key>
+	<string>鼠标增强已暂停，保留原始滚动。</string>
+	<key>Allow Accessibility access, then refresh to enable mouse enhancement.</key>
+	<string>请授予辅助功能权限，然后刷新以启用鼠标增强。</string>
+	<key>Mouse enhancement is on. Identifiable injected and continuous input pass through.</key>
+	<string>鼠标增强已启用，可识别的远程输入和连续滚动保持原样。</string>
+	<key>Could not start mouse enhancement. Original scrolling is preserved.</key>
+	<string>无法启动鼠标增强，保留原始滚动。</string>
+	<key>Resume mouse enhancement</key>
+	<string>恢复鼠标增强</string>
+	<key>Pause mouse enhancement</key>
+	<string>暂停鼠标增强</string>
+	<key>Wheel behavior</key>
+	<string>滚轮行为</string>
+	<key>Smooth mouse scrolling</key>
+	<string>平滑鼠标滚动</string>
+	<key>Scroll speed</key>
+	<string>滚动速度</string>
+	<key>Smoothing duration</key>
+	<string>平滑时长</string>
+	<key>Reverse vertical scrolling</key>
+	<string>反转垂直滚动</string>
+	<key>Reverse horizontal scrolling</key>
+	<string>反转水平滚动</string>
+	<key>Reversal is unavailable on axes already reversed by Karabiner, or when its configuration cannot be read. Existing Karabiner settings are kept. Refresh after changing them.</key>
+	<string>Karabiner 已反转的轴或无法读取其配置时，该轴的反转功能不可用。保留现有 Karabiner 设置，修改后请刷新。</string>
+	<key>Remote control</key>
+	<string>远程控制</string>
+	<key>Identifiable injected input, including ToDesk input, passes through without smoothing or reversal. Some remote tools hide its origin; pause mouse enhancement if scrolling changes while this Mac is remotely controlled.</key>
+	<string>可识别的注入输入（包括 ToDesk 输入）保持原样，不做平滑或反转。部分远程工具会隐藏输入来源；本机被控时若滚动异常，请暂停鼠标增强。</string>
+	<key>Pause lasts until you resume or quit WinTaskbar. Avoid running another scrolling enhancer at the same time.</key>
+	<string>暂停状态持续到手动恢复或退出 WinTaskbar。请避免同时运行其他滚动增强工具。</string>
+	<key>Use original scrolling in these apps</key>
+	<string>在以下应用中使用原始滚动</string>
+	<key>Excluded apps receive unmodified scrolling. This list applies to the app being scrolled, not to the source of a remote-control connection.</key>
+	<string>排除的应用接收原始滚动。此列表针对正在滚动的应用，不代表远程连接的输入来源。</string>
+	<key>Add application…</key>
+	<string>添加应用…</string>
 </dict>
 </plist>

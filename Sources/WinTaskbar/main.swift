@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         buildApplicationMenu()
         SystemNotificationService.shared.start()
+        MouseEnhancementService.shared.start(preferences: preferences)
         KarabinerIntegrationService.shared.migrateManagedConfigurationIfNeeded(preferences: preferences)
 
         let taskbar = TaskbarWindowController(
@@ -390,6 +391,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         SystemNotificationService.shared.stop()
+        MouseEnhancementService.shared.stop()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         dockToggleService.restoreDockOnExit()
     }
@@ -679,6 +681,7 @@ func runSelfTest() async -> Int32 {
         "Date & time",
         "Fullscreen & Apps",
         "Input Adaptation",
+        "Mouse Enhancement",
         "Hotkeys",
         "Shortcut Mappings",
         "About"
