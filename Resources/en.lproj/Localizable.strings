@@ -1028,8 +1028,6 @@
 	<string>Smooth mouse scrolling</string>
 	<key>Scroll speed</key>
 	<string>Scroll speed</string>
-	<key>Smoothing duration</key>
-	<string>Smoothing duration</string>
 	<key>Reverse vertical scrolling</key>
 	<string>Reverse vertical scrolling</string>
 	<key>Reverse horizontal scrolling</key>
@@ -1048,5 +1046,13 @@
 	<string>Excluded apps receive unmodified scrolling. This list applies to the app being scrolled, not to the source of a remote-control connection.</string>
 	<key>Add application…</key>
 	<string>Add application…</string>
+	<key>Minimum scroll step</key>
+	<string>Minimum scroll step</string>
+	<key>Scroll response</key>
+	<string>Scroll response</string>
+	<key>A larger response value gives a softer, longer transition. It is a response scale, not a duration in seconds.</key>
+	<string>A larger response value gives a softer, longer transition. It is a response scale, not a duration in seconds.</string>
+	<key>Reset scroll tuning</key>
+	<string>Reset scroll tuning</string>
 </dict>
 </plist>

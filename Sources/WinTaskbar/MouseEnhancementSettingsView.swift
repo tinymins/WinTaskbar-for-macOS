@@ -30,18 +30,28 @@ struct MouseEnhancementSettingsView: View {
 
             SettingsSection("Wheel behavior") {
                 Toggle("Smooth mouse scrolling", isOn: $preferences.mouseEnhancement.smoothScrolling)
-                HStack {
-                    Text("Scroll speed")
-                    Slider(value: $preferences.mouseEnhancement.speed, in: 0.25...4, step: 0.05)
-                    Text(preferences.mouseEnhancement.effectiveSpeed.formatted(.number.precision(.fractionLength(2))) + "×")
-                        .monospacedDigit().frame(width: 52, alignment: .trailing)
+                Group {
+                    HStack {
+                        Text("Minimum scroll step")
+                        Slider(value: $preferences.mouseEnhancement.step, in: 0.01...100, step: 0.01)
+                        MouseScrollTuningField(value: $preferences.mouseEnhancement.step, bounds: 0.01...100, label: "Minimum scroll step")
+                    }
+                    HStack {
+                        Text("Scroll speed")
+                        Slider(value: $preferences.mouseEnhancement.speed, in: 1...10, step: 0.01)
+                        MouseScrollTuningField(value: $preferences.mouseEnhancement.speed, bounds: 1...10, label: "Scroll speed")
+                        Text("×")
+                    }
+                    HStack {
+                        Text("Scroll response")
+                        Slider(value: $preferences.mouseEnhancement.response, in: 1...5, step: 0.01)
+                        MouseScrollTuningField(value: $preferences.mouseEnhancement.response, bounds: 1...5, label: "Scroll response")
+                    }
+                    Text("A larger response value gives a softer, longer transition. It is a response scale, not a duration in seconds.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Reset scroll tuning") { preferences.mouseEnhancement.resetTuning() }
                 }
-                HStack {
-                    Text("Smoothing duration")
-                    Slider(value: $preferences.mouseEnhancement.duration, in: 0.05...0.5, step: 0.01)
-                    Text(String(format: "%.0f ms", preferences.mouseEnhancement.effectiveDuration * 1_000))
-                        .monospacedDigit().frame(width: 62, alignment: .trailing)
-                }.disabled(!preferences.mouseEnhancement.smoothScrolling)
+                .disabled(!preferences.mouseEnhancement.smoothScrolling)
                 Toggle("Reverse vertical scrolling", isOn: $preferences.mouseEnhancement.reverseVertical)
                     .disabled(service.verticalReversalBlocked)
                 Toggle("Reverse horizontal scrolling", isOn: $preferences.mouseEnhancement.reverseHorizontal)
@@ -102,5 +112,50 @@ struct MouseEnhancementSettingsView: View {
                 name: FileManager.default.displayName(atPath: url.path)
             ))
         }
+    }
+}
+
+@MainActor
+private struct MouseScrollTuningField: View {
+    @Binding var value: Double
+    let bounds: ClosedRange<Double>
+    let label: String
+    @State private var draft = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField(LocalizedStringKey(label), text: $draft)
+            .labelsHidden()
+            .textFieldStyle(.roundedBorder)
+            .multilineTextAlignment(.trailing)
+            .monospacedDigit()
+            .frame(width: 76)
+            .focused($focused)
+            .onAppear { syncDraft() }
+            .onChange(of: value) { _ in syncDraft() }
+            .onChange(of: focused) { editing in if !editing { commit() } }
+            .onSubmit { commit() }
+    }
+
+    private func syncDraft() {
+        draft = value.formatted(.number.precision(.fractionLength(2)).grouping(.never))
+    }
+
+    private func commit() {
+        value = Self.normalizedValue(draft, fallback: value, bounds: bounds)
+        syncDraft()
+    }
+
+    static func normalizedValue(_ input: String, fallback: Double, bounds: ClosedRange<Double>) -> Double {
+        let formatter = NumberFormatter()
+        formatter.locale = .current
+        formatter.numberStyle = .decimal
+        formatter.isLenient = false
+        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        let separator = NSRegularExpression.escapedPattern(for: formatter.decimalSeparator ?? ".")
+        let pattern = "^[+-]?(?:\\p{Nd}+(?:\(separator)\\p{Nd}*)?|\(separator)\\p{Nd}+)$"
+        guard text.range(of: pattern, options: .regularExpression) != nil,
+              let parsed = formatter.number(from: text)?.doubleValue, parsed.isFinite else { return fallback }
+        return min(bounds.upperBound, max(bounds.lowerBound, parsed))
     }
 }

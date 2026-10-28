@@ -1642,8 +1642,6 @@
 	<string>平滑鼠标滚动</string>
 	<key>Scroll speed</key>
 	<string>滚动速度</string>
-	<key>Smoothing duration</key>
-	<string>平滑时长</string>
 	<key>Reverse vertical scrolling</key>
 	<string>反转垂直滚动</string>
 	<key>Reverse horizontal scrolling</key>
@@ -1662,5 +1660,13 @@
 	<string>排除的应用接收原始滚动。此列表针对正在滚动的应用，不代表远程连接的输入来源。</string>
 	<key>Add application…</key>
 	<string>添加应用…</string>
+	<key>Minimum scroll step</key>
+	<string>最小滚动步长</string>
+	<key>Scroll response</key>
+	<string>滚动响应</string>
+	<key>A larger response value gives a softer, longer transition. It is a response scale, not a duration in seconds.</key>
+	<string>响应值越大，过渡越柔和、延续越长。这是响应系数，不是以秒计的时长。</string>
+	<key>Reset scroll tuning</key>
+	<string>重置滚动参数</string>
 </dict>
 </plist>

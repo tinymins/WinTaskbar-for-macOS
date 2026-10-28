@@ -9,19 +9,15 @@ private let mouseEnhancementCallback: CGEventTapCallBack = { _, type, event, con
     // The tap source is installed exclusively on the main run loop. The C
     // callback borrows this event synchronously; it never crosses a queue.
     nonisolated(unsafe) let callbackEvent = event
-    MainActor.assumeIsolated { service.handle(type, event: callbackEvent) }
-    return Unmanaged.passUnretained(event)
+    let consumed = MainActor.assumeIsolated { service.handle(type, event: callbackEvent) }
+    return consumed ? nil : Unmanaged.passUnretained(event)
 }
 
 @MainActor
 final class MouseEnhancementService: ObservableObject {
     static let shared = MouseEnhancementService()
     private static let eventMarker: Int64 = 0x57544D4F555345
-    private let syntheticSource: CGEventSource? = {
-        let source = CGEventSource(stateID: .privateState)
-        source?.userData = eventMarker
-        return source
-    }()
+    private let renderer = MouseScrollRenderer(marker: eventMarker)
 
     @Published private(set) var statusKey = "Mouse enhancement is off."
     @Published private(set) var isPaused = false
@@ -33,16 +29,6 @@ final class MouseEnhancementService: ObservableObject {
     private var observers: [NSObjectProtocol] = []
     private var tap: CFMachPort?
     private var tapSource: CFRunLoopSource?
-    private var frameTimer: Timer?
-    private var template: CGEvent?
-    private var target: NSRunningApplication?
-    private var remainingX = 0.0
-    private var remainingY = 0.0
-    private var fractionalX = 0.0
-    private var fractionalY = 0.0
-    private var discreteRemainders: [UInt32: Double] = [:]
-    private var lastFrameTime = 0.0
-    private var endTime = 0.0
     private var sleeping = false
     private var sourcePolicyCache: (pid: pid_t, expires: TimeInterval, bypass: Bool)?
 
@@ -136,7 +122,7 @@ final class MouseEnhancementService: ObservableObject {
     }
 
     private func removeTap() {
-        cancelAnimation()
+        renderer.shutDown()
         if let tapSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), tapSource, .commonModes) }
         if let tap { CFMachPortInvalidate(tap) }
         tapSource = nil
@@ -145,16 +131,16 @@ final class MouseEnhancementService: ObservableObject {
 
     // Local mouse drivers also inject events. Resolve the source instead of
     // treating every nonzero PID/private source as remote input.
-    fileprivate func handle(_ type: CGEventType, event: CGEvent) {
+    fileprivate func handle(_ type: CGEventType, event: CGEvent) -> Bool {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             cancelAnimation()
             if let tap, configuration.enabled, !isPaused, !sleeping {
                 CGEvent.tapEnable(tap: tap, enable: true)
             }
-            return
+            return false
         }
         if event.getIntegerValueField(.eventSourceUserData) == Self.eventMarker {
-            return
+            return false
         }
         guard type == .scrollWheel, configuration.enabled, !isPaused, !sleeping,
               !shouldBypassSource(event.getIntegerValueField(.eventSourceUnixProcessID)),
@@ -165,7 +151,7 @@ final class MouseEnhancementService: ObservableObject {
               event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis3) == 0,
               event.getDoubleValueField(.scrollWheelEventPointDeltaAxis3) == 0 else {
             cancelAnimation()
-            return
+            return false
         }
         let pidValue = event.getIntegerValueField(.eventTargetUnixProcessID)
         guard pidValue > 1, pidValue <= Int64(Int32.max),
@@ -173,135 +159,56 @@ final class MouseEnhancementService: ObservableObject {
               !app.isTerminated, let bundleID = app.bundleIdentifier,
               !configuration.excludedApps.contains(where: { $0.bundleID == bundleID }) else {
             cancelAnimation()
-            return
-        }
-        if target?.processIdentifier != app.processIdentifier || template?.flags != event.flags
-            || template?.location != event.location {
-            cancelAnimation()
+            return false
         }
         let reverseY = configuration.reverseVertical && !verticalReversalBlocked
         let reverseX = configuration.reverseHorizontal && !horizontalReversalBlocked
+        // Reverse before capturing the output template, including legacy line and
+        // fixed-point metadata. If smoothing is unavailable this reversed native
+        // event still follows its original route.
+        if reverseY { reverse(event, axis: 1) }
+        if reverseX { reverse(event, axis: 2) }
         guard configuration.smoothScrolling else {
-            target = app
-            template = event.copy()
-            scale(event, axis: 1, multiplier: configuration.effectiveSpeed * (reverseY ? -1 : 1))
-            scale(event, axis: 2, multiplier: configuration.effectiveSpeed * (reverseX ? -1 : 1))
-            return
+            cancelAnimation()
+            return false
         }
-        let y = pixelDelta(event, axis: 1) * configuration.effectiveSpeed * (reverseY ? -1 : 1)
-        let x = pixelDelta(event, axis: 2) * configuration.effectiveSpeed * (reverseX ? -1 : 1)
+        let y = scrollDelta(event, axis: 1)
+        let x = scrollDelta(event, axis: 2)
         guard x.isFinite, y.isFinite, abs(x) + abs(y) > 0,
-              abs(x) < 100_000, abs(y) < 100_000,
-              syntheticSource != nil, let copy = event.copy() else {
+              abs(x) < 100_000, abs(y) < 100_000 else {
             cancelAnimation()
-            return
+            return false
         }
-        if remainingX * x < 0 { remainingX = 0; fractionalX = 0 }
-        if remainingY * y < 0 { remainingY = 0; fractionalY = 0 }
-        let now = ProcessInfo.processInfo.systemUptime
-        let fraction = min(1, (1.0 / 120) / configuration.effectiveDuration * 3)
-        let firstX = (x == 0 ? 0 : copysign(min(abs(x), max(1, abs(x) * fraction)), x)).rounded(.towardZero)
-        let firstY = (y == 0 ? 0 : copysign(min(abs(y), max(1, abs(y) * fraction)), y)).rounded(.towardZero)
-        template = copy
-        target = app
-        remainingX += x - firstX
-        remainingY += y - firstY
-        endTime = now + configuration.effectiveDuration
-        if frameTimer == nil {
-            lastFrameTime = now
-            let timer = Timer(timeInterval: 1.0 / 120, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.deliverFrame() }
-            }
-            frameTimer = timer
-            RunLoop.main.add(timer, forMode: .common)
-        }
-        // Keep the original event on its normal route with the first whole-pixel
-        // frame. Subpixel input stays in the tail until it can form a pixel.
-        setPixels(event, x: firstX, y: firstY)
-        return
+        let handlingWindow = event.getIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent)
+        let windowNumber = handlingWindow != 0 ? handlingWindow
+            : event.getIntegerValueField(.mouseEventWindowUnderMousePointer)
+        // Preserve the original stream unless its snapshot and display clock are
+        // ready. The first visible frame comes from the display-paced response.
+        return renderer.enqueue(
+            event: event, targetPID: app.processIdentifier, windowNumber: windowNumber,
+            x: x, y: y, step: configuration.effectiveStep,
+            speed: configuration.effectiveSpeed, transition: configuration.transition
+        )
     }
 
-    private func deliverFrame() {
-        let now = ProcessInfo.processInfo.systemUptime
-        guard let tap, CGEvent.tapIsEnabled(tap: tap),
-              let target, !target.isTerminated, let frame = template?.copy(),
-              now - lastFrameTime < 0.25 else {
-            cancelAnimation()
-            return
-        }
-        let finished = now >= endTime
-        let fraction = finished ? 1 : 1 - exp(-3 * (now - lastFrameTime) / configuration.effectiveDuration)
-        // Decay ideal motion independently of integer output. Fractional output
-        // accumulates across frames so small deltas do not stall until the end.
-        let idealX = remainingX * fraction
-        let idealY = remainingY * fraction
-        remainingX -= idealX
-        remainingY -= idealY
-        fractionalX += idealX
-        fractionalY += idealY
-        let x = fractionalX.rounded(finished ? .toNearestOrAwayFromZero : .towardZero)
-        let y = fractionalY.rounded(finished ? .toNearestOrAwayFromZero : .towardZero)
-        fractionalX -= x
-        fractionalY -= y
-        lastFrameTime = now
-        if x != 0 || y != 0 {
-            setPixels(frame, x: x, y: y)
-            frame.timestamp = DispatchTime.now().uptimeNanoseconds
-            frame.postToPid(target.processIdentifier)
-        }
-        if finished { cancelAnimation() }
-    }
+    private func cancelAnimation() { renderer.cancel() }
 
-    private func cancelAnimation() {
-        frameTimer?.invalidate()
-        frameTimer = nil
-        template = nil
-        target = nil
-        remainingX = 0
-        remainingY = 0
-        fractionalX = 0
-        fractionalY = 0
-        discreteRemainders.removeAll()
-    }
-
-    private func setPixels(_ event: CGEvent, x: Double, y: Double) {
-        // Source metadata can remain cached after setIntegerValueField. A fresh
-        // source carries a reliable marker even when the input explicitly had 0.
-        event.setSource(syntheticSource)
-        event.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
-        // Setting a line delta also recalculates fixed/point deltas. Write the
-        // explicit fixed and point values afterwards to preserve our frame.
-        event.setIntegerValueField(.scrollWheelEventDeltaAxis1, value: Int64((y / 10).rounded()))
-        event.setIntegerValueField(.scrollWheelEventDeltaAxis2, value: Int64((x / 10).rounded()))
-        event.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: y / 10)
-        event.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2, value: x / 10)
-        event.setIntegerValueField(.scrollWheelEventPointDeltaAxis1, value: Int64(y))
-        event.setIntegerValueField(.scrollWheelEventPointDeltaAxis2, value: Int64(x))
-    }
-
-    private func pixelDelta(_ event: CGEvent, axis: Int) -> Double {
+    private func scrollDelta(_ event: CGEvent, axis: Int) -> Double {
         let point = event.getDoubleValueField(axis == 1 ? .scrollWheelEventPointDeltaAxis1 : .scrollWheelEventPointDeltaAxis2)
         if point != 0 { return point }
         let fixed = event.getDoubleValueField(axis == 1 ? .scrollWheelEventFixedPtDeltaAxis1 : .scrollWheelEventFixedPtDeltaAxis2)
-        if fixed != 0 { return fixed * 10 }
-        return Double(event.getIntegerValueField(axis == 1 ? .scrollWheelEventDeltaAxis1 : .scrollWheelEventDeltaAxis2)) * 10
+        if fixed != 0 { return fixed }
+        return Double(event.getIntegerValueField(axis == 1 ? .scrollWheelEventDeltaAxis1 : .scrollWheelEventDeltaAxis2))
     }
 
-    private func scale(_ event: CGEvent, axis: Int, multiplier: Double) {
+    private func reverse(_ event: CGEvent, axis: Int) {
         let fields: [CGEventField] = axis == 1
             ? [.scrollWheelEventDeltaAxis1, .scrollWheelEventFixedPtDeltaAxis1, .scrollWheelEventPointDeltaAxis1]
             : [.scrollWheelEventDeltaAxis2, .scrollWheelEventFixedPtDeltaAxis2, .scrollWheelEventPointDeltaAxis2]
         let originalValues = fields.map { event.getDoubleValueField($0) }
+        // Line writes also update fixed/point fields, so restore those explicitly.
         for (index, field) in fields.enumerated() {
-            let scaled = originalValues[index] * multiplier
-            if index == 1 {
-                event.setDoubleValueField(field, value: scaled)
-            } else {
-                let total = scaled + (discreteRemainders[field.rawValue] ?? 0)
-                let emitted = total.rounded(.towardZero)
-                discreteRemainders[field.rawValue] = total - emitted
-                event.setDoubleValueField(field, value: emitted)
-            }
+            event.setDoubleValueField(field, value: -originalValues[index])
         }
     }
 

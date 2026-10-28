@@ -129,8 +129,10 @@ final class PreferencesStore: ObservableObject {
         let notificationSettings = Self.load(NotificationPreferences.self, key: "wintaskbar.notifications", defaults: defaults)
             ?? NotificationPreferences()
         notifications = notificationSettings
-        mouseEnhancement = Self.load(MouseEnhancementPreferences.self, key: "wintaskbar.mouseEnhancement", defaults: defaults)
+        let mouseSettings = Self.load(MouseEnhancementPreferences.self, key: "wintaskbar.mouseEnhancement", defaults: defaults)
             ?? MouseEnhancementPreferences()
+        mouseEnhancement = mouseSettings
+        Self.store(mouseSettings, key: "wintaskbar.mouseEnhancement", defaults: defaults)
         Self.store(notificationSettings, key: "wintaskbar.notifications", defaults: defaults)
         let hasCompletedCurrentOnboarding = defaults.bool(forKey: "wintaskbar.hasCompletedFeatureOnboarding")
         position = TaskbarPosition(rawValue: defaults.string(forKey: "wintaskbar.position") ?? "") ?? .bottom
