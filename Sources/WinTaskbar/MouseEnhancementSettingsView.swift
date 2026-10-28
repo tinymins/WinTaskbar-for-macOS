@@ -33,18 +33,18 @@ struct MouseEnhancementSettingsView: View {
                 Group {
                     HStack {
                         Text("Minimum scroll step")
-                        Slider(value: $preferences.mouseEnhancement.step, in: 0.01...100, step: 0.01)
+                        Slider(value: sliderBinding($preferences.mouseEnhancement.step, bounds: 0.01...100), in: 0.01...100)
                         MouseScrollTuningField(value: $preferences.mouseEnhancement.step, bounds: 0.01...100, label: "Minimum scroll step")
                     }
                     HStack {
                         Text("Scroll speed")
-                        Slider(value: $preferences.mouseEnhancement.speed, in: 1...10, step: 0.01)
+                        Slider(value: sliderBinding($preferences.mouseEnhancement.speed, bounds: 1...10), in: 1...10)
                         MouseScrollTuningField(value: $preferences.mouseEnhancement.speed, bounds: 1...10, label: "Scroll speed")
                         Text("×")
                     }
                     HStack {
                         Text("Scroll response")
-                        Slider(value: $preferences.mouseEnhancement.response, in: 1...5, step: 0.01)
+                        Slider(value: sliderBinding($preferences.mouseEnhancement.response, bounds: 1...5), in: 1...5)
                         MouseScrollTuningField(value: $preferences.mouseEnhancement.response, bounds: 1...5, label: "Scroll response")
                     }
                     Text("A larger response value gives a softer, longer transition. It is a response scale, not a duration in seconds.")
@@ -90,6 +90,13 @@ struct MouseEnhancementSettingsView: View {
             .disabled(!preferences.mouseEnhancement.enabled)
         }
         .onAppear { refresh() }
+    }
+
+    private func sliderBinding(_ value: Binding<Double>, bounds: ClosedRange<Double>) -> Binding<Double> {
+        Binding(
+            get: { value.wrappedValue },
+            set: { value.wrappedValue = min(bounds.upperBound, max(bounds.lowerBound, ($0 * 100).rounded() / 100)) }
+        )
     }
 
     private func refresh() {
