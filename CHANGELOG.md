@@ -2,6 +2,24 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.37] - 2026-10-28
+
+### Added
+
+- Add a dedicated Mouse Enhancement settings page with its own switch, disabled by default and independent of the taskbar.
+- Add smooth wheel scrolling with gradual acceleration and deceleration, adjustable minimum step, speed, and response, two-decimal input fields, and a reset to defaults.
+- Add vertical and horizontal scrolling reversal, preventing double reversal on axes already reversed by Karabiner-Elements.
+- Add per-application exclusions and temporary pause. Preserve trackpad and continuous scrolling, and pass recognized ToDesk and Screen Sharing input through without smoothing or reversal.
+
+### Fixed
+
+- Remove the delay when opening Mouse Enhancement settings caused by densely spaced slider tick marks, while retaining two-decimal adjustment precision.
+
+### Usage notes
+
+- Mouse enhancement requires Accessibility permission. Avoid having another scrolling enhancer process the same input at the same time.
+- Some remote-control tools hide their input source. If scrolling changes while this Mac is remotely controlled, temporarily pause mouse enhancement.
+
 ## [0.0.36] - 2026-10-14
 
 ### Added
