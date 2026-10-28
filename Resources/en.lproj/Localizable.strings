@@ -1014,8 +1014,8 @@
 	<string>Mouse enhancement is paused. Original scrolling is preserved.</string>
 	<key>Allow Accessibility access, then refresh to enable mouse enhancement.</key>
 	<string>Allow Accessibility access, then refresh to enable mouse enhancement.</string>
-	<key>Mouse enhancement is on. Identifiable injected and continuous input pass through.</key>
-	<string>Mouse enhancement is on. Identifiable injected and continuous input pass through.</string>
+	<key>Mouse enhancement is on. Recognized remote and continuous input pass through.</key>
+	<string>Mouse enhancement is on. Recognized remote and continuous input pass through.</string>
 	<key>Could not start mouse enhancement. Original scrolling is preserved.</key>
 	<string>Could not start mouse enhancement. Original scrolling is preserved.</string>
 	<key>Resume mouse enhancement</key>
@@ -1038,8 +1038,8 @@
 	<string>Reversal is unavailable on axes already reversed by Karabiner, or when its configuration cannot be read. Existing Karabiner settings are kept. Refresh after changing them.</string>
 	<key>Remote control</key>
 	<string>Remote control</string>
-	<key>Identifiable injected input, including ToDesk input, passes through without smoothing or reversal. Some remote tools hide its origin; pause mouse enhancement if scrolling changes while this Mac is remotely controlled.</key>
-	<string>Identifiable injected input, including ToDesk input, passes through without smoothing or reversal. Some remote tools hide its origin; pause mouse enhancement if scrolling changes while this Mac is remotely controlled.</string>
+	<key>Recognized ToDesk and Screen Sharing input passes through without smoothing or reversal. Local mouse-driver input can be enhanced. Some remote tools hide their origin; pause mouse enhancement if scrolling changes while this Mac is remotely controlled.</key>
+	<string>Recognized ToDesk and Screen Sharing input passes through without smoothing or reversal. Local mouse-driver input can be enhanced. Some remote tools hide their origin; pause mouse enhancement if scrolling changes while this Mac is remotely controlled.</string>
 	<key>Pause lasts until you resume or quit WinTaskbar. Avoid running another scrolling enhancer at the same time.</key>
 	<string>Pause lasts until you resume or quit WinTaskbar. Avoid running another scrolling enhancer at the same time.</string>
 	<key>Use original scrolling in these apps</key>

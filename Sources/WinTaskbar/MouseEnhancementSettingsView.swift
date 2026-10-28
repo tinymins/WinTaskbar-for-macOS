@@ -54,7 +54,7 @@ struct MouseEnhancementSettingsView: View {
             .disabled(!preferences.mouseEnhancement.enabled)
 
             SettingsSection("Remote control") {
-                Text("Identifiable injected input, including ToDesk input, passes through without smoothing or reversal. Some remote tools hide its origin; pause mouse enhancement if scrolling changes while this Mac is remotely controlled.")
+                Text("Recognized ToDesk and Screen Sharing input passes through without smoothing or reversal. Local mouse-driver input can be enhanced. Some remote tools hide their origin; pause mouse enhancement if scrolling changes while this Mac is remotely controlled.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Pause lasts until you resume or quit WinTaskbar. Avoid running another scrolling enhancer at the same time.")
                     .font(.caption).foregroundStyle(.secondary)

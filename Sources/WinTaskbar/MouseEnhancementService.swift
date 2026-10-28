@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Combine
+import Darwin
 
 private let mouseEnhancementCallback: CGEventTapCallBack = { _, type, event, context in
     guard let context else { return Unmanaged.passUnretained(event) }
@@ -43,6 +44,7 @@ final class MouseEnhancementService: ObservableObject {
     private var lastFrameTime = 0.0
     private var endTime = 0.0
     private var sleeping = false
+    private var sourcePolicyCache: (pid: pid_t, expires: TimeInterval, bypass: Bool)?
 
     func start(preferences: PreferencesStore) {
         guard subscription == nil else { return }
@@ -105,7 +107,7 @@ final class MouseEnhancementService: ObservableObject {
             return
         }
         guard tap == nil else {
-            statusKey = "Mouse enhancement is on. Identifiable injected and continuous input pass through."
+            statusKey = "Mouse enhancement is on. Recognized remote and continuous input pass through."
             return
         }
         let mask = (CGEventMask(1) << CGEventType.scrollWheel.rawValue)
@@ -113,7 +115,8 @@ final class MouseEnhancementService: ObservableObject {
             | (CGEventMask(1) << CGEventType.rightMouseDown.rawValue)
             | (CGEventMask(1) << CGEventType.otherMouseDown.rawValue)
         guard let newTap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap, place: .tailAppendEventTap, options: .defaultTap,
+            // Target PID/window routing is available after session annotation.
+            tap: .cgAnnotatedSessionEventTap, place: .tailAppendEventTap, options: .defaultTap,
             eventsOfInterest: mask, callback: mouseEnhancementCallback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
@@ -129,7 +132,7 @@ final class MouseEnhancementService: ObservableObject {
         tapSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: newTap, enable: true)
-        statusKey = "Mouse enhancement is on. Identifiable injected and continuous input pass through."
+        statusKey = "Mouse enhancement is on. Recognized remote and continuous input pass through."
     }
 
     private func removeTap() {
@@ -140,9 +143,8 @@ final class MouseEnhancementService: ObservableObject {
         tap = nil
     }
 
-    // A nonzero source PID identifies injected input, including ToDesk helper processes.
-    // PID 0 is not proof of a physical device: remote tools can discard source metadata.
-    // In that case the explicit pause control preserves the unmodified remote stream.
+    // Local mouse drivers also inject events. Resolve the source instead of
+    // treating every nonzero PID/private source as remote input.
     fileprivate func handle(_ type: CGEventType, event: CGEvent) {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             cancelAnimation()
@@ -155,14 +157,10 @@ final class MouseEnhancementService: ObservableObject {
             return
         }
         guard type == .scrollWheel, configuration.enabled, !isPaused, !sleeping,
-              event.getIntegerValueField(.eventSourceUnixProcessID) == 0,
-              event.getIntegerValueField(.eventSourceStateID) >= 0,
-              event.getIntegerValueField(.eventSourceStateID) <= 1,
-              event.getIntegerValueField(.eventSourceUserData) == 0,
+              !shouldBypassSource(event.getIntegerValueField(.eventSourceUnixProcessID)),
               event.getIntegerValueField(.scrollWheelEventIsContinuous) == 0,
               event.getIntegerValueField(.scrollWheelEventScrollPhase) == 0,
               event.getIntegerValueField(.scrollWheelEventMomentumPhase) == 0,
-              event.getIntegerValueField(.scrollWheelEventScrollCount) == 0,
               event.getIntegerValueField(.scrollWheelEventDeltaAxis3) == 0,
               event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis3) == 0,
               event.getDoubleValueField(.scrollWheelEventPointDeltaAxis3) == 0 else {
@@ -326,5 +324,35 @@ final class MouseEnhancementService: ObservableObject {
         let devices = profile["devices"] as? [[String: Any]] ?? []
         verticalReversalBlocked = devices.contains { ($0["ignore"] as? Bool) != true && ($0["mouse_flip_vertical_wheel"] as? Bool) == true }
         horizontalReversalBlocked = devices.contains { ($0["ignore"] as? Bool) != true && ($0["mouse_flip_horizontal_wheel"] as? Bool) == true }
+    }
+
+    private func shouldBypassSource(_ value: Int64) -> Bool {
+        // Hardware commonly has no source process. Remote tools that strip this
+        // metadata cannot be distinguished here; manual pause remains available.
+        if value == 0 { return false }
+        guard value > 0, value <= Int64(Int32.max) else { return true }
+        let pid = pid_t(value)
+        let now = ProcessInfo.processInfo.systemUptime
+        if let cached = sourcePolicyCache, cached.pid == pid, now < cached.expires {
+            return cached.bypass
+        }
+        let app = NSRunningApplication(processIdentifier: pid)
+        var path = app?.executableURL?.path
+        if path == nil {
+            var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+            if proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 {
+                path = String(cString: buffer)
+            }
+        }
+        let bundleID = app?.bundleIdentifier ?? ""
+        let remoteExecutables: Set<String> = [
+            "ToDesk", "ToDesk_Service", "ToDesk_Session_Proxy", "ToDesk_Session",
+            "ToDesk_Screenwall_Helper", "ToDesk_XPCHelper", "screensharingd", "screensharingagent"
+        ]
+        let executable = path.map { URL(fileURLWithPath: $0).lastPathComponent } ?? ""
+        let bypass = path == nil || bundleID.hasPrefix("com.youqu.todesk.")
+            || bundleID == "com.apple.screensharing.agent" || remoteExecutables.contains(executable)
+        sourcePolicyCache = (pid, now + 1, bypass)
+        return bypass
     }
 }

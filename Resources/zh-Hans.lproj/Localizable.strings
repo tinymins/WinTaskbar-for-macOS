@@ -1628,7 +1628,7 @@
 	<string>鼠标增强已暂停，保留原始滚动。</string>
 	<key>Allow Accessibility access, then refresh to enable mouse enhancement.</key>
 	<string>请授予辅助功能权限，然后刷新以启用鼠标增强。</string>
-	<key>Mouse enhancement is on. Identifiable injected and continuous input pass through.</key>
+	<key>Mouse enhancement is on. Recognized remote and continuous input pass through.</key>
 	<string>鼠标增强已启用，可识别的远程输入和连续滚动保持原样。</string>
 	<key>Could not start mouse enhancement. Original scrolling is preserved.</key>
 	<string>无法启动鼠标增强，保留原始滚动。</string>
@@ -1652,8 +1652,8 @@
 	<string>Karabiner 已反转的轴或无法读取其配置时，该轴的反转功能不可用。保留现有 Karabiner 设置，修改后请刷新。</string>
 	<key>Remote control</key>
 	<string>远程控制</string>
-	<key>Identifiable injected input, including ToDesk input, passes through without smoothing or reversal. Some remote tools hide its origin; pause mouse enhancement if scrolling changes while this Mac is remotely controlled.</key>
-	<string>可识别的注入输入（包括 ToDesk 输入）保持原样，不做平滑或反转。部分远程工具会隐藏输入来源；本机被控时若滚动异常，请暂停鼠标增强。</string>
+	<key>Recognized ToDesk and Screen Sharing input passes through without smoothing or reversal. Local mouse-driver input can be enhanced. Some remote tools hide their origin; pause mouse enhancement if scrolling changes while this Mac is remotely controlled.</key>
+	<string>可识别的 ToDesk 和屏幕共享输入保持原样，不做平滑或反转。本地鼠标驱动输入可以增强。部分远程工具会隐藏输入来源；本机被控时若滚动异常，请暂停鼠标增强。</string>
 	<key>Pause lasts until you resume or quit WinTaskbar. Avoid running another scrolling enhancer at the same time.</key>
 	<string>暂停状态持续到手动恢复或退出 WinTaskbar。请避免同时运行其他滚动增强工具。</string>
 	<key>Use original scrolling in these apps</key>
