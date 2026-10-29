@@ -2,6 +2,17 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.38] - 2026-10-29
+
+### Fixed
+
+- Fix excessive scrolling caused by smooth scrolling frames reusing the original wheel delta.
+
+### Changed
+
+- Use one native line as the baseline for slow wheel input. Preserve the system's accelerated distance during fast scrolling before applying the fast scrolling multiplier.
+- Remove the minimum scroll step setting and clarify that the speed control is a fast scrolling multiplier. Keep the scroll response control.
+
 ## [0.0.37] - 2026-10-28
 
 ### Added
