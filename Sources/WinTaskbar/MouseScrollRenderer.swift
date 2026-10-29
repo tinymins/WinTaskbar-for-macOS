@@ -23,7 +23,7 @@ private final class MouseScrollRenderState: @unchecked Sendable {
     var canPost: Bool { source != nil }
 
     func accept(event: CGEvent, targetPID: pid_t, windowNumber: Int64, x: Double, y: Double,
-                step: Double, speed: Double, transition: Double) {
+                speed: Double, transition: Double) {
         lock.lock()
         defer { lock.unlock() }
         if self.targetPID != targetPID || self.windowNumber != windowNumber || self.event?.flags != event.flags {
@@ -32,7 +32,8 @@ private final class MouseScrollRenderState: @unchecked Sendable {
         self.event = event
         self.targetPID = targetPID
         self.windowNumber = windowNumber
-        dynamics.add(x: x, y: y, step: step, speed: speed, transition: transition)
+        dynamics.add(x: x, y: y, speed: speed, transition: transition,
+                     at: Double(event.timestamp) / 1_000_000_000)
         generation &+= 1
         idle = false
     }
@@ -69,19 +70,20 @@ private final class MouseScrollRenderState: @unchecked Sendable {
             return generation
         }
         let output = dynamics.advance()
-        if max(abs(output.x), abs(output.y)) > MouseScrollDynamics.deadZone {
-            // Match the integer pixel contract: truncate fractional output and
-            // discard sub-threshold tails, without a forced final-distance flush.
-            guard let pixelFrame = CGEvent(
-                scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2,
-                wheel1: Int32(clamping: Int64(output.y)),
-                wheel2: Int32(clamping: Int64(output.x)), wheel3: 0
+        if output.x != 0 || output.y != 0 {
+            // Whole native lines keep both precise and line-based consumers
+            // within the same distance budget, including the first slow notch.
+            guard let lineFrame = CGEvent(
+                scrollWheelEvent2Source: source, units: .line, wheelCount: 2,
+                wheel1: Int32(clamping: output.y),
+                wheel2: Int32(clamping: output.x), wheel3: 0
             ) else {
                 clearLocked()
                 return generation
             }
             frame.setSource(source)
-            frame.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+            frame.setIntegerValueField(.scrollWheelEventIsContinuous,
+                                       value: lineFrame.getIntegerValueField(.scrollWheelEventIsContinuous))
             // Keep every delta representation consistent with this frame. Copy
             // line fields first because writing them also updates fixed/point fields.
             for field: CGEventField in [
@@ -89,13 +91,15 @@ private final class MouseScrollRenderState: @unchecked Sendable {
                 .scrollWheelEventFixedPtDeltaAxis1, .scrollWheelEventFixedPtDeltaAxis2,
                 .scrollWheelEventPointDeltaAxis1, .scrollWheelEventPointDeltaAxis2
             ] {
-                frame.setDoubleValueField(field, value: pixelFrame.getDoubleValueField(field))
+                frame.setDoubleValueField(field, value: lineFrame.getDoubleValueField(field))
             }
             frame.timestamp = DispatchTime.now().uptimeNanoseconds
             frame.postToPid(targetPID)
         }
-        if dynamics.isSettled && max(abs(output.x), abs(output.y)) <= MouseScrollDynamics.deadZone {
-            clearLocked()
+        if dynamics.isSettled {
+            // Natural completion stops the clock but retains input timing for
+            // the next notch. Cancellation still clears all state.
+            idle = true
             return generation
         }
         return nil
@@ -110,13 +114,13 @@ final class MouseScrollRenderer {
     init(marker: Int64) { state = MouseScrollRenderState(marker: marker) }
 
     func enqueue(event: CGEvent, targetPID: pid_t, windowNumber: Int64, x: Double, y: Double,
-                 step: Double, speed: Double, transition: Double) -> Bool {
+                 speed: Double, transition: Double) -> Bool {
         guard state.canPost, let snapshot = event.copy(), prepareDisplayLink() else {
             cancel()
             return false
         }
         state.accept(event: snapshot, targetPID: targetPID, windowNumber: windowNumber,
-                     x: x, y: y, step: step, speed: speed, transition: transition)
+                     x: x, y: y, speed: speed, transition: transition)
         return true
     }
 

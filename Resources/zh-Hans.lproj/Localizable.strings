@@ -1640,8 +1640,10 @@
 	<string>滚轮行为</string>
 	<key>Smooth mouse scrolling</key>
 	<string>平滑鼠标滚动</string>
-	<key>Scroll speed</key>
-	<string>滚动速度</string>
+	<key>Fast scrolling multiplier</key>
+	<string>快速滚动倍率</string>
+	<key>Slow scrolling moves one line at a time. Faster consecutive scrolling accelerates up to this multiplier.</key>
+	<string>慢速滚动每次一行；连续快速滚动时加速，最高达到此倍率。</string>
 	<key>Reverse vertical scrolling</key>
 	<string>反转垂直滚动</string>
 	<key>Reverse horizontal scrolling</key>
@@ -1660,8 +1662,6 @@
 	<string>排除的应用接收原始滚动。此列表针对正在滚动的应用，不代表远程连接的输入来源。</string>
 	<key>Add application…</key>
 	<string>添加应用…</string>
-	<key>Minimum scroll step</key>
-	<string>最小滚动步长</string>
 	<key>Scroll response</key>
 	<string>滚动响应</string>
 	<key>A larger response value gives a softer, longer transition. It is a response scale, not a duration in seconds.</key>

@@ -1,49 +1,81 @@
 import Foundation
 
-/// Display-frame response: accumulated wheel distance followed by two low-pass
-/// stages. This model advances once per display refresh, not by a millisecond TTL.
+/// Each discrete wheel event contributes one native line. Only the additional
+/// distance from rapid input is smoothed; complete line budgets are never lost.
 struct MouseScrollDynamics: Sendable {
     struct Axis: Sendable {
-        private(set) var remaining = 0.0
-        private(set) var filtered = 0.0
-        private var previousInput = 0.0
+        private var direction: Int64 = 0
+        private var previousTime: Double?
+        private var accelerationRemainder = 0.0
+        private var immediateLines: Int64 = 0
+        private var pendingLines: Int64 = 0
+        private var remaining = 0.0
+        private var filtered = 0.0
+        private var outputRemainder = 0.0
 
-        mutating func add(_ input: Double) {
-            // Direction changes (and an inactive axis) restart distance tracking,
-            // while retaining filtered velocity for a smooth transition.
-            remaining = input * previousInput > 0 ? remaining + input : input
-            previousInput = input
+        private static let slowInterval = 0.2
+        private static let fastestInterval = 0.04
+
+        mutating func add(_ input: Double, at time: Double, speed: Double) {
+            guard input != 0 else { return }
+            let newDirection: Int64 = input > 0 ? 1 : -1
+            if direction != newDirection { self = Axis() }
+            let interval = previousTime.map { time - $0 }
+            let gain: Double
+            if let interval, interval > 0, interval < Self.slowInterval {
+                let activity = min(1, (Self.slowInterval - interval)
+                    / (Self.slowInterval - Self.fastestInterval))
+                gain = 1 + (speed - 1) * activity
+            } else {
+                accelerationRemainder = 0
+                gain = 1
+            }
+            direction = newDirection
+            previousTime = time
+            immediateLines += 1
+            // Quantize acceleration once per input burst, never once per frame.
+            // Allow floating-point noise at a complete-line boundary.
+            let additional = accelerationRemainder + gain - 1
+            let lines = Int64((additional + 1e-9).rounded(.down))
+            accelerationRemainder = max(0, additional - Double(lines))
+            pendingLines += lines
+            remaining += Double(lines)
         }
 
-        mutating func advance(transition: Double) -> Double {
+        mutating func advance(transition: Double) -> Int64 {
             let raw = remaining * transition
             remaining -= raw
-            let output = filtered
+            outputRemainder += filtered
             filtered += 0.23 * (raw - filtered)
-            return output
+            var lines = min(pendingLines, Int64(max(0, outputRemainder.rounded())))
+            outputRemainder -= Double(lines)
+            pendingLines -= lines
+            if pendingLines == 0 {
+                remaining = 0
+                filtered = 0
+                outputRemainder = 0
+            }
+            lines += immediateLines
+            immediateLines = 0
+            return direction * lines
         }
+
+        var isSettled: Bool { immediateLines == 0 && pendingLines == 0 }
     }
 
-    private(set) var x = Axis()
-    private(set) var y = Axis()
+    private var x = Axis()
+    private var y = Axis()
     private var transition = 0.085
-    static let deadZone = 1.0
 
-    mutating func add(x: Double, y: Double, step: Double, speed: Double, transition: Double) {
-        func distance(_ value: Double) -> Double {
-            value == 0 ? 0 : copysign(max(abs(value), step) * speed, value)
-        }
+    mutating func add(x: Double, y: Double, speed: Double, transition: Double, at time: Double) {
         self.transition = transition
-        self.x.add(distance(x))
-        self.y.add(distance(y))
+        self.x.add(x, at: time, speed: speed)
+        self.y.add(y, at: time, speed: speed)
     }
 
-    mutating func advance() -> (x: Double, y: Double) {
+    mutating func advance() -> (x: Int64, y: Int64) {
         (x.advance(transition: transition), y.advance(transition: transition))
     }
 
-    var isSettled: Bool {
-        max(abs(x.remaining), abs(y.remaining)) <= Self.deadZone
-            && max(abs(x.filtered), abs(y.filtered)) <= Self.deadZone
-    }
+    var isSettled: Bool { x.isSettled && y.isSettled }
 }

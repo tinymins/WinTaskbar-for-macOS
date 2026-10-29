@@ -1026,8 +1026,10 @@
 	<string>Wheel behavior</string>
 	<key>Smooth mouse scrolling</key>
 	<string>Smooth mouse scrolling</string>
-	<key>Scroll speed</key>
-	<string>Scroll speed</string>
+	<key>Fast scrolling multiplier</key>
+	<string>Fast scrolling multiplier</string>
+	<key>Slow scrolling moves one line at a time. Faster consecutive scrolling accelerates up to this multiplier.</key>
+	<string>Slow scrolling moves one line at a time. Faster consecutive scrolling accelerates up to this multiplier.</string>
 	<key>Reverse vertical scrolling</key>
 	<string>Reverse vertical scrolling</string>
 	<key>Reverse horizontal scrolling</key>
@@ -1046,8 +1048,6 @@
 	<string>Excluded apps receive unmodified scrolling. This list applies to the app being scrolled, not to the source of a remote-control connection.</string>
 	<key>Add application…</key>
 	<string>Add application…</string>
-	<key>Minimum scroll step</key>
-	<string>Minimum scroll step</string>
 	<key>Scroll response</key>
 	<string>Scroll response</string>
 	<key>A larger response value gives a softer, longer transition. It is a response scale, not a duration in seconds.</key>
