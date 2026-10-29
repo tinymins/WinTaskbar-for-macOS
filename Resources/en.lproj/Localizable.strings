@@ -1028,8 +1028,8 @@
 	<string>Smooth mouse scrolling</string>
 	<key>Fast scrolling multiplier</key>
 	<string>Fast scrolling multiplier</string>
-	<key>Slow scrolling moves one line at a time. Faster consecutive scrolling accelerates up to this multiplier.</key>
-	<string>Slow scrolling moves one line at a time. Faster consecutive scrolling accelerates up to this multiplier.</string>
+	<key>Slow scrolling moves one line at a time. Fast scrolling preserves system acceleration and applies this multiplier.</key>
+	<string>Slow scrolling moves one line at a time. Fast scrolling preserves system acceleration and applies this multiplier.</string>
 	<key>Reverse vertical scrolling</key>
 	<string>Reverse vertical scrolling</string>
 	<key>Reverse horizontal scrolling</key>

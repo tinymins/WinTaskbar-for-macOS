@@ -172,9 +172,8 @@ final class MouseEnhancementService: ObservableObject {
             cancelAnimation()
             return false
         }
-        let y = scrollDelta(event, axis: 1)
-        let x = scrollDelta(event, axis: 2)
-        guard x.isFinite, y.isFinite, abs(x) + abs(y) > 0,
+        guard let y = scrollLines(event, axis: 1), let x = scrollLines(event, axis: 2),
+              x.isFinite, y.isFinite, abs(x) + abs(y) > 0,
               abs(x) < 100_000, abs(y) < 100_000 else {
             cancelAnimation()
             return false
@@ -193,12 +192,15 @@ final class MouseEnhancementService: ObservableObject {
 
     private func cancelAnimation() { renderer.cancel() }
 
-    private func scrollDelta(_ event: CGEvent, axis: Int) -> Double {
-        let point = event.getDoubleValueField(axis == 1 ? .scrollWheelEventPointDeltaAxis1 : .scrollWheelEventPointDeltaAxis2)
-        if point != 0 { return point }
+    private func scrollLines(_ event: CGEvent, axis: Int) -> Double? {
         let fixed = event.getDoubleValueField(axis == 1 ? .scrollWheelEventFixedPtDeltaAxis1 : .scrollWheelEventFixedPtDeltaAxis2)
         if fixed != 0 { return fixed }
-        return Double(event.getIntegerValueField(axis == 1 ? .scrollWheelEventDeltaAxis1 : .scrollWheelEventDeltaAxis2))
+        let lines = event.getIntegerValueField(axis == 1 ? .scrollWheelEventDeltaAxis1 : .scrollWheelEventDeltaAxis2)
+        if lines != 0 { return Double(lines) }
+        // Pixel-only input has no known line distance. Preserve the whole event
+        // rather than guessing a conversion or discarding one of its axes.
+        let point = event.getDoubleValueField(axis == 1 ? .scrollWheelEventPointDeltaAxis1 : .scrollWheelEventPointDeltaAxis2)
+        return point == 0 ? 0 : nil
     }
 
     private func reverse(_ event: CGEvent, axis: Int) {

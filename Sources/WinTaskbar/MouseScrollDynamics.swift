@@ -1,7 +1,7 @@
 import Foundation
 
-/// Each discrete wheel event contributes one native line. Only the additional
-/// distance from rapid input is smoothed; complete line budgets are never lost.
+/// Slow input contributes one native line. Rapid input preserves the native
+/// distance and applies acceleration; only additional line budgets are smoothed.
 struct MouseScrollDynamics: Sendable {
     struct Axis: Sendable {
         private var direction: Int64 = 0
@@ -21,21 +21,22 @@ struct MouseScrollDynamics: Sendable {
             let newDirection: Int64 = input > 0 ? 1 : -1
             if direction != newDirection { self = Axis() }
             let interval = previousTime.map { time - $0 }
-            let gain: Double
+            let distance: Double
             if let interval, interval > 0, interval < Self.slowInterval {
                 let activity = min(1, (Self.slowInterval - interval)
                     / (Self.slowInterval - Self.fastestInterval))
-                gain = 1 + (speed - 1) * activity
+                let gain = 1 + (speed - 1) * activity
+                distance = max(1, abs(input)) * gain
             } else {
                 accelerationRemainder = 0
-                gain = 1
+                distance = 1
             }
             direction = newDirection
             previousTime = time
             immediateLines += 1
             // Quantize acceleration once per input burst, never once per frame.
             // Allow floating-point noise at a complete-line boundary.
-            let additional = accelerationRemainder + gain - 1
+            let additional = accelerationRemainder + distance - 1
             let lines = Int64((additional + 1e-9).rounded(.down))
             accelerationRemainder = max(0, additional - Double(lines))
             pendingLines += lines

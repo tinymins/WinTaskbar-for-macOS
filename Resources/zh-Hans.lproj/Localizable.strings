@@ -1642,8 +1642,8 @@
 	<string>平滑鼠标滚动</string>
 	<key>Fast scrolling multiplier</key>
 	<string>快速滚动倍率</string>
-	<key>Slow scrolling moves one line at a time. Faster consecutive scrolling accelerates up to this multiplier.</key>
-	<string>慢速滚动每次一行；连续快速滚动时加速，最高达到此倍率。</string>
+	<key>Slow scrolling moves one line at a time. Fast scrolling preserves system acceleration and applies this multiplier.</key>
+	<string>慢速滚动每次一行；快速滚动保留系统加速，再应用此倍率。</string>
 	<key>Reverse vertical scrolling</key>
 	<string>反转垂直滚动</string>
 	<key>Reverse horizontal scrolling</key>
