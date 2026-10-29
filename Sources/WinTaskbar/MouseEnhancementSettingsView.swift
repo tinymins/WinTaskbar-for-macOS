@@ -32,12 +32,12 @@ struct MouseEnhancementSettingsView: View {
                 Toggle("Smooth mouse scrolling", isOn: $preferences.mouseEnhancement.smoothScrolling)
                 Group {
                     HStack {
-                        Text("Fast scrolling multiplier")
+                        Text("Fast scrolling multiplier limit")
                         Slider(value: sliderBinding($preferences.mouseEnhancement.speed, bounds: 1...10), in: 1...10)
-                        MouseScrollTuningField(value: $preferences.mouseEnhancement.speed, bounds: 1...10, label: "Fast scrolling multiplier")
+                        MouseScrollTuningField(value: $preferences.mouseEnhancement.speed, bounds: 1...10, label: "Fast scrolling multiplier limit")
                         Text("×")
                     }
-                    Text("Slow scrolling moves one line at a time. Fast scrolling preserves system acceleration and applies this multiplier.")
+                    Text("Slow scrolling moves one line at a time. The first quick flick uses 1×; consecutive flicks add 0.25× each, up to this limit. A 0.8-second pause or a direction change resets acceleration.")
                         .font(.caption).foregroundStyle(.secondary)
                     HStack {
                         Text("Scroll response")

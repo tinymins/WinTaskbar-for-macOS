@@ -1,11 +1,14 @@
 import Foundation
 
 /// Slow input contributes one native line. Rapid input preserves the native
-/// distance and applies acceleration; only additional line budgets are smoothed.
+/// distance, with acceleration increasing between flicks, never within one flick.
 struct MouseScrollDynamics: Sendable {
     struct Axis: Sendable {
         private var direction: Int64 = 0
         private var previousTime: Double?
+        private var nextRoundGain = 1.0
+        private var roundGain: Double?
+        private var firstRoundDistance = 1.0
         private var accelerationRemainder = 0.0
         private var immediateLines: Int64 = 0
         private var pendingLines: Int64 = 0
@@ -13,22 +16,38 @@ struct MouseScrollDynamics: Sendable {
         private var filtered = 0.0
         private var outputRemainder = 0.0
 
-        private static let slowInterval = 0.2
-        private static let fastestInterval = 0.04
+        private static let roundInterval = 0.12
+        private static let cooldown = 0.8
 
         mutating func add(_ input: Double, at time: Double, speed: Double) {
             guard input != 0 else { return }
             let newDirection: Int64 = input > 0 ? 1 : -1
             if direction != newDirection { self = Axis() }
-            let interval = previousTime.map { time - $0 }
-            let distance: Double
-            if let interval, interval > 0, interval < Self.slowInterval {
-                let activity = min(1, (Self.slowInterval - interval)
-                    / (Self.slowInterval - Self.fastestInterval))
-                let gain = 1 + (speed - 1) * activity
-                distance = max(1, abs(input)) * gain
-            } else {
+            let interval = previousTime.map { time - $0 } ?? .infinity
+            // Event timestamps are converted from nanoseconds to Double.
+            let boundaryInterval = interval + 1e-9
+            if interval <= 0 || boundaryInterval >= Self.cooldown {
+                nextRoundGain = 1
+                roundGain = nil
                 accelerationRemainder = 0
+            }
+            let nativeDistance = max(1, abs(input))
+            let distance: Double
+            if interval > 0, boundaryInterval < Self.roundInterval {
+                if let roundGain {
+                    distance = nativeDistance * roundGain
+                } else {
+                    let gain = min(speed, nextRoundGain)
+                    roundGain = gain
+                    nextRoundGain = min(speed, gain + 0.25)
+                    // The second event confirms a quick flick. Credit its first
+                    // event too, subtracting the baseline line already emitted.
+                    distance = firstRoundDistance * gain - 1 + nativeDistance * gain
+                    firstRoundDistance = 1
+                }
+            } else {
+                roundGain = nil
+                firstRoundDistance = nativeDistance
                 distance = 1
             }
             direction = newDirection
