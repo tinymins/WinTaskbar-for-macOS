@@ -72,10 +72,25 @@ private final class MouseScrollRenderState: @unchecked Sendable {
         if max(abs(output.x), abs(output.y)) > MouseScrollDynamics.deadZone {
             // Match the integer pixel contract: truncate fractional output and
             // discard sub-threshold tails, without a forced final-distance flush.
+            guard let pixelFrame = CGEvent(
+                scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2,
+                wheel1: Int32(clamping: Int64(output.y)),
+                wheel2: Int32(clamping: Int64(output.x)), wheel3: 0
+            ) else {
+                clearLocked()
+                return generation
+            }
             frame.setSource(source)
             frame.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
-            frame.setIntegerValueField(.scrollWheelEventPointDeltaAxis1, value: Int64(output.y))
-            frame.setIntegerValueField(.scrollWheelEventPointDeltaAxis2, value: Int64(output.x))
+            // Keep every delta representation consistent with this frame. Copy
+            // line fields first because writing them also updates fixed/point fields.
+            for field: CGEventField in [
+                .scrollWheelEventDeltaAxis1, .scrollWheelEventDeltaAxis2,
+                .scrollWheelEventFixedPtDeltaAxis1, .scrollWheelEventFixedPtDeltaAxis2,
+                .scrollWheelEventPointDeltaAxis1, .scrollWheelEventPointDeltaAxis2
+            ] {
+                frame.setDoubleValueField(field, value: pixelFrame.getDoubleValueField(field))
+            }
             frame.timestamp = DispatchTime.now().uptimeNanoseconds
             frame.postToPid(targetPID)
         }
