@@ -22,36 +22,44 @@ struct WindowActivationOrder {
 
     mutating func reconcile(
         availableWindowIDs: [CGWindowID],
-        fallbackWindowIDs: [CGWindowID]
+        liveWindowIDs: Set<CGWindowID>?
     ) -> [CGWindowID] {
+        // An unselected tab can leave the candidate list while its window stays alive.
+        if let liveWindowIDs {
+            windowIDs.removeAll { !liveWindowIDs.contains($0) }
+        }
         let available = Set(availableWindowIDs)
-        windowIDs.removeAll { !available.contains($0) }
         var included = Set(windowIDs)
-        for windowID in fallbackWindowIDs + availableWindowIDs where included.insert(windowID).inserted {
+        for windowID in availableWindowIDs where included.insert(windowID).inserted {
             windowIDs.append(windowID)
         }
-        return windowIDs
+        return windowIDs.filter(available.contains)
     }
 }
 
-private let focusedWindowChangedCallback: AXObserverCallback = { _, element, _, context in
+private let windowNotificationCallback: AXObserverCallback = { _, element, notification, context in
     guard let context else { return }
     let history = Unmanaged<WindowActivationHistory>.fromOpaque(context).takeUnretainedValue()
     var pid: pid_t = 0
     guard AXUIElementGetPid(element, &pid) == .success else { return }
+    let notification = notification as String
+    let windowID: CGWindowID?
+    switch notification {
+    case kAXFocusedWindowChangedNotification, kAXMainWindowChangedNotification:
+        AXUIElementSetMessagingTimeout(element, 0.1)
+        windowID = AccessibilityWindowIdentity.windowID(of: element)
+    default:
+        windowID = nil
+    }
     MainActor.assumeIsolated {
-        history.recordFocusedWindow(forPID: pid)
+        history.handleWindowNotification(notification, windowID: windowID, forPID: pid)
     }
 }
 
-private let windowCreatedCallback: AXObserverCallback = { _, element, _, context in
-    guard let context else { return }
-    let history = Unmanaged<WindowActivationHistory>.fromOpaque(context).takeUnretainedValue()
-    var pid: pid_t = 0
-    guard AXUIElementGetPid(element, &pid) == .success else { return }
-    MainActor.assumeIsolated {
-        history.onWindowCreated?(pid)
-    }
+struct FocusedAccessibilityWindow {
+    let ownerPID: pid_t
+    let windowID: CGWindowID
+    let element: AXUIElement
 }
 
 @MainActor
@@ -68,7 +76,7 @@ final class WindowActivationHistory {
     private var isStarted = false
     private var focusedWindowCaptureTask: Task<Void, Never>?
     private var focusedWindowCaptureGeneration = 0
-    var onWindowCreated: ((pid_t) -> Void)?
+    var onWindowChanged: ((pid_t) -> Void)?
 
     init(workspace: NSWorkspace = .shared) {
         self.workspace = workspace
@@ -133,41 +141,59 @@ final class WindowActivationHistory {
         workspaceObservers.removeAll()
     }
 
-    func currentFocusedWindowID() -> CGWindowID? {
+    func captureCurrentFocusedWindow() -> FocusedAccessibilityWindow? {
+        guard let pid = workspace.frontmostApplication?.processIdentifier,
+              let window = Self.focusedWindow(forPID: pid),
+              workspace.frontmostApplication?.processIdentifier == pid else { return nil }
         focusedWindowCaptureTask?.cancel()
         focusedWindowCaptureTask = nil
         focusedWindowCaptureGeneration &+= 1
-        guard let pid = workspace.frontmostApplication?.processIdentifier,
-              let windowID = Self.focusedWindowID(forPID: pid),
-              workspace.frontmostApplication?.processIdentifier == pid else { return nil }
-        return windowID
+        activationOrder.record(window.windowID)
+        return window
     }
 
     func orderedWindows(
         from frontToBackWindows: [WindowInfo],
-        focusedWindowID: CGWindowID?
+        liveWindowIDs: Set<CGWindowID>?
     ) -> [WindowInfo] {
-        if let focusedWindowID,
-           frontToBackWindows.contains(where: { $0.windowID == focusedWindowID }) {
-            activationOrder.record(focusedWindowID)
-        }
         let windowIDs = frontToBackWindows.map(\.windowID)
         let orderedIDs = activationOrder.reconcile(
             availableWindowIDs: windowIDs,
-            fallbackWindowIDs: windowIDs
+            liveWindowIDs: liveWindowIDs
         )
         let windowsByID = Dictionary(uniqueKeysWithValues: frontToBackWindows.map { ($0.windowID, $0) })
         return orderedIDs.compactMap { windowsByID[$0] }
     }
 
-    fileprivate func recordFocusedWindow(forPID pid: pid_t) {
+    fileprivate func handleWindowNotification(
+        _ notification: String,
+        windowID: CGWindowID?,
+        forPID pid: pid_t
+    ) {
+        switch notification {
+        case kAXWindowCreatedNotification:
+            onWindowChanged?(pid)
+        case kAXFocusedWindowChangedNotification, kAXMainWindowChangedNotification:
+            recordFocusedWindow(forPID: pid, windowID: windowID)
+            onWindowChanged?(pid)
+        default:
+            break
+        }
+    }
+
+    private func recordFocusedWindow(forPID pid: pid_t, windowID: CGWindowID? = nil) {
         guard workspace.frontmostApplication?.processIdentifier == pid else { return }
         focusedWindowCaptureGeneration &+= 1
         let generation = focusedWindowCaptureGeneration
         focusedWindowCaptureTask?.cancel()
+        if let windowID {
+            focusedWindowCaptureTask = nil
+            activationOrder.record(windowID)
+            return
+        }
         focusedWindowCaptureTask = Task { [weak self] in
             let windowID = await Task.detached(priority: .userInitiated) {
-                Self.focusedWindowID(forPID: pid)
+                Self.focusedWindow(forPID: pid)?.windowID
             }.value
             guard let self else { return }
             defer {
@@ -181,7 +207,7 @@ final class WindowActivationHistory {
         }
     }
 
-    private nonisolated static func focusedWindowID(forPID pid: pid_t) -> CGWindowID? {
+    private nonisolated static func focusedWindow(forPID pid: pid_t) -> FocusedAccessibilityWindow? {
         let application = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(application, 0.1)
         var value: CFTypeRef?
@@ -194,7 +220,8 @@ final class WindowActivationHistory {
         CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
         let window = value as! AXUIElement
         AXUIElementSetMessagingTimeout(window, 0.1)
-        return AccessibilityWindowIdentity.windowID(of: window)
+        guard let windowID = AccessibilityWindowIdentity.windowID(of: window) else { return nil }
+        return FocusedAccessibilityWindow(ownerPID: pid, windowID: windowID, element: window)
     }
 
     private func eligibleApplications() -> [NSRunningApplication] {
@@ -214,23 +241,25 @@ final class WindowActivationHistory {
               ),
               observations[pid] == nil else { return }
         var observer: AXObserver?
-        guard AXObserverCreate(pid, focusedWindowChangedCallback, &observer) == .success,
+        guard AXObserverCreate(pid, windowNotificationCallback, &observer) == .success,
               let observer else { return }
         let applicationElement = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(applicationElement, 0.1)
         let context = Unmanaged.passUnretained(self).toOpaque()
-        guard AXObserverAddNotification(
-            observer,
-            applicationElement,
-            kAXFocusedWindowChangedNotification as CFString,
-            context
-        ) == .success else { return }
-        _ = AXObserverAddNotification(
-            observer,
-            applicationElement,
-            kAXWindowCreatedNotification as CFString,
-            context
-        )
+        let notifications = [
+            kAXFocusedWindowChangedNotification,
+            kAXMainWindowChangedNotification,
+            kAXWindowCreatedNotification,
+        ]
+        var registered = false
+        for notification in notifications {
+            if AXObserverAddNotification(
+                observer, applicationElement, notification as CFString, context
+            ) == .success {
+                registered = true
+            }
+        }
+        guard registered else { return }
         let source = AXObserverGetRunLoopSource(observer)
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         observations[pid] = Observation(observer: observer, source: source)
@@ -748,14 +777,14 @@ final class WindowSwitcherPanelController {
             )
         }
         let applicationPIDs = applications.map(\.processIdentifier)
+        let focusedWindow = activationHistory.captureCurrentFocusedWindow()
         let cachedFilter = windowsService.switcherWindowSnapshot(
-            forPIDs: applicationPIDs
+            forPIDs: applicationPIDs, focusedWindow: focusedWindow
         )
         needsWindowCacheRefresh = cachedFilter.hasUnclassifiedWindows
-        let focusedWindowID = activationHistory.currentFocusedWindowID()
         windows = activationHistory.orderedWindows(
             from: cachedFilter.windows,
-            focusedWindowID: focusedWindowID
+            liveWindowIDs: cachedFilter.liveWindowIDs
         )
         guard !windows.isEmpty else {
             dismiss()
@@ -764,7 +793,7 @@ final class WindowSwitcherPanelController {
         }
         selectedIndex = WindowSwitcherSelection.initialIndex(
             windowIDs: windows.map(\.windowID),
-            focusedWindowID: focusedWindowID,
+            focusedWindowID: focusedWindow?.windowID,
             reverse: reverse
         )
         updateSelection(disablesAnimations: true)

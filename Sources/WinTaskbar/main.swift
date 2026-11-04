@@ -97,7 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         globalHotkeysService.onAltTabGesture = { [weak self] action in
             self?.windowSwitcherController.handle(action)
         }
-        windowActivationHistory.onWindowCreated = { [weak self] pid in
+        windowActivationHistory.onWindowChanged = { [weak self] pid in
             self?.windowSwitcherController.refreshWindowClassification(forPID: pid)
         }
         actions.showDesktopHandler = { [weak self] in self?.showDesktopService.toggle() }
@@ -3105,8 +3105,8 @@ func runSelfTest() async -> Int32 {
             keyLabel: "⇥"
           ) == .suppress,
           windowActivationOrder.reconcile(
-              availableWindowIDs: [101, 202, 303],
-              fallbackWindowIDs: [202, 101, 303]
+              availableWindowIDs: [202, 101, 303],
+              liveWindowIDs: [101, 202, 303]
           ) == [202, 101, 303] else {
         fputs("SELF-TEST FAILED: held-key switcher gesture or initial MRU order mismatch\n", stderr)
         return 1
@@ -3128,12 +3128,12 @@ func runSelfTest() async -> Int32 {
     )
     let switcherVisibleFrame = CGRect(x: 100, y: 50, width: 1_200, height: 800)
     guard windowActivationOrder.reconcile(
-        availableWindowIDs: [101, 202, 303],
-        fallbackWindowIDs: [202, 101, 303]
+        availableWindowIDs: [202, 101, 303],
+        liveWindowIDs: [101, 202, 303]
     ) == [101, 202, 303],
     windowActivationOrder.reconcile(
-        availableWindowIDs: [202, 303, 404],
-        fallbackWindowIDs: [404, 202, 303]
+        availableWindowIDs: [404, 202, 303],
+        liveWindowIDs: [202, 303, 404]
     ) == [202, 303, 404],
     WindowSwitcherSelection.indexAfterRemoving(
         removedIndex: 0,
