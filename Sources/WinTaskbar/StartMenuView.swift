@@ -211,7 +211,6 @@ struct StartMenuView: View {
             powerMenu
         }
         .padding(.top, 10)
-        .padding(.bottom, 5)
         .frame(width: 52)
         .frame(maxHeight: .infinity)
     }
@@ -224,14 +223,14 @@ struct StartMenuView: View {
             powerMenuButton(.shutDown, systemName: "power")
             powerMenuButton(.restart, systemName: "arrow.counterclockwise")
         } label: {
-            HoveringIconLabel(systemName: "power", width: 50, height: 40)
+            HoveringIconLabel(systemName: "power", width: 44, height: 44)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .help("Power")
         .accessibilityLabel("Power")
-        .padding(.bottom, 8)
+        .padding(4)
     }
 
     private func powerMenuButton(_ action: PowerAction, systemName: String) -> some View {
