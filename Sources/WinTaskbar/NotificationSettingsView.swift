@@ -11,6 +11,7 @@ struct NotificationSettingsView: View {
     @State private var editingFallback = false
     @State private var expandedOutput: NotificationOutputKind?
     @State private var settingsOpenFailed = false
+    @StateObject private var numericEditing = NotificationNumericEditingScope()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -62,14 +63,20 @@ struct NotificationSettingsView: View {
                             Button { moveRule(rule.id, offset: 1) } label: { Image(systemName: "arrow.down") }
                                 .disabled(preferences.notifications.rules.last?.id == rule.id).help("Move rule down")
                                 .accessibilityLabel("Move rule down")
-                            Button("Edit") { editingRule = rule }
+                            Button("Edit") {
+                                numericEditing.commitPending()
+                                editingRule = rule
+                            }
                             Button {
                                 preferences.notifications.rules.removeAll { $0.id == rule.id }
                             } label: { Image(systemName: "trash") }
                                 .help("Delete rule")
                         }.padding(.vertical, 4)
                     }
-                    Button("Add capture rule") { editingRule = NotificationCaptureRule() }
+                    Button("Add capture rule") {
+                        numericEditing.commitPending()
+                        editingRule = NotificationCaptureRule()
+                    }
                     Divider()
                     Label("Default rule (fallback)", systemImage: "arrow.turn.down.right")
                         .font(.body.weight(.semibold))
@@ -78,8 +85,14 @@ struct NotificationSettingsView: View {
                     Text("Always applies when no rule matches. It stays last and cannot be disabled or deleted.")
                         .font(.caption).foregroundStyle(.secondary)
                     HStack {
-                        Button("Edit fallback") { editingFallback = true }
-                        Button("Preview fallback") { service.showPreview() }
+                        Button("Edit fallback") {
+                            numericEditing.commitPending()
+                            editingFallback = true
+                        }
+                        Button("Preview fallback") {
+                            numericEditing.commitPending()
+                            service.showPreview()
+                        }
                     }
                     Text("Preview shows only WinTaskbar output and never closes a real system notification.")
                         .font(.caption).foregroundStyle(.secondary)
@@ -95,7 +108,10 @@ struct NotificationSettingsView: View {
                                     kind: kind, settings: defaultSettingsBinding(kind)
                                 )
                                 outputPlacement(kind)
-                                Button("Preview this output") { service.showOutputPreview(kind) }
+                                Button("Preview this output") {
+                                    numericEditing.commitPending()
+                                    service.showOutputPreview(kind)
+                                }
                             }
                             .padding(.top, 10)
                             .padding(.leading, 18)
@@ -123,6 +139,7 @@ struct NotificationSettingsView: View {
                     Text("Drag the sample overlays to place them. The important-message frame appears here even when its list is empty.")
                         .font(.caption).foregroundStyle(.secondary)
                     Button(service.isLayoutEditing ? "Finish layout editing" : "Edit layout") {
+                        numericEditing.commitPending()
                         if service.isLayoutEditing {
                             service.endLayoutEditing()
                         } else {
@@ -153,11 +170,15 @@ struct NotificationSettingsView: View {
             .disabled(!preferences.notifications.enabled)
             .opacity(preferences.notifications.enabled ? 1 : 0.5)
         }
+        .environment(\.notificationNumericEditingScope, numericEditing)
         .onAppear { permissions.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             permissions.refresh()
         }
-        .onDisappear { service.endLayoutEditing() }
+        .onDisappear {
+            numericEditing.commitPending()
+            service.endLayoutEditing()
+        }
         .onChange(of: preferences.notifications.enabled) { enabled in
             if !enabled {
                 editingRule = nil
@@ -226,7 +247,10 @@ struct NotificationSettingsView: View {
     private func expansionBinding(_ kind: NotificationOutputKind) -> Binding<Bool> {
         Binding(
             get: { expandedOutput == kind },
-            set: { expandedOutput = $0 ? kind : nil }
+            set: {
+                numericEditing.commitPending()
+                expandedOutput = $0 ? kind : nil
+            }
         )
     }
 
@@ -308,6 +332,7 @@ private struct NotificationRuleEditor: View {
     @ObservedObject var service: SystemNotificationService
     let onSave: (NotificationCaptureRule) -> Void
     let onCancel: () -> Void
+    @StateObject private var numericEditing = NotificationNumericEditingScope()
 
     var body: some View {
         NotificationEditorSheet {
@@ -331,16 +356,23 @@ private struct NotificationRuleEditor: View {
             }
         } actions: {
                 HStack {
-                    Button("Preview rule outputs") { service.showPreview(outputs: rule.outputs) }
+                    Button("Preview rule outputs") {
+                        numericEditing.commitPending()
+                        service.showPreview(outputs: rule.outputs)
+                    }
                 Spacer()
                 Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
-                Button("Save") { onSave(rule) }
+                Button("Save") {
+                        numericEditing.commitPending()
+                        onSave(rule)
+                    }
                     .keyboardShortcut(.defaultAction)
                         .disabled(rule.isEmpty || rule.patternError != nil || rule.outputs.countdownPatternError(defaults: defaults) != nil)
                 }
                 Text("Preview shows only WinTaskbar output and never closes a real system notification.")
                     .font(.caption).foregroundStyle(.secondary)
         }
+        .environment(\.notificationNumericEditingScope, numericEditing)
         .onAppear { apps.reloadInstalledApps() }
     }
 
@@ -370,6 +402,7 @@ private struct NotificationFallbackEditor: View {
     @ObservedObject var service: SystemNotificationService
     let onSave: (NotificationOutputs) -> Void
     let onCancel: () -> Void
+    @StateObject private var numericEditing = NotificationNumericEditingScope()
 
     var body: some View {
         NotificationEditorSheet {
@@ -381,16 +414,23 @@ private struct NotificationFallbackEditor: View {
             }
         } actions: {
                 HStack {
-                    Button("Preview fallback") { service.showPreview(outputs: outputs) }
+                    Button("Preview fallback") {
+                        numericEditing.commitPending()
+                        service.showPreview(outputs: outputs)
+                    }
                 Spacer()
                 Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
-                Button("Save") { onSave(outputs) }
+                Button("Save") {
+                        numericEditing.commitPending()
+                        onSave(outputs)
+                    }
                     .keyboardShortcut(.defaultAction)
                         .disabled(outputs.countdownPatternError(defaults: defaults) != nil)
                 }
                 Text("Preview shows only WinTaskbar output and never closes a real system notification.")
                     .font(.caption).foregroundStyle(.secondary)
         }
+        .environment(\.notificationNumericEditingScope, numericEditing)
     }
 }
 
@@ -571,11 +611,10 @@ private struct NotificationChannelSettingsEditor: View {
                     HStack {
                         Text("Card display time (seconds)")
                         Spacer()
-                        TextField("Seconds", value: $settings.card.seconds, format: .number)
-                            .textFieldStyle(.roundedBorder).frame(width: 70)
-                            .onChange(of: settings.card.seconds) { value in
-                                settings.card.seconds = min(3600, max(1, value))
-                            }
+                        NotificationNumericField("Seconds", value: $settings.card.seconds,
+                                                 format: { $0.formatted(.number.grouping(.never)) },
+                                                 parse: { NotificationNumericText.integer($0, bounds: 1...3600) })
+                            .frame(width: 70)
                     }
                 }
             }
@@ -589,14 +628,11 @@ private struct NotificationChannelSettingsEditor: View {
                 NotificationEffectDurationSetting(seconds: $settings.durationSeconds)
             }
             if kind == .glow {
-                HStack {
-                    Text("Flash count").frame(width: 180, alignment: .leading)
-                    Slider(value: flashCountSliderBinding, in: 1...5, step: 1)
-                        .accessibilityLabel("Flash count")
-                    TextField("Flash count", value: flashCountBinding, format: .number)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 68)
-                }
+                NotificationNumericSetting("Flash count", value: flashCountBinding,
+                                           sliderRange: 1...5, step: 1,
+                                           toSlider: { Double($0) }, fromSlider: { Int($0) },
+                                           format: { $0.formatted(.number.grouping(.never)) },
+                                           parse: { NotificationNumericText.integer($0, bounds: 1...Int.max) })
                 Text("Flashes finish within the effect duration. With Reduce Motion enabled, one gentle glow is shown instead.")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -634,13 +670,6 @@ private struct NotificationChannelSettingsEditor: View {
         Binding(
             get: { settings.effectiveGlowFlashCount },
             set: { settings.glowFlashCount = max(1, $0) }
-        )
-    }
-
-    private var flashCountSliderBinding: Binding<Double> {
-        Binding(
-            get: { Double(min(5, settings.effectiveGlowFlashCount)) },
-            set: { settings.glowFlashCount = Int($0) }
         )
     }
 
@@ -744,26 +773,10 @@ private struct NotificationPositionSettings: View {
 private struct NotificationEffectDurationSetting: View {
     @Binding var seconds: Double
 
-    private var sliderValue: Binding<Double> {
-        Binding(
-            get: { min(5, max(0.5, seconds)) },
-            set: { seconds = ($0 * 100).rounded() / 100 }
-        )
-    }
-
     var body: some View {
-        HStack {
-            Text("Effect duration").frame(width: 180, alignment: .leading)
-            Slider(value: sliderValue, in: 0.5...5, step: 0.01)
-            TextField("Value", value: $seconds, format: .number.precision(.fractionLength(2)))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 68)
-                .onChange(of: seconds) { newValue in
-                    seconds = newValue.isFinite ? max(0.5, newValue) : 0.5
-                }
-            Text("\(seconds.formatted(.number.precision(.fractionLength(2))))\(NSLocalizedString("s", comment: ""))")
-                .monospacedDigit().frame(width: 58, alignment: .trailing)
-        }
+        NotificationNumberSetting("Effect duration", value: $seconds, range: 0.5...5, suffix: "s",
+                                  inputRange: 0.5...Double.greatestFiniteMagnitude, step: 0.01,
+                                  fractionDigits: 2)
     }
 }
 
@@ -773,30 +786,41 @@ private struct NotificationNumberSetting: View {
     let range: ClosedRange<Double>
     let suffix: String
     var scale: Double = 1
+    var inputRange: ClosedRange<Double>?
+    var step: Double?
+    var fractionDigits: Int?
 
     init(_ title: LocalizedStringKey, value: Binding<Double>, range: ClosedRange<Double>,
-         suffix: String, scale: Double = 1) {
+         suffix: String, scale: Double = 1, inputRange: ClosedRange<Double>? = nil,
+         step: Double? = nil, fractionDigits: Int? = nil) {
         self.title = title
         _value = value
         self.range = range
         self.suffix = suffix
         self.scale = scale
+        self.inputRange = inputRange
+        self.step = step
+        self.fractionDigits = fractionDigits
     }
 
     var body: some View {
-        HStack {
-            Text(title).frame(width: 180, alignment: .leading)
-            Slider(value: $value, in: range)
-            if scale == 1 {
-                TextField("Value", value: $value, format: .number)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 68)
-                    .onChange(of: value) { newValue in
-                        value = newValue.isFinite ? min(range.upperBound, max(range.lowerBound, newValue)) : range.lowerBound
-                    }
-            }
-            Text("\(Int((value * scale).rounded()))\(NSLocalizedString(suffix, comment: ""))")
-                .monospacedDigit().frame(width: 58, alignment: .trailing)
+        NotificationNumericSetting(title, value: $value, sliderRange: range, step: step,
+                                   showsField: scale == 1, toSlider: { $0 },
+                                   fromSlider: { fractionDigits == 2 ? ($0 * 100).rounded() / 100 : $0 },
+                                   format: format,
+                                   parse: { NotificationNumericText.double($0, bounds: inputRange ?? range) },
+                                   readout: { value in
+            let number = fractionDigits == nil
+                ? (value * scale).rounded().formatted(.number.precision(.fractionLength(0)).grouping(.never))
+                : format(value)
+            return number + NSLocalizedString(suffix, comment: "")
+        })
+    }
+
+    private func format(_ value: Double) -> String {
+        if let fractionDigits {
+            return value.formatted(.number.precision(.fractionLength(fractionDigits)).grouping(.never))
         }
+        return value.formatted(.number.grouping(.never))
     }
 }

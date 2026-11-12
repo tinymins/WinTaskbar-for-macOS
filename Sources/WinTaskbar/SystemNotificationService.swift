@@ -26,6 +26,7 @@ final class SystemNotificationService: ObservableObject {
 
     private let preferences: PreferencesStore
     private var configuration = NotificationPreferences()
+    private var hasConfiguration = false
     private var subscription: AnyCancellable?
     private let presenter = NotificationAlertPresenter()
     private var runtime = NotificationAlertRuntime()
@@ -71,6 +72,7 @@ final class SystemNotificationService: ObservableObject {
         observers.append(NotificationCenter.default.addObserver(
             forName: .systemNotificationAXChanged, object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.capture(queueIfBusy: true) } })
+        hasConfiguration = false
         subscription = preferences.$notifications.sink { [weak self] in self?.configure($0) }
         layoutSubscription = Publishers.CombineLatest4(
             preferences.$taskbarEnabled, preferences.$position, preferences.$barHeight, preferences.$theme
@@ -133,11 +135,18 @@ final class SystemNotificationService: ObservableObject {
     }
 
     private func configure(_ value: NotificationPreferences) {
-        let changedEnabled = configuration.enabled != value.enabled
+        let initial = !hasConfiguration
+        guard initial || configuration != value else { return }
+        let changedEnabled = initial || configuration.enabled != value.enabled
         let changedRules = configuration.rules != value.rules || configuration.fallback != value.fallback
             || configuration.outputDefaults != value.outputDefaults
+        let changedPresentation = initial || configuration.presentation != value.presentation
+        let changedCardPlacement = initial
+            || configuration.presentation.alwaysOnTop != value.presentation.alwaysOnTop
+            || configuration.presentation.showInFullscreen != value.presentation.showInFullscreen
         configuration = value
-        captureWorker.setBannerHidingEnabled(value.enabled && !suspended)
+        hasConfiguration = true
+        if changedEnabled { captureWorker.setBannerHidingEnabled(value.enabled && !suspended) }
         if changedEnabled || changedRules {
             captureWorker.restoreBanners()
             generation = UUID()
@@ -161,8 +170,8 @@ final class SystemNotificationService: ObservableObject {
             }
         }
         if changedEnabled { clearAllAlerts() }
-        presenter.configure(value.presentation)
-        if !value.enabled {
+        if changedPresentation { presenter.configure(value.presentation) }
+        if changedEnabled && !value.enabled {
             captureTimer?.invalidate()
             captureTimer = nil
             capturePending = false
@@ -170,7 +179,7 @@ final class SystemNotificationService: ObservableObject {
             generation = UUID()
             seen.removeAll()
             statusKey = "Notification capture is off."
-        } else if captureTimer == nil {
+        } else if value.enabled && captureTimer == nil {
             let timer = Timer(timeInterval: 0.75, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.capture() }
             }
@@ -178,7 +187,7 @@ final class SystemNotificationService: ObservableObject {
             RunLoop.main.add(timer, forMode: .common)
             capture()
         }
-        layout()
+        if changedEnabled || changedRules || changedCardPlacement { layout() }
     }
 
     private func capture(queueIfBusy: Bool = false) {
