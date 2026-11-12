@@ -224,9 +224,10 @@ struct StartMenuView: View {
             powerMenuButton(.shutDown, systemName: "power")
             powerMenuButton(.restart, systemName: "arrow.counterclockwise")
         } label: {
-            HoveringIconLabel(systemName: "power", width: 40, height: 30)
+            HoveringIconLabel(systemName: "power", width: 50, height: 40)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .help("Power")
         .accessibilityLabel("Power")
