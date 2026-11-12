@@ -2,6 +2,18 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.39] - 2026-11-12
+
+### Fixed
+
+- Fix freezing while dragging notification settings sliders, and prevent numeric fields in notification settings and rule editors from changing unfinished input. Apply current numeric input before Preview or Save.
+- Preserve Alt-Tab recent-window ordering when switching native window tabs, and refresh window classification when the focused or main window changes.
+- Give the Start menu power button a square hover and click area with even margins.
+
+### Changed
+
+- Start quick wheel flicks at 1× and add 0.25× per consecutive flick, keeping the multiplier constant within each flick and resetting after a 0.8-second pause or direction change. The speed control now sets the fast scrolling multiplier limit.
+
 ## [0.0.38] - 2026-10-29
 
 ### Fixed
