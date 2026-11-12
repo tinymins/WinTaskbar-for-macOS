@@ -2,6 +2,13 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.40] - 2026-11-12
+
+### Fixed
+
+- Close taskbar window previews when clicking elsewhere, typing, or switching applications, whether opened by hovering or clicking an app icon.
+- Cancel delayed preview opening and switching when dismissed, preventing previews from reappearing.
+
 ## [0.0.39] - 2026-11-12
 
 ### Fixed
