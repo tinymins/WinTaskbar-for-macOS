@@ -402,7 +402,9 @@ struct TaskbarView: View {
         Menu {
             ForEach(items) { item in
                 Button {
-                    windowActivator.activateOrMinimize(item, minimizeOnClick: preferences.minimizeOnTaskbarClick)
+                    Task { @MainActor in
+                        await windowActivator.activateOrMinimize(item, minimizeOnClick: preferences.minimizeOnTaskbarClick)
+                    }
                 } label: {
                     Label {
                         Text(item.name)
@@ -811,6 +813,7 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
     @State private var attentionPulse = false
     @State private var attentionTask: Task<Void, Never>?
     @State private var transitionAnchor: TaskbarTransitionAnchorView?
+    @State private var activationTask: Task<Void, Never>?
 
     static func == (lhs: TaskbarAppButton, rhs: TaskbarAppButton) -> Bool {
         lhs.item == rhs.item
@@ -831,11 +834,19 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
         Button {
             guard !isTaskbarReordering() else { return }
             dockBadges.acknowledge(item.bundleIdentifier)
-            if let pid = item.processIdentifier {
-                let windows = windowsService.windows(forPID: pid)
+            activationTask?.cancel()
+            let requestID = windowActivator.beginActivationRequest()
+            activationTask = Task { @MainActor in
+                let windows: [WindowInfo]
+                if let pid = item.processIdentifier {
+                    windows = await windowsService.windows(forPID: pid)
+                } else {
+                    windows = []
+                }
+                guard !Task.isCancelled, !isTaskbarReordering(),
+                      windowActivator.isCurrentActivationRequest(requestID) else { return }
                 if TaskbarAppPrimaryClickPolicy.showsPreviewsImmediately(
-                    windowCount: windows.count,
-                    previewsEnabled: preferences.windowPreviewsEnabled
+                    windowCount: windows.count, previewsEnabled: preferences.windowPreviewsEnabled
                 ) {
                     previewWindows = windows
                     taskbarJumpListController.dismiss()
@@ -843,10 +854,10 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
                     windowPreviewPanelController.pin(ownerID: previewOwnerID)
                     return
                 }
-            }
-            DispatchQueue.main.async {
-                windowActivator.activateOrMinimize(
+                await windowActivator.activateOrMinimize(
                     item,
+                    windows: windows,
+                    requestID: requestID,
                     minimizeOnClick: preferences.minimizeOnTaskbarClick,
                     targetFrame: transitionAnchor?.screenFrame,
                     reduceMotion: reduceMotion,
@@ -898,14 +909,21 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
             if !highlighted { stopAttentionPulse() }
         }
         .onDisappear {
+            activationTask?.cancel()
+            activationTask = nil
             stopAttentionPulse()
             windowPreviewPanelController.dismiss(ownerID: previewOwnerID)
             windowPeekController.hideImmediately()
         }
         .onHover(perform: handlePreviewHover)
-        .onChange(of: windowPreviewPanelController.activeOwnerID) { activeOwnerID in
-            guard activeOwnerID == previewOwnerID, let pid = item.processIdentifier else { return }
-            previewWindows = windowsService.windows(forPID: pid)
+        .task(id: windowPreviewPanelController.activeOwnerID == previewOwnerID ? item.processIdentifier : nil) {
+            guard windowPreviewPanelController.activeOwnerID == previewOwnerID,
+                  let pid = item.processIdentifier else { return }
+            if previewWindows.isEmpty { previewWindows = windowsService.cachedWindows(forPID: pid) }
+            let windows = await windowsService.windows(forPID: pid)
+            guard !Task.isCancelled,
+                  windowPreviewPanelController.activeOwnerID == previewOwnerID else { return }
+            previewWindows = windows
         }
         .background {
             ZStack {
@@ -973,64 +991,68 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
         windowPreviewPanelController.dismissAll()
         windowPeekController.hideImmediately()
 
-        let windows = item.processIdentifier.map(windowsService.windows(forPID:)) ?? []
+        activationTask?.cancel()
+        windowActivator.beginActivationRequest()
+        let windows = item.processIdentifier.map(windowsService.cachedWindows(forPID:)) ?? []
         let shortcuts = preferences.showShortcutsInMenu
             ? preferences.pinnedShortcuts[item.bundleIdentifier] ?? []
             : []
         let recent = preferences.showRecentInMenu
             ? recentDocuments.recentDocuments(forBundleID: item.bundleIdentifier)
             : []
-        let model = TaskbarJumpListModel(
-            shortcuts: shortcuts,
-            recentDocuments: recent,
-            isPinned: item.isPinned,
-            windowCount: windows.count
-        )
         let contentSize = TaskbarJumpListMetrics.contentSize(
             shortcutCount: shortcuts.count,
             recentCount: recent.count,
             isRunning: item.isRunning
         )
-        let rootView = TaskbarJumpListView(
-            item: item,
-            model: model,
-            onOpenApp: {
-                taskbarJumpListController.dismiss()
-                windowActivator.openNewWindow(item)
-            },
-            onOpenShortcut: { shortcut in
-                taskbarJumpListController.dismiss()
-                if let url = shortcut.url { NSWorkspace.shared.open(url) }
-            },
-            onOpenRecent: { document in
-                taskbarJumpListController.dismiss()
-                recentDocuments.open(document, with: item)
-            },
-            onManageShortcuts: {
-                taskbarJumpListController.dismiss()
-                shortcutEditorController.present(
-                    bundleID: item.bundleIdentifier,
-                    appName: item.name
-                )
-            },
-            onShowInFinder: {
-                taskbarJumpListController.dismiss()
-                apps.showInFinder(item)
-            },
-            onTogglePin: {
-                taskbarJumpListController.dismiss()
-                if item.isPinned { preferences.unpin(item.bundleIdentifier) }
-                else { preferences.pin(item.bundleIdentifier) }
-            },
-            onClose: {
-                taskbarJumpListController.dismiss()
-                for window in windows { windowActivator.close(window: window) }
-            },
-            onQuit: {
-                taskbarJumpListController.dismiss()
-                apps.quit(item)
-            }
-        )
+        let rootView = TaskbarJumpListWindowLoader(
+            pid: item.processIdentifier, service: windowsService, initialWindows: windows
+        ) { windows in
+            let model = TaskbarJumpListModel(
+                shortcuts: shortcuts, recentDocuments: recent, isPinned: item.isPinned, windowCount: windows.count
+            )
+            TaskbarJumpListView(
+                item: item,
+                model: model,
+                onOpenApp: {
+                    taskbarJumpListController.dismiss()
+                    windowActivator.openNewWindow(item)
+                },
+                onOpenShortcut: { shortcut in
+                    taskbarJumpListController.dismiss()
+                    if let url = shortcut.url { NSWorkspace.shared.open(url) }
+                },
+                onOpenRecent: { document in
+                    taskbarJumpListController.dismiss()
+                    recentDocuments.open(document, with: item)
+                },
+                onManageShortcuts: {
+                    taskbarJumpListController.dismiss()
+                    shortcutEditorController.present(
+                        bundleID: item.bundleIdentifier,
+                        appName: item.name
+                    )
+                },
+                onShowInFinder: {
+                    taskbarJumpListController.dismiss()
+                    apps.showInFinder(item)
+                },
+                onTogglePin: {
+                    taskbarJumpListController.dismiss()
+                    if item.isPinned { preferences.unpin(item.bundleIdentifier) }
+                    else { preferences.pin(item.bundleIdentifier) }
+                },
+                onClose: {
+                    taskbarJumpListController.dismiss()
+                    for window in windows { windowActivator.close(window: window) }
+                },
+                onQuit: {
+                    taskbarJumpListController.dismiss()
+                    apps.quit(item)
+                }
+            )
+        }
+        .id(UUID())
         .frame(width: contentSize.width, height: contentSize.height)
 
         taskbarJumpListController.show(
@@ -1247,6 +1269,24 @@ private struct TaskbarAppButton: View, @MainActor Equatable {
         case .left: .leading
         case .right: .trailing
         }
+    }
+}
+
+private struct TaskbarJumpListWindowLoader<Content: View>: View {
+    let pid: pid_t?
+    let service: WindowsService
+    let initialWindows: [WindowInfo]
+    @ViewBuilder let content: ([WindowInfo]) -> Content
+    @State private var windows: [WindowInfo]?
+
+    var body: some View {
+        content(windows ?? initialWindows)
+            .task(id: pid) {
+                guard let pid else { return }
+                let refreshed = await service.windows(forPID: pid)
+                guard !Task.isCancelled else { return }
+                windows = refreshed
+            }
     }
 }
 

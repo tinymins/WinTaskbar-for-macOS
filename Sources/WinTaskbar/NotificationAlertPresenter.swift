@@ -34,6 +34,9 @@ final class NotificationAlertPresenter {
     private var importantPanel: NotificationAlertPanel?
     private var countdownPanel: NotificationAlertPanel?
     private var importantRows: [ImportantRow] = []
+    private var importantMeasurementView: NSHostingView<AnyView>?
+    private var importantMeasurementWidth: CGFloat?
+    private var importantMeasurements: [(row: ImportantRow, height: CGFloat)] = []
     private var countdownRows: [CountdownRow] = []
     private lazy var sourceApps = AppDiscoveryService()
     private let speechSynthesizer = NSSpeechSynthesizer()
@@ -200,6 +203,9 @@ final class NotificationAlertPresenter {
         textContents.removeAll()
         importantPanel?.close()
         importantPanel = nil
+        importantMeasurementView = nil
+        importantMeasurementWidth = nil
+        importantMeasurements.removeAll()
         countdownPanel?.close()
         countdownPanel = nil
         importantRows.removeAll()
@@ -211,6 +217,9 @@ final class NotificationAlertPresenter {
         guard !suspended, !importantRows.isEmpty || layoutEditing else {
             importantPanel?.close()
             importantPanel = nil
+            importantMeasurementView = nil
+            importantMeasurementWidth = nil
+            importantMeasurements.removeAll()
             return
         }
         let panel = importantPanel ?? makePanel(size: NSSize(width: preferences.importantWidth, height: preferences.importantHeight), interactive: true)
@@ -247,25 +256,47 @@ final class NotificationAlertPresenter {
 
     private func importantHeight(_ view: NotificationImportantOverlay, width: CGFloat,
                                  defaultHeight: CGFloat, screenHeight: CGFloat) -> CGFloat {
+        if importantMeasurementWidth != width {
+            importantMeasurementWidth = width
+            importantMeasurements.removeAll()
+        }
+        var unchangedCount = 0
+        for (measurement, row) in zip(importantMeasurements, view.rows) {
+            guard measurement.row == row else { break }
+            unchangedCount += 1
+        }
+        importantMeasurements.removeSubrange(unchangedCount...)
+
         func height(for count: Int) -> CGFloat {
+            if count <= importantMeasurements.count { return importantMeasurements[count - 1].height }
             var measuredView = view
             measuredView.measuring = true
             measuredView.measuredRowCount = count
-            let measurement = NSHostingView(rootView: measuredView.frame(width: width).fixedSize(horizontal: false, vertical: true))
-            return ceil(measurement.fittingSize.height)
+            let root = AnyView(measuredView.frame(width: width).fixedSize(horizontal: false, vertical: true))
+            let measurement: NSHostingView<AnyView>
+            if let existing = importantMeasurementView {
+                existing.rootView = root
+                measurement = existing
+            } else {
+                measurement = NSHostingView(rootView: root)
+                importantMeasurementView = measurement
+            }
+            let height = ceil(measurement.fittingSize.height)
+            importantMeasurements.append((row: view.rows[count - 1], height: height))
+            return height
         }
 
         // Measure real wrapped rows; always round from the configured height, never the current frame.
-        var lower = 1
-        var upper = view.rows.count
-        while lower < upper {
-            let middle = (lower + upper) / 2
-            if height(for: middle) < defaultHeight { lower = middle + 1 } else { upper = middle }
+        // Stop at the first complete boundary: older, offscreen messages need no measurement.
+        var count = 1
+        var roundedHeight = height(for: count)
+        while roundedHeight < defaultHeight, count < view.rows.count {
+            count += 1
+            roundedHeight = height(for: count)
         }
-        let roundedHeight = height(for: lower)
         // If rounding would leave the screen, stop at the previous complete row. A single
         // oversized message still needs scrolling within the available screen height.
-        let fittingHeight = roundedHeight <= screenHeight ? roundedHeight : height(for: max(1, lower - 1))
+        let fittingHeight = roundedHeight <= screenHeight ? roundedHeight : height(for: max(1, count - 1))
         return min(screenHeight, fittingHeight)
     }
 
@@ -590,8 +621,7 @@ private struct NotificationImportantOverlay: View {
     let onMove: () -> Void
     let onResize: (CGSize, Bool) -> Void
     @State private var hoveredRowID: String?
-    @State private var hoverLocation: CGPoint?
-    @State private var rowFrames: [String: CGRect] = [:]
+    @State private var hoverTracking = NotificationImportantHoverTracking()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -620,13 +650,13 @@ private struct NotificationImportantOverlay: View {
                 .coordinateSpace(name: "importantMessageList")
                 .onContinuousHover(coordinateSpace: .named("importantMessageList")) { phase in
                     switch phase {
-                    case .active(let location): hoverLocation = location
-                    case .ended: hoverLocation = nil
+                    case .active(let location): hoverTracking.location = location
+                    case .ended: hoverTracking.location = nil
                     }
                     updateHoveredRow()
                 }
                 .onPreferenceChange(NotificationImportantRowFrames.self) { frames in
-                    rowFrames = frames
+                    hoverTracking.rowFrames = frames
                     updateHoveredRow()
                 }
             }
@@ -717,10 +747,16 @@ private struct NotificationImportantOverlay: View {
     private func updateHoveredRow() {
         // Both the pointer and row bounds use the stationary scroll viewport's coordinates.
         // Re-evaluate after layout even when the pointer has not moved.
-        hoveredRowID = hoverLocation.flatMap { point in
-            rows.first { rowFrames[$0.id]?.contains(point) == true }?.id
+        let rowID = hoverTracking.location.flatMap { point in
+            rows.first { hoverTracking.rowFrames[$0.id]?.contains(point) == true }?.id
         }
+        if hoveredRowID != rowID { hoveredRowID = rowID }
     }
+}
+
+private final class NotificationImportantHoverTracking {
+    var location: CGPoint?
+    var rowFrames: [String: CGRect] = [:]
 }
 
 private struct NotificationImportantRowFrames: PreferenceKey {

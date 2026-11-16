@@ -111,6 +111,7 @@ final class WindowActivationService {
     private let windowsService: WindowsService
     private let minimizeTransitionAnimator = WindowMinimizeTransitionAnimator()
     private var pendingMinimizations: [pid_t: Task<Void, Never>] = [:]
+    private var activationRequestGeneration = 0
     private let isRemoteSessionActive: @MainActor () -> Bool
 
     init(
@@ -121,13 +122,27 @@ final class WindowActivationService {
         self.isRemoteSessionActive = isRemoteSessionActive
     }
 
+    @discardableResult
+    func beginActivationRequest() -> Int {
+        activationRequestGeneration &+= 1
+        return activationRequestGeneration
+    }
+
+    func isCurrentActivationRequest(_ generation: Int) -> Bool {
+        activationRequestGeneration == generation
+    }
+
     func activateOrMinimize(
         _ item: TaskbarItem,
+        windows suppliedWindows: [WindowInfo]? = nil,
+        requestID: Int? = nil,
         minimizeOnClick: Bool,
         targetFrame: CGRect? = nil,
         reduceMotion: Bool = false,
         disableAnimationWhenRemote: Bool = false
-    ) {
+    ) async {
+        let requestID = requestID ?? beginActivationRequest()
+        guard !Task.isCancelled, isCurrentActivationRequest(requestID) else { return }
         guard let pid = item.processIdentifier,
               let application = NSRunningApplication(processIdentifier: pid) else {
             NSWorkspace.shared.open(item.url)
@@ -142,11 +157,21 @@ final class WindowActivationService {
             return
         }
 
-        let windows = windowsService.windows(forPID: pid)
-        let applicationElement = AXUIElementCreateApplication(pid)
-        let isSingleWindowFocused = windows.first.map {
-            windows.count == 1 && isFocused($0, in: applicationElement)
-        } ?? false
+        let windows: [WindowInfo]
+        if let suppliedWindows { windows = suppliedWindows }
+        else { windows = await windowsService.windows(forPID: pid) }
+        guard !Task.isCancelled, isCurrentActivationRequest(requestID) else { return }
+        let isSingleWindowFocused: Bool
+        if windows.count == 1, let window = windows.first {
+            isSingleWindowFocused = await Task.detached(priority: .userInitiated) { [self] in
+                let applicationElement = AXUIElementCreateApplication(pid)
+                AXUIElementSetMessagingTimeout(applicationElement, 0.1)
+                return isFocused(window, in: applicationElement)
+            }.value
+        } else {
+            isSingleWindowFocused = false
+        }
+        guard !Task.isCancelled, isCurrentActivationRequest(requestID) else { return }
 
         switch TaskbarAppClickPolicy.action(
             windows: windows,
@@ -172,6 +197,7 @@ final class WindowActivationService {
     }
 
     func raise(window: WindowInfo) {
+        beginActivationRequest()
         pendingMinimizations.removeValue(forKey: window.ownerPID)?.cancel()
         if minimizeTransitionAnimator.restore(ownerPID: window.ownerPID, reveal: {
             let application = NSRunningApplication(processIdentifier: window.ownerPID)
@@ -305,7 +331,7 @@ final class WindowActivationService {
         return elements[index]
     }
 
-    private func isFocused(_ window: WindowInfo, in application: AXUIElement) -> Bool {
+    nonisolated private func isFocused(_ window: WindowInfo, in application: AXUIElement) -> Bool {
         guard let focusedWindow: AXUIElement = attribute(application, kAXFocusedWindowAttribute) else { return false }
         if let focusedWindowID = AccessibilityWindowIdentity.windowID(of: focusedWindow) {
             return focusedWindowID == window.windowID
@@ -368,6 +394,10 @@ final class WindowThumbnailCache {
                 as? [[String: Any]] else { return }
         // Off-screen windows include minimized windows and windows on other Spaces.
         let liveWindowIDs = Set(windows.compactMap { $0[kCGWindowNumber as String] as? CGWindowID })
+        removeClosedWindows(liveWindowIDs: liveWindowIDs)
+    }
+
+    func removeClosedWindows(liveWindowIDs: Set<CGWindowID>) {
         images = images.filter { liveWindowIDs.contains($0.key) }
     }
 }
@@ -443,6 +473,12 @@ struct AccessibilityWindowSnapshot: Sendable {
     let fullScreenWindowIDs: Set<CGWindowID>
 }
 
+private struct WindowDiscoverySnapshot: Sendable {
+    let candidates: [WindowSnapshotCandidate]
+    let accessibilitySnapshots: [pid_t: AccessibilityWindowSnapshot]
+    let liveWindowIDs: Set<CGWindowID>?
+}
+
 struct CachedWindowFilterResult {
     let windows: [WindowInfo]
     let liveWindowIDs: Set<CGWindowID>?
@@ -513,17 +549,67 @@ final class WindowsService {
     private var appearanceOrder = WindowAppearanceOrder()
     private var accessibilitySnapshotsByPID: [pid_t: AccessibilityWindowSnapshot] = [:]
     private var switcherEligibilityCache = WindowSwitcherEligibilityCache()
+    private var windowsByPID: [pid_t: [WindowInfo]] = [:]
+    private var frontToBackWindows: [WindowInfo] = []
+    private var snapshotDatesByPID: [pid_t: TimeInterval] = [:]
+    private var latestSnapshotPIDs: Set<pid_t> = []
+    private var pendingSnapshot: (
+        id: UUID, pids: Set<pid_t>, startedAt: TimeInterval,
+        task: Task<WindowDiscoverySnapshot, Never>
+    )?
 
-    func windows(forPID pid: pid_t) -> [WindowInfo] {
-        windows(forPIDs: [pid])[pid] ?? []
+    func cachedWindows(forPID pid: pid_t) -> [WindowInfo] {
+        windowsByPID[pid] ?? []
     }
 
-    func windows(forPIDs pids: [pid_t]) -> [pid_t: [WindowInfo]] {
-        windowSnapshot(forPIDs: pids).windowsByPID
+    func windows(forPID pid: pid_t) async -> [WindowInfo] {
+        await windows(forPIDs: [pid])[pid] ?? []
     }
 
-    func windowsInFrontToBackOrder(forPIDs pids: [pid_t]) -> [WindowInfo] {
-        windowSnapshot(forPIDs: pids).frontToBackWindows
+    func windows(forPIDs pids: [pid_t]) async -> [pid_t: [WindowInfo]] {
+        let requestedPIDs = Set(pids)
+        guard !requestedPIDs.isEmpty else { return [:] }
+        while !Task.isCancelled {
+            let now = ProcessInfo.processInfo.systemUptime
+            if requestedPIDs.isSubset(of: latestSnapshotPIDs),
+               requestedPIDs.allSatisfy({ now - (snapshotDatesByPID[$0] ?? -.infinity) < 0.1 }) {
+                break
+            }
+            if pendingSnapshot == nil {
+                pendingSnapshot = (
+                    UUID(), requestedPIDs, now,
+                    Task.detached(priority: .userInitiated) {
+                        let windowList = Self.windowList()
+                        let candidates = Self.windowCandidates(forPIDs: pids, in: windowList ?? [])
+                        let snapshots = Self.accessibilityWindowSnapshots(
+                            forPIDs: Array(Set(candidates.map(\.pid)))
+                        )
+                        return WindowDiscoverySnapshot(
+                            candidates: candidates, accessibilitySnapshots: snapshots,
+                            liveWindowIDs: windowList.map { Set($0.compactMap { $0[kCGWindowNumber as String] as? CGWindowID }) }
+                        )
+                    }
+                )
+            }
+            guard let pending = pendingSnapshot else { continue }
+            let snapshot = await pending.task.value
+            if pendingSnapshot?.id == pending.id {
+                apply(snapshot, forPIDs: pending.pids)
+                snapshotDatesByPID = snapshotDatesByPID.filter { windowsByPID[$0.key] != nil }
+                for pid in pending.pids { snapshotDatesByPID[pid] = pending.startedAt }
+                latestSnapshotPIDs = pending.pids
+                pendingSnapshot = nil
+            }
+            // A slow collection is still fresh for callers that requested it.
+            if requestedPIDs.isSubset(of: pending.pids) { break }
+        }
+        return windowsByPID.filter { requestedPIDs.contains($0.key) }
+    }
+
+    func windowsInFrontToBackOrder(forPIDs pids: [pid_t]) async -> [WindowInfo] {
+        _ = await windows(forPIDs: pids)
+        let requestedPIDs = Set(pids)
+        return frontToBackWindows.filter { requestedPIDs.contains($0.ownerPID) }
     }
 
     func switcherWindowSnapshot(
@@ -612,20 +698,13 @@ final class WindowsService {
         accessibilitySnapshotsByPID.merge(snapshots) { _, refreshed in refreshed }
     }
 
-    private func windowSnapshot(
-        forPIDs pids: [pid_t]
-    ) -> (windowsByPID: [pid_t: [WindowInfo]], frontToBackWindows: [WindowInfo]) {
-        captureService.removeClosedWindows()
-        let requestedPIDs = Set(pids)
-        guard !requestedPIDs.isEmpty else { return ([:], []) }
-        let candidates = Self.windowCandidates(forPIDs: pids, in: Self.windowList() ?? [])
+    private func apply(_ snapshot: WindowDiscoverySnapshot, forPIDs requestedPIDs: Set<pid_t>) {
+        let candidates = snapshot.candidates
         let observedWindowIDsByPID = Dictionary(grouping: candidates, by: \.pid).mapValues {
             $0.map(\.windowID)
         }
 
-        let refreshedSnapshots = Self.accessibilityWindowSnapshots(
-            forPIDs: Array(Set(candidates.map(\.pid)))
-        )
+        let refreshedSnapshots = snapshot.accessibilitySnapshots
         storeAccessibilityWindowSnapshots(refreshedSnapshots)
         var windowsByPID: [pid_t: [WindowInfo]] = [:]
         var frontToBackWindows: [WindowInfo] = []
@@ -662,7 +741,15 @@ final class WindowsService {
                 windowsByPID[pid] = orderedWindows
             }
         }
-        return (windowsByPID, frontToBackWindows)
+        for pid in requestedPIDs { self.windowsByPID[pid] = windowsByPID[pid] }
+        self.frontToBackWindows = frontToBackWindows
+        if let liveWindowIDs = snapshot.liveWindowIDs {
+            for pid in Array(self.windowsByPID.keys) {
+                let liveWindows = self.windowsByPID[pid]?.filter { liveWindowIDs.contains($0.windowID) } ?? []
+                self.windowsByPID[pid] = liveWindows.isEmpty ? nil : liveWindows
+            }
+            captureService.removeClosedWindows(liveWindowIDs: liveWindowIDs)
+        }
     }
 
     func cachedThumbnail(for window: WindowInfo) -> NSImage? {

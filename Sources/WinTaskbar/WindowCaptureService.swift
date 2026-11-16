@@ -117,4 +117,9 @@ final class WindowCaptureService {
         images.removeClosedWindows()
         captures = captures.filter { images.cachedImage(for: $0.key.windowID) != nil }
     }
+
+    func removeClosedWindows(liveWindowIDs: Set<CGWindowID>) {
+        images.removeClosedWindows(liveWindowIDs: liveWindowIDs)
+        captures = captures.filter { images.cachedImage(for: $0.key.windowID) != nil }
+    }
 }

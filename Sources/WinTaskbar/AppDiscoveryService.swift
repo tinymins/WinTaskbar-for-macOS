@@ -40,6 +40,8 @@ final class AppDiscoveryService: ObservableObject {
     private var taskbarItemOrder = TaskbarItemOrder()
     private var tracksWindowPresence = false
     private var windowRefreshTimer: AnyCancellable?
+    private var windowRefreshTask: Task<Void, Never>?
+    private var windowRefreshGeneration = 0
 
     init(workspace: NSWorkspace = .shared, windowsService: WindowsService = WindowsService()) {
         self.workspace = workspace
@@ -67,9 +69,11 @@ final class AppDiscoveryService: ObservableObject {
     func reloadRunningApps() {
         let runningApplications = workspace.runningApplications
             .filter { $0.activationPolicy == .regular && !$0.isTerminated }
-        let windowsByPID = tracksWindowPresence
-            ? windowsService.windows(forPIDs: runningApplications.map(\.processIdentifier))
-            : [:]
+        let previousWindowPresence = Dictionary(
+            uniqueKeysWithValues: runningApps.compactMap { app in
+                app.processIdentifier.map { ($0, app.hasWindows) }
+            }
+        )
         let discovered = runningApplications
             .compactMap { app -> DiscoveredApp? in
                 guard let url = app.bundleURL, let name = app.localizedName else { return nil }
@@ -80,12 +84,14 @@ final class AppDiscoveryService: ObservableObject {
                     isRunning: true,
                     isActive: app.isActive,
                     processIdentifier: app.processIdentifier,
-                    hasWindows: !tracksWindowPresence || windowsByPID[app.processIdentifier] != nil
+                    hasWindows: !tracksWindowPresence || previousWindowPresence[app.processIdentifier] == true
                 )
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         remember(discovered)
         if runningApps != discovered { runningApps = discovered }
+        windowRefreshGeneration &+= 1
+        refreshWindowPresence()
     }
 
     func setTracksWindowPresence(_ enabled: Bool) {
@@ -97,11 +103,43 @@ final class AppDiscoveryService: ObservableObject {
                 .autoconnect()
                 .sink { [weak self] _ in
                     MainActor.assumeIsolated {
-                        self?.reloadRunningApps()
+                        self?.refreshWindowPresence()
                     }
                 }
         }
-        reloadRunningApps()
+        windowRefreshGeneration &+= 1
+        if enabled {
+            refreshWindowPresence()
+        } else {
+            let discovered = runningApps.map { app in
+                var app = app
+                app.hasWindows = true
+                return app
+            }
+            if runningApps != discovered { runningApps = discovered }
+        }
+    }
+
+    private func refreshWindowPresence() {
+        guard tracksWindowPresence, windowRefreshTask == nil else { return }
+        let generation = windowRefreshGeneration
+        let pids = runningApps.compactMap(\.processIdentifier)
+        windowRefreshTask = Task { @MainActor [weak self, windowsService] in
+            let windowsByPID = await windowsService.windows(forPIDs: pids)
+            guard let self else { return }
+            self.windowRefreshTask = nil
+            guard self.tracksWindowPresence else { return }
+            guard self.windowRefreshGeneration == generation else {
+                self.refreshWindowPresence()
+                return
+            }
+            let discovered = self.runningApps.map { app in
+                var app = app
+                app.hasWindows = app.processIdentifier.map { windowsByPID[$0] != nil } ?? false
+                return app
+            }
+            if self.runningApps != discovered { self.runningApps = discovered }
+        }
     }
 
     func reloadInstalledApps() {
