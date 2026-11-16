@@ -1028,8 +1028,8 @@
 	<string>Smooth mouse scrolling</string>
 	<key>Fast scrolling multiplier limit</key>
 	<string>Fast scrolling multiplier limit</string>
-	<key>Slow scrolling moves one line at a time. On a local mouse, the first quick flick uses 1× and each consecutive flick adds 0.25× until a 0.8-second pause or a direction change. In ToDesk, turning the wheel faster increases the multiplier during the same flick. Both use this limit.</key>
-	<string>Slow scrolling moves one line at a time. On a local mouse, the first quick flick uses 1× and each consecutive flick adds 0.25× until a 0.8-second pause or a direction change. In ToDesk, turning the wheel faster increases the multiplier during the same flick. Both use this limit.</string>
+	<key>Slow scrolling moves one line at a time. The first quick flick uses 1×; consecutive flicks add 0.25× each, up to this limit. A 0.8-second pause or a direction change resets acceleration.</key>
+	<string>Slow scrolling moves one line at a time. The first quick flick uses 1×; consecutive flicks add 0.25× each, up to this limit. A 0.8-second pause or a direction change resets acceleration.</string>
 	<key>Reverse vertical scrolling</key>
 	<string>Reverse vertical scrolling</string>
 	<key>Reverse horizontal scrolling</key>

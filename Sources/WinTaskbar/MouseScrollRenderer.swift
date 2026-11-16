@@ -9,6 +9,7 @@ private final class MouseScrollRenderState: @unchecked Sendable {
     private let lock = NSLock()
     private var dynamics = MouseScrollDynamics()
     private var event: CGEvent?
+    private var isToDesk = false
     private var targetPID: pid_t = 0
     private var windowNumber: Int64 = 0
     private var generation: UInt64 = 0
@@ -27,10 +28,11 @@ private final class MouseScrollRenderState: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         if self.targetPID != targetPID || self.windowNumber != windowNumber
-            || self.event?.flags != event.flags || dynamics.isToDesk != isToDesk {
-            dynamics = MouseScrollDynamics(isToDesk: isToDesk)
+            || self.event?.flags != event.flags || self.isToDesk != isToDesk {
+            dynamics = MouseScrollDynamics()
         }
         self.event = event
+        self.isToDesk = isToDesk
         self.targetPID = targetPID
         self.windowNumber = windowNumber
         dynamics.add(x: x, y: y, speed: speed, transition: transition,
@@ -49,6 +51,7 @@ private final class MouseScrollRenderState: @unchecked Sendable {
         generation &+= 1
         idle = true
         event = nil
+        isToDesk = false
         targetPID = 0
         windowNumber = 0
         dynamics = MouseScrollDynamics()
