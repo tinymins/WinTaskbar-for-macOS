@@ -22,12 +22,13 @@ private final class MouseScrollRenderState: @unchecked Sendable {
 
     var canPost: Bool { source != nil }
 
-    func accept(event: CGEvent, targetPID: pid_t, windowNumber: Int64, x: Double, y: Double,
+    func accept(event: CGEvent, targetPID: pid_t, windowNumber: Int64, x: Double, y: Double, isToDesk: Bool,
                 speed: Double, transition: Double) {
         lock.lock()
         defer { lock.unlock() }
-        if self.targetPID != targetPID || self.windowNumber != windowNumber || self.event?.flags != event.flags {
-            dynamics = MouseScrollDynamics()
+        if self.targetPID != targetPID || self.windowNumber != windowNumber
+            || self.event?.flags != event.flags || dynamics.isToDesk != isToDesk {
+            dynamics = MouseScrollDynamics(isToDesk: isToDesk)
         }
         self.event = event
         self.targetPID = targetPID
@@ -113,7 +114,7 @@ final class MouseScrollRenderer {
 
     init(marker: Int64) { state = MouseScrollRenderState(marker: marker) }
 
-    func enqueue(event: CGEvent, targetPID: pid_t, windowNumber: Int64, x: Double, y: Double,
+    func enqueue(event: CGEvent, targetPID: pid_t, windowNumber: Int64, x: Double, y: Double, isToDesk: Bool,
                  speed: Double, transition: Double) -> Bool {
         guard state.canPost, let snapshot = event.copy(), prepareDisplayLink() else {
             cancel()
@@ -125,7 +126,7 @@ final class MouseScrollRenderer {
         snapshot.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis3, value: 0)
         snapshot.setIntegerValueField(.scrollWheelEventPointDeltaAxis3, value: 0)
         state.accept(event: snapshot, targetPID: targetPID, windowNumber: windowNumber,
-                     x: x, y: y, speed: speed, transition: transition)
+                     x: x, y: y, isToDesk: isToDesk, speed: speed, transition: transition)
         return true
     }
 

@@ -37,7 +37,7 @@ struct MouseEnhancementSettingsView: View {
                         MouseScrollTuningField(value: $preferences.mouseEnhancement.speed, bounds: 1...10, label: "Fast scrolling multiplier limit")
                         Text("×")
                     }
-                    Text("Slow scrolling moves one line at a time. The first quick flick uses 1×; consecutive flicks add 0.25× each, up to this limit. A 0.8-second pause or a direction change resets acceleration.")
+                    Text("Slow scrolling moves one line at a time. On a local mouse, the first quick flick uses 1× and each consecutive flick adds 0.25× until a 0.8-second pause or a direction change. In ToDesk, turning the wheel faster increases the multiplier during the same flick. Both use this limit.")
                         .font(.caption).foregroundStyle(.secondary)
                     HStack {
                         Text("Scroll response")

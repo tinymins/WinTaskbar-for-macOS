@@ -195,7 +195,7 @@ final class MouseEnhancementService: ObservableObject {
         // ready. The first visible frame comes from the display-paced response.
         return renderer.enqueue(
             event: event, targetPID: app.processIdentifier, windowNumber: windowNumber,
-            x: x, y: y,
+            x: x, y: y, isToDesk: source == .toDesk,
             speed: configuration.effectiveSpeed, transition: configuration.transition
         )
     }
