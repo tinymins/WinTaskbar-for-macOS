@@ -12,7 +12,7 @@ struct MouseEnhancementSettingsView: View {
             SettingsSection("Mouse Enhancement") {
                 Toggle("Enable mouse enhancement", isOn: $preferences.mouseEnhancement.enabled)
                     .toggleStyle(.switch)
-                Text("Works independently of the taskbar. Trackpad and continuous scrolling keep their original behavior.")
+                Text("Works independently of the taskbar. Local trackpad gestures keep their original behavior.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text(LocalizedStringKey(service.statusKey))
                     .font(.caption).foregroundStyle(.secondary)
@@ -61,7 +61,7 @@ struct MouseEnhancementSettingsView: View {
             .disabled(!preferences.mouseEnhancement.enabled)
 
             SettingsSection("Remote control") {
-                Text("Recognized ToDesk and Screen Sharing input passes through without smoothing or reversal. Local mouse-driver input can be enhanced. Some remote tools hide their origin; pause mouse enhancement if scrolling changes while this Mac is remotely controlled.")
+                Text("Smooth scrolling also applies to ToDesk mouse wheels and preserves their direction. Screen Sharing input passes through. Some remote tools hide their origin; pause mouse enhancement if scrolling changes while this Mac is remotely controlled.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Pause lasts until you resume or quit WinTaskbar. Avoid running another scrolling enhancer at the same time.")
                     .font(.caption).foregroundStyle(.secondary)

@@ -119,6 +119,11 @@ final class MouseScrollRenderer {
             cancel()
             return false
         }
+        // The renderer emits two-axis wheel frames. A ToDesk event can carry
+        // unrelated values on its third axis, even for a vertical wheel step.
+        snapshot.setIntegerValueField(.scrollWheelEventDeltaAxis3, value: 0)
+        snapshot.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis3, value: 0)
+        snapshot.setIntegerValueField(.scrollWheelEventPointDeltaAxis3, value: 0)
         state.accept(event: snapshot, targetPID: targetPID, windowNumber: windowNumber,
                      x: x, y: y, speed: speed, transition: transition)
         return true

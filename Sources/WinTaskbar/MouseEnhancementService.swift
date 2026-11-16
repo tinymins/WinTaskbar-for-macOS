@@ -30,7 +30,11 @@ final class MouseEnhancementService: ObservableObject {
     private var tap: CFMachPort?
     private var tapSource: CFRunLoopSource?
     private var sleeping = false
-    private var sourcePolicyCache: (pid: pid_t, expires: TimeInterval, bypass: Bool)?
+    private enum ScrollSource {
+        case local, toDesk, passThrough
+    }
+
+    private var sourcePolicyCache: (pid: pid_t, expires: TimeInterval, source: ScrollSource)?
 
     func start(preferences: PreferencesStore) {
         guard subscription == nil else { return }
@@ -93,7 +97,7 @@ final class MouseEnhancementService: ObservableObject {
             return
         }
         guard tap == nil else {
-            statusKey = "Mouse enhancement is on. Recognized remote and continuous input pass through."
+            statusKey = "Mouse enhancement is on."
             return
         }
         let mask = (CGEventMask(1) << CGEventType.scrollWheel.rawValue)
@@ -118,7 +122,7 @@ final class MouseEnhancementService: ObservableObject {
         tapSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: newTap, enable: true)
-        statusKey = "Mouse enhancement is on. Recognized remote and continuous input pass through."
+        statusKey = "Mouse enhancement is on."
     }
 
     private func removeTap() {
@@ -143,13 +147,19 @@ final class MouseEnhancementService: ObservableObject {
             return false
         }
         guard type == .scrollWheel, configuration.enabled, !isPaused, !sleeping,
-              !shouldBypassSource(event.getIntegerValueField(.eventSourceUnixProcessID)),
-              event.getIntegerValueField(.scrollWheelEventIsContinuous) == 0,
               event.getIntegerValueField(.scrollWheelEventScrollPhase) == 0,
-              event.getIntegerValueField(.scrollWheelEventMomentumPhase) == 0,
-              event.getIntegerValueField(.scrollWheelEventDeltaAxis3) == 0,
-              event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis3) == 0,
-              event.getDoubleValueField(.scrollWheelEventPointDeltaAxis3) == 0 else {
+              event.getIntegerValueField(.scrollWheelEventMomentumPhase) == 0 else {
+            cancelAnimation()
+            return false
+        }
+        let source = scrollSource(event.getIntegerValueField(.eventSourceUnixProcessID))
+        // ToDesk can mark wheel steps as continuous and populate unused third-axis fields.
+        guard source != .passThrough, source == .toDesk || (
+            event.getIntegerValueField(.scrollWheelEventIsContinuous) == 0
+                && event.getIntegerValueField(.scrollWheelEventDeltaAxis3) == 0
+                && event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis3) == 0
+                && event.getDoubleValueField(.scrollWheelEventPointDeltaAxis3) == 0
+        ) else {
             cancelAnimation()
             return false
         }
@@ -161,8 +171,8 @@ final class MouseEnhancementService: ObservableObject {
             cancelAnimation()
             return false
         }
-        let reverseY = configuration.reverseVertical && !verticalReversalBlocked
-        let reverseX = configuration.reverseHorizontal && !horizontalReversalBlocked
+        let reverseY = source == .local && configuration.reverseVertical && !verticalReversalBlocked
+        let reverseX = source == .local && configuration.reverseHorizontal && !horizontalReversalBlocked
         // Reverse before capturing the output template, including legacy line and
         // fixed-point metadata. If smoothing is unavailable this reversed native
         // event still follows its original route.
@@ -235,15 +245,15 @@ final class MouseEnhancementService: ObservableObject {
         horizontalReversalBlocked = devices.contains { ($0["ignore"] as? Bool) != true && ($0["mouse_flip_horizontal_wheel"] as? Bool) == true }
     }
 
-    private func shouldBypassSource(_ value: Int64) -> Bool {
+    private func scrollSource(_ value: Int64) -> ScrollSource {
         // Hardware commonly has no source process. Remote tools that strip this
         // metadata cannot be distinguished here; manual pause remains available.
-        if value == 0 { return false }
-        guard value > 0, value <= Int64(Int32.max) else { return true }
+        if value == 0 { return .local }
+        guard value > 0, value <= Int64(Int32.max) else { return .passThrough }
         let pid = pid_t(value)
         let now = ProcessInfo.processInfo.systemUptime
         if let cached = sourcePolicyCache, cached.pid == pid, now < cached.expires {
-            return cached.bypass
+            return cached.source
         }
         let app = NSRunningApplication(processIdentifier: pid)
         var path = app?.executableURL?.path
@@ -254,14 +264,21 @@ final class MouseEnhancementService: ObservableObject {
             }
         }
         let bundleID = app?.bundleIdentifier ?? ""
-        let remoteExecutables: Set<String> = [
+        let toDeskExecutables: Set<String> = [
             "ToDesk", "ToDesk_Service", "ToDesk_Session_Proxy", "ToDesk_Session",
-            "ToDesk_Screenwall_Helper", "ToDesk_XPCHelper", "screensharingd", "screensharingagent"
+            "ToDesk_Screenwall_Helper", "ToDesk_XPCHelper"
         ]
         let executable = path.map { URL(fileURLWithPath: $0).lastPathComponent } ?? ""
-        let bypass = path == nil || bundleID.hasPrefix("com.youqu.todesk.")
-            || bundleID == "com.apple.screensharing.agent" || remoteExecutables.contains(executable)
-        sourcePolicyCache = (pid, now + 1, bypass)
-        return bypass
+        let source: ScrollSource
+        if bundleID.hasPrefix("com.youqu.todesk.") || toDeskExecutables.contains(executable) {
+            source = .toDesk
+        } else if path == nil || bundleID == "com.apple.screensharing.agent"
+                    || executable == "screensharingd" || executable == "screensharingagent" {
+            source = .passThrough
+        } else {
+            source = .local
+        }
+        sourcePolicyCache = (pid, now + 1, source)
+        return source
     }
 }
