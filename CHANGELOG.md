@@ -2,6 +2,19 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.41] - 2026-11-17
+
+### Added
+
+- Enable Windows-style middle-click auto-scroll by default when Mouse Enhancement is on. Click the wheel once, release it, and move the pointer to scroll. Moving farther from the origin scrolls faster. Click again or press Esc to stop.
+- Show a Windows-style origin marker and directional cursor during auto-scroll. Scroll the original window while the pointer moves freely.
+
+### Changed
+
+- Smooth scrolling now supports ToDesk mouse wheels and preserves their scroll direction.
+- Reset wheel acceleration when a flick has finished scrolling, and fold the final line into the preceding frame for a smoother stop.
+- Move window discovery off the main thread and reuse notification message layouts to reduce repeated work.
+
 ## [0.0.40] - 2026-11-12
 
 ### Fixed
