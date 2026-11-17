@@ -9,7 +9,7 @@ struct MouseEnhancementExcludedApp: Codable, Equatable, Identifiable {
 struct MouseEnhancementPreferences: Codable, Equatable {
     private(set) var tuningVersion = 2
     var enabled = false
-    var middleClickAutoScroll = false
+    var middleClickAutoScroll = true
     var smoothScrolling = true
     var speed = 2.7
     var response = 4.35
@@ -31,7 +31,7 @@ struct MouseEnhancementPreferences: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         enabled = try values.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
-        middleClickAutoScroll = try values.decodeIfPresent(Bool.self, forKey: .middleClickAutoScroll) ?? false
+        middleClickAutoScroll = try values.decodeIfPresent(Bool.self, forKey: .middleClickAutoScroll) ?? true
         smoothScrolling = try values.decodeIfPresent(Bool.self, forKey: .smoothScrolling) ?? true
         reverseVertical = try values.decodeIfPresent(Bool.self, forKey: .reverseVertical) ?? false
         reverseHorizontal = try values.decodeIfPresent(Bool.self, forKey: .reverseHorizontal) ?? false
