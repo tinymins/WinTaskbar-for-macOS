@@ -1,7 +1,7 @@
 import Foundation
 
 /// Slow input contributes one native line. Rapid input preserves the native
-/// distance, with acceleration increasing between flicks, never within one flick.
+/// distance, with acceleration increasing only between overlapping flicks.
 struct MouseScrollDynamics: Sendable {
     struct Axis: Sendable {
         private var direction: Int64 = 0
@@ -26,11 +26,6 @@ struct MouseScrollDynamics: Sendable {
             let interval = previousTime.map { time - $0 } ?? .infinity
             // Event timestamps are converted from nanoseconds to Double.
             let boundaryInterval = interval + 1e-9
-            if interval <= 0 || boundaryInterval >= Self.cooldown {
-                nextRoundGain = 1
-                roundGain = nil
-                accelerationRemainder = 0
-            }
             let nativeDistance = max(1, abs(input))
             let distance: Double
             if interval > 0, boundaryInterval < Self.roundInterval {
@@ -46,6 +41,12 @@ struct MouseScrollDynamics: Sendable {
                     firstRoundDistance = 1
                 }
             } else {
+                // Decide overlap at the start of a new flick. Its first line
+                // can finish rendering before the second input confirms it.
+                if isSettled || interval <= 0 || boundaryInterval >= Self.cooldown {
+                    nextRoundGain = 1
+                    accelerationRemainder = 0
+                }
                 roundGain = nil
                 firstRoundDistance = nativeDistance
                 distance = 1

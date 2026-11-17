@@ -1642,8 +1642,8 @@
 	<string>平滑鼠标滚动</string>
 	<key>Fast scrolling multiplier limit</key>
 	<string>快速滚动倍率上限</string>
-	<key>Slow scrolling moves one line at a time. The first quick flick uses 1×; consecutive flicks add 0.25× each, up to this limit. A 0.8-second pause or a direction change resets acceleration.</key>
-	<string>慢速滚动每次一行；首轮快速拨动为 1 倍，连续拨动逐轮增加 0.25 倍，最高达到此上限。停手 0.8 秒或改变方向后重置加速。</string>
+	<key>Slow scrolling moves one line at a time. Quick flicks start at 1×. Each new flick in the same direction adds 0.25× while the previous flick is still scrolling, up to this limit. Acceleration resets when scrolling finishes, after a 0.8-second pause, or when you change direction.</key>
+	<string>慢速滚动每次一行，首次快速拨动为 1 倍。上一拨还在滚动时，同向快拨每轮增加 0.25 倍，最高达到此上限。滚动结束、停手满 0.8 秒或改变方向后，下一拨从 1 倍开始。</string>
 	<key>Reverse vertical scrolling</key>
 	<string>反转垂直滚动</string>
 	<key>Reverse horizontal scrolling</key>
