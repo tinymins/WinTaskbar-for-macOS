@@ -1,13 +1,15 @@
 import Foundation
 
 /// Slow input contributes one native line. Rapid input preserves the native
-/// distance, with acceleration increasing between flicks, never within one flick.
+/// distance, with additional acceleration during sustained, overlapping fast flicks.
 struct MouseScrollDynamics: Sendable {
     struct Axis: Sendable {
         private var direction: Int64 = 0
         private var previousTime: Double?
         private var nextRoundGain = 1.0
         private var roundGain: Double?
+        private var overlapStart: Double?
+        private var sustainedFraction = 0.0
         private var firstRoundDistance = 1.0
         private var accelerationRemainder = 0.0
         private var immediateLines: Int64 = 0
@@ -34,18 +36,33 @@ struct MouseScrollDynamics: Sendable {
             let nativeDistance = max(1, abs(input))
             let distance: Double
             if interval > 0, boundaryInterval < Self.roundInterval {
-                if let roundGain {
-                    distance = nativeDistance * roundGain
-                } else {
-                    let gain = min(speed, nextRoundGain)
+                // A long gap within a flick breaks its high-rate input stream.
+                if interval > Self.roundInterval / 2 { overlapStart = nil }
+                sustainedFraction = overlapStart.map {
+                    // Build speed over 200 ms once fast flicks overlap for 400 ms.
+                    min(1, max(0, (time - $0 - Self.cooldown / 2) / (Self.cooldown / 4)))
+                } ?? 0
+                let gain = roundGain ?? min(speed, nextRoundGain)
+                let effectiveGain = gain + (speed - gain) * sustainedFraction
+                if roundGain == nil {
                     roundGain = gain
                     nextRoundGain = min(speed, gain + 0.25)
                     // The second event confirms a quick flick. Credit its first
                     // event too, subtracting the baseline line already emitted.
-                    distance = firstRoundDistance * gain - 1 + nativeDistance * gain
+                    distance = firstRoundDistance * effectiveGain - 1 + nativeDistance * effectiveGain
                     firstRoundDistance = 1
+                } else {
+                    distance = nativeDistance * effectiveGain
                 }
             } else {
+                // Qualify a new flick only if its predecessor really has output
+                // left to render at this instant, before accepting this event.
+                if roundGain != nil, pendingLines > 0, interval > 0, interval < 2 * Self.roundInterval {
+                    if overlapStart == nil { overlapStart = time }
+                } else {
+                    overlapStart = nil
+                    sustainedFraction = 0
+                }
                 roundGain = nil
                 firstRoundDistance = nativeDistance
                 distance = 1
@@ -63,10 +80,14 @@ struct MouseScrollDynamics: Sendable {
         }
 
         mutating func advance(transition: Double) -> Int64 {
-            let raw = remaining * transition
+            // As the user keeps flicking, deliver queued lines sooner. The
+            // per-flick gain still bounds total distance, including at the cap.
+            let response = min(1, transition * (1 + 2 * sustainedFraction))
+            let raw = remaining * response
             remaining -= raw
-            outputRemainder += filtered
-            filtered += 0.23 * (raw - filtered)
+            let released = filtered * (1 + sustainedFraction)
+            outputRemainder += released
+            filtered += 0.23 * (raw - released)
             var lines = min(pendingLines, Int64(max(0, outputRemainder.rounded())))
             outputRemainder -= Double(lines)
             pendingLines -= lines

@@ -37,7 +37,7 @@ struct MouseEnhancementSettingsView: View {
                         MouseScrollTuningField(value: $preferences.mouseEnhancement.speed, bounds: 1...10, label: "Fast scrolling multiplier limit")
                         Text("×")
                     }
-                    Text("Slow scrolling moves one line at a time. The first quick flick uses 1×; consecutive flicks add 0.25× each, up to this limit. A 0.8-second pause or a direction change resets acceleration.")
+                    Text("Slow scrolling moves one line at a time. Quick flicks start at 1× and add 0.25× per flick. Sustained fast flicks that overlap the previous scroll animation accelerate more quickly, up to this limit. A 0.8-second pause or a direction change resets acceleration.")
                         .font(.caption).foregroundStyle(.secondary)
                     HStack {
                         Text("Scroll response")
