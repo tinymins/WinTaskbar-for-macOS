@@ -1028,8 +1028,8 @@
 	<string>Smooth mouse scrolling</string>
 	<key>Fast scrolling multiplier limit</key>
 	<string>Fast scrolling multiplier limit</string>
-	<key>Slow scrolling moves one line at a time. Quick flicks start at 1× and add 0.25× per flick. Sustained fast flicks that overlap the previous scroll animation accelerate more quickly, up to this limit. A 0.8-second pause or a direction change resets acceleration.</key>
-	<string>Slow scrolling moves one line at a time. Quick flicks start at 1× and add 0.25× per flick. Sustained fast flicks that overlap the previous scroll animation accelerate more quickly, up to this limit. A 0.8-second pause or a direction change resets acceleration.</string>
+	<key>Slow scrolling moves one line at a time. The first quick flick uses 1×; consecutive flicks add 0.25× each, up to this limit. A 0.8-second pause or a direction change resets acceleration.</key>
+	<string>Slow scrolling moves one line at a time. The first quick flick uses 1×; consecutive flicks add 0.25× each, up to this limit. A 0.8-second pause or a direction change resets acceleration.</string>
 	<key>Reverse vertical scrolling</key>
 	<string>Reverse vertical scrolling</string>
 	<key>Reverse horizontal scrolling</key>

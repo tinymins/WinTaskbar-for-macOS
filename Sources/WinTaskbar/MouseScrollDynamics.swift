@@ -1,16 +1,13 @@
 import Foundation
 
 /// Slow input contributes one native line. Rapid input preserves the native
-/// distance, with additional acceleration during sustained, overlapping fast flicks.
+/// distance, with acceleration increasing between flicks, never within one flick.
 struct MouseScrollDynamics: Sendable {
     struct Axis: Sendable {
         private var direction: Int64 = 0
         private var previousTime: Double?
         private var nextRoundGain = 1.0
         private var roundGain: Double?
-        private var fastRunStart: Double?
-        private var lastFastOverlap = -Double.infinity
-        private var sustainedFraction = 0.0
         private var firstRoundDistance = 1.0
         private var accelerationRemainder = 0.0
         private var immediateLines: Int64 = 0
@@ -21,10 +18,6 @@ struct MouseScrollDynamics: Sendable {
 
         private static let roundInterval = 0.12
         private static let cooldown = 0.8
-        private static let fastInterval = 0.04
-        private static let sustainedThreshold = 0.8
-        private static let flickGracePeriod = 0.24
-        private static let sustainedRamp = 0.36
 
         mutating func add(_ input: Double, at time: Double, speed: Double) {
             guard input != 0 else { return }
@@ -40,33 +33,17 @@ struct MouseScrollDynamics: Sendable {
             }
             let nativeDistance = max(1, abs(input))
             let distance: Double
-            if interval <= 0 || time - lastFastOverlap >= Self.flickGracePeriod {
-                fastRunStart = nil
-            }
-            // Short gaps bridge fast inputs only when the next one overlaps
-            // real queued output. Single slow steps cannot extend the run.
-            if pendingLines > 0, interval > 0, interval <= Self.fastInterval {
-                if fastRunStart == nil { fastRunStart = time - interval }
-                lastFastOverlap = time
-            }
-            if let fastRunStart, pendingLines > 0 {
-                let elapsed = lastFastOverlap - fastRunStart
-                sustainedFraction = min(1, max(0, (elapsed - Self.sustainedThreshold) / Self.sustainedRamp))
-            } else {
-                sustainedFraction = 0
-            }
             if interval > 0, boundaryInterval < Self.roundInterval {
-                let gain = roundGain ?? min(speed, nextRoundGain)
-                let effectiveGain = gain + (speed - gain) * sustainedFraction
-                if roundGain == nil {
+                if let roundGain {
+                    distance = nativeDistance * roundGain
+                } else {
+                    let gain = min(speed, nextRoundGain)
                     roundGain = gain
                     nextRoundGain = min(speed, gain + 0.25)
                     // The second event confirms a quick flick. Credit its first
                     // event too, subtracting the baseline line already emitted.
-                    distance = firstRoundDistance * effectiveGain - 1 + nativeDistance * effectiveGain
+                    distance = firstRoundDistance * gain - 1 + nativeDistance * gain
                     firstRoundDistance = 1
-                } else {
-                    distance = nativeDistance * effectiveGain
                 }
             } else {
                 roundGain = nil
@@ -86,14 +63,10 @@ struct MouseScrollDynamics: Sendable {
         }
 
         mutating func advance(transition: Double) -> Int64 {
-            // As the user keeps flicking, deliver queued lines sooner. The
-            // per-flick gain still bounds total distance, including at the cap.
-            let response = min(1, transition * (1 + 2 * sustainedFraction))
-            let raw = remaining * response
+            let raw = remaining * transition
             remaining -= raw
-            let released = filtered * (1 + sustainedFraction)
-            outputRemainder += released
-            filtered += 0.23 * (raw - released)
+            outputRemainder += filtered
+            filtered += 0.23 * (raw - filtered)
             var lines = min(pendingLines, Int64(max(0, outputRemainder.rounded())))
             outputRemainder -= Double(lines)
             pendingLines -= lines
