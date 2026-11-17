@@ -1638,6 +1638,10 @@
 	<string>暂停鼠标增强</string>
 	<key>Wheel behavior</key>
 	<string>滚轮行为</string>
+	<key>Middle-click auto-scroll</key>
+	<string>中键自动滚动</string>
+	<key>Click the middle button, then move the pointer. The farther you move from the marker, the faster you scroll. Click again or press Esc to stop.</key>
+	<string>单击中键后移动指针，离标记越远，滚动越快。再次点击或按 Esc 退出。</string>
 	<key>Smooth mouse scrolling</key>
 	<string>平滑鼠标滚动</string>
 	<key>Fast scrolling multiplier limit</key>

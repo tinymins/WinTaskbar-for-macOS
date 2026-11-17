@@ -1024,6 +1024,10 @@
 	<string>Pause mouse enhancement</string>
 	<key>Wheel behavior</key>
 	<string>Wheel behavior</string>
+	<key>Middle-click auto-scroll</key>
+	<string>Middle-click auto-scroll</string>
+	<key>Click the middle button, then move the pointer. The farther you move from the marker, the faster you scroll. Click again or press Esc to stop.</key>
+	<string>Click the middle button, then move the pointer. The farther you move from the marker, the faster you scroll. Click again or press Esc to stop.</string>
 	<key>Smooth mouse scrolling</key>
 	<string>Smooth mouse scrolling</string>
 	<key>Fast scrolling multiplier limit</key>

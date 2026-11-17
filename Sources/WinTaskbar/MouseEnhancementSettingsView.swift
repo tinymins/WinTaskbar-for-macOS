@@ -29,6 +29,9 @@ struct MouseEnhancementSettingsView: View {
             }
 
             SettingsSection("Wheel behavior") {
+                Toggle("Middle-click auto-scroll", isOn: $preferences.mouseEnhancement.middleClickAutoScroll)
+                Text("Click the middle button, then move the pointer. The farther you move from the marker, the faster you scroll. Click again or press Esc to stop.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Smooth mouse scrolling", isOn: $preferences.mouseEnhancement.smoothScrolling)
                 Group {
                     HStack {

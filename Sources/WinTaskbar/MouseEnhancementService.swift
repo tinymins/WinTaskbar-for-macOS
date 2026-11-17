@@ -29,6 +29,8 @@ final class MouseEnhancementService: ObservableObject {
     private var observers: [NSObjectProtocol] = []
     private var tap: CFMachPort?
     private var tapSource: CFRunLoopSource?
+    private var autoScroll: MiddleClickAutoScroll?
+    private var swallowMiddleUp = false
     private var sleeping = false
     private enum ScrollSource {
         case local, toDesk, passThrough
@@ -39,6 +41,7 @@ final class MouseEnhancementService: ObservableObject {
     func start(preferences: PreferencesStore) {
         guard subscription == nil else { return }
         subscription = preferences.$mouseEnhancement.removeDuplicates().sink { [weak self] value in
+            if self?.configuration.middleClickAutoScroll != value.middleClickAutoScroll { self?.removeTap() }
             self?.configuration = value
             self?.refresh()
         }
@@ -79,6 +82,7 @@ final class MouseEnhancementService: ObservableObject {
     }
 
     func refresh() {
+        stopAutoScroll()
         cancelAnimation()
         readKarabinerReversals()
         guard configuration.enabled else {
@@ -100,10 +104,14 @@ final class MouseEnhancementService: ObservableObject {
             statusKey = "Mouse enhancement is on."
             return
         }
-        let mask = (CGEventMask(1) << CGEventType.scrollWheel.rawValue)
+        var mask = (CGEventMask(1) << CGEventType.scrollWheel.rawValue)
             | (CGEventMask(1) << CGEventType.leftMouseDown.rawValue)
             | (CGEventMask(1) << CGEventType.rightMouseDown.rawValue)
             | (CGEventMask(1) << CGEventType.otherMouseDown.rawValue)
+        if configuration.middleClickAutoScroll {
+            mask |= (CGEventMask(1) << CGEventType.otherMouseUp.rawValue)
+                | (CGEventMask(1) << CGEventType.keyDown.rawValue)
+        }
         guard let newTap = CGEvent.tapCreate(
             // Target PID/window routing is available after session annotation.
             tap: .cgAnnotatedSessionEventTap, place: .tailAppendEventTap, options: .defaultTap,
@@ -126,6 +134,8 @@ final class MouseEnhancementService: ObservableObject {
     }
 
     private func removeTap() {
+        stopAutoScroll()
+        swallowMiddleUp = false
         renderer.shutDown()
         if let tapSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), tapSource, .commonModes) }
         if let tap { CFMachPortInvalidate(tap) }
@@ -137,6 +147,8 @@ final class MouseEnhancementService: ObservableObject {
     // treating every nonzero PID/private source as remote input.
     fileprivate func handle(_ type: CGEventType, event: CGEvent) -> Bool {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            stopAutoScroll()
+            swallowMiddleUp = false
             cancelAnimation()
             if let tap, configuration.enabled, !isPaused, !sleeping {
                 CGEvent.tapEnable(tap: tap, enable: true)
@@ -146,6 +158,34 @@ final class MouseEnhancementService: ObservableObject {
         if event.getIntegerValueField(.eventSourceUserData) == Self.eventMarker {
             return false
         }
+        if type == .keyDown {
+            guard autoScroll != nil, event.getIntegerValueField(.keyboardEventKeycode) == 53 else { return false }
+            stopAutoScroll()
+            return true
+        }
+        if type == .otherMouseUp {
+            guard event.getIntegerValueField(.mouseEventButtonNumber) == 2, swallowMiddleUp else { return false }
+            swallowMiddleUp = false
+            return true
+        }
+        if type == .otherMouseDown, event.getIntegerValueField(.mouseEventButtonNumber) == 2,
+           configuration.middleClickAutoScroll, configuration.enabled, !isPaused, !sleeping,
+           scrollSource(event.getIntegerValueField(.eventSourceUnixProcessID)) != .passThrough {
+            if autoScroll != nil {
+                stopAutoScroll()
+                swallowMiddleUp = true
+                return true
+            }
+            if let target = targetApplication(for: event),
+               let session = MiddleClickAutoScroll(event: event, target: target, marker: Self.eventMarker) {
+                cancelAnimation()
+                autoScroll = session
+                session.start { [weak self] in self?.stopAutoScroll() }
+                swallowMiddleUp = true
+                return true
+            }
+        }
+        stopAutoScroll()
         guard type == .scrollWheel, configuration.enabled, !isPaused, !sleeping,
               event.getIntegerValueField(.scrollWheelEventScrollPhase) == 0,
               event.getIntegerValueField(.scrollWheelEventMomentumPhase) == 0 else {
@@ -163,11 +203,7 @@ final class MouseEnhancementService: ObservableObject {
             cancelAnimation()
             return false
         }
-        let pidValue = event.getIntegerValueField(.eventTargetUnixProcessID)
-        guard pidValue > 1, pidValue <= Int64(Int32.max),
-              let app = NSRunningApplication(processIdentifier: pid_t(pidValue)),
-              !app.isTerminated, let bundleID = app.bundleIdentifier,
-              !configuration.excludedApps.contains(where: { $0.bundleID == bundleID }) else {
+        guard let app = targetApplication(for: event) else {
             cancelAnimation()
             return false
         }
@@ -198,6 +234,22 @@ final class MouseEnhancementService: ObservableObject {
             x: x, y: y, isToDesk: source == .toDesk,
             speed: configuration.effectiveSpeed, transition: configuration.transition
         )
+    }
+
+    private func stopAutoScroll() {
+        autoScroll?.stop()
+        autoScroll = nil
+    }
+
+    private func targetApplication(for event: CGEvent) -> NSRunningApplication? {
+        let pidValue = event.getIntegerValueField(.eventTargetUnixProcessID)
+        guard pidValue > 1, pidValue <= Int64(Int32.max),
+              let app = NSRunningApplication(processIdentifier: pid_t(pidValue)),
+              !app.isTerminated, let bundleID = app.bundleIdentifier,
+              !configuration.excludedApps.contains(where: { $0.bundleID == bundleID }) else {
+            return nil
+        }
+        return app
     }
 
     private func cancelAnimation() { renderer.cancel() }
