@@ -10,6 +10,7 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "WinTaskbar",
+            resources: [.copy("AutoscrollCursors")],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("CoreAudio"),
