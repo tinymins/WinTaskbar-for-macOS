@@ -8,7 +8,8 @@ struct MouseScrollDynamics: Sendable {
         private var previousTime: Double?
         private var nextRoundGain = 1.0
         private var roundGain: Double?
-        private var overlapStart: Double?
+        private var fastRunStart: Double?
+        private var lastFastOverlap = -Double.infinity
         private var sustainedFraction = 0.0
         private var firstRoundDistance = 1.0
         private var accelerationRemainder = 0.0
@@ -20,6 +21,10 @@ struct MouseScrollDynamics: Sendable {
 
         private static let roundInterval = 0.12
         private static let cooldown = 0.8
+        private static let fastInterval = 0.04
+        private static let sustainedThreshold = 0.6
+        private static let flickGracePeriod = 0.24
+        private static let sustainedRamp = 0.12
 
         mutating func add(_ input: Double, at time: Double, speed: Double) {
             guard input != 0 else { return }
@@ -35,13 +40,22 @@ struct MouseScrollDynamics: Sendable {
             }
             let nativeDistance = max(1, abs(input))
             let distance: Double
+            if interval <= 0 || time - lastFastOverlap >= Self.flickGracePeriod {
+                fastRunStart = nil
+            }
+            // Short gaps bridge fast inputs only when the next one overlaps
+            // real queued output. Single slow steps cannot extend the run.
+            if pendingLines > 0, interval > 0, interval <= Self.fastInterval {
+                if fastRunStart == nil { fastRunStart = time - interval }
+                lastFastOverlap = time
+            }
+            if let fastRunStart, pendingLines > 0 {
+                let elapsed = lastFastOverlap - fastRunStart
+                sustainedFraction = min(1, max(0, (elapsed - Self.sustainedThreshold) / Self.sustainedRamp))
+            } else {
+                sustainedFraction = 0
+            }
             if interval > 0, boundaryInterval < Self.roundInterval {
-                // A long gap within a flick breaks its high-rate input stream.
-                if interval > Self.roundInterval / 2 { overlapStart = nil }
-                sustainedFraction = overlapStart.map {
-                    // Build speed over 200 ms once fast flicks overlap for 400 ms.
-                    min(1, max(0, (time - $0 - Self.cooldown / 2) / (Self.cooldown / 4)))
-                } ?? 0
                 let gain = roundGain ?? min(speed, nextRoundGain)
                 let effectiveGain = gain + (speed - gain) * sustainedFraction
                 if roundGain == nil {
@@ -55,14 +69,6 @@ struct MouseScrollDynamics: Sendable {
                     distance = nativeDistance * effectiveGain
                 }
             } else {
-                // Qualify a new flick only if its predecessor really has output
-                // left to render at this instant, before accepting this event.
-                if roundGain != nil, pendingLines > 0, interval > 0, interval < 2 * Self.roundInterval {
-                    if overlapStart == nil { overlapStart = time }
-                } else {
-                    overlapStart = nil
-                    sustainedFraction = 0
-                }
                 roundGain = nil
                 firstRoundDistance = nativeDistance
                 distance = 1
