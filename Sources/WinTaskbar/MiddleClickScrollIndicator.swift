@@ -55,7 +55,7 @@ final class MiddleClickScrollIndicator {
     private let pid: pid_t
     private var axes: Axes
     private var axisLookup: Task<Void, Never>?
-    private var hiddenDisplay: CGDirectDisplayID?
+    private var hiddenCursor: BackgroundCursor?
     private var lastPosition: CGPoint?
 
     init(origin: CGPoint, target: NSRunningApplication) {
@@ -68,8 +68,7 @@ final class MiddleClickScrollIndicator {
     func show() {
         guard let image = Self.images[axes.center] else { return }
         anchor.show(image, at: origin)
-        let display = CGMainDisplayID() // Core Graphics balances this hide/show count across displays.
-        if CGDisplayHideCursor(display) == .success { hiddenDisplay = display }
+        hiddenCursor = BackgroundCursor.hide()
 
         let pid = pid, origin = origin
         axisLookup = Task { [weak self] in
@@ -88,7 +87,13 @@ final class MiddleClickScrollIndicator {
     }
 
     func update(at location: CGPoint) {
-        guard location != lastPosition, hiddenDisplay != nil else { return }
+        guard let hiddenCursor else { return }
+        guard hiddenCursor.isHidden else {
+            if pointer.isVisible { pointer.orderOut(nil) }
+            lastPosition = nil
+            return
+        }
+        guard location != lastPosition else { return }
         lastPosition = location
         let offset = CGPoint(x: location.x - origin.x, y: location.y - origin.y)
         // Only one copy of the central cursor should cover its hotspot.
@@ -104,9 +109,43 @@ final class MiddleClickScrollIndicator {
         axisLookup = nil
         pointer.orderOut(nil)
         anchor.orderOut(nil)
-        if let hiddenDisplay {
-            CGDisplayShowCursor(hiddenDisplay)
-            self.hiddenDisplay = nil
+        hiddenCursor?.restore()
+        hiddenCursor = nil
+    }
+
+    // A background agent can receive success from CGDisplayHideCursor while
+    // the foreground application still owns the visible system cursor.
+    private struct BackgroundCursor {
+        private typealias MainConnection = @convention(c) () -> Int32
+        private typealias SetProperty = @convention(c) (Int32, Int32, CFString, CFBoolean) -> Int32
+        private typealias CursorVisible = @convention(c) () -> UInt32
+        private let connection: Int32
+        private let setProperty: SetProperty
+        private let cursorVisible: CursorVisible
+        private let display: CGDirectDisplayID
+
+        var isHidden: Bool { cursorVisible() == 0 }
+
+        static func hide() -> Self? {
+            guard let handle = UnsafeMutableRawPointer(bitPattern: -2),
+                  let main = dlsym(handle, "CGSMainConnectionID"),
+                  let set = dlsym(handle, "CGSSetConnectionProperty"),
+                  let visible = dlsym(handle, "CGCursorIsVisible") else { return nil }
+            let connection = unsafeBitCast(main, to: MainConnection.self)()
+            let setProperty = unsafeBitCast(set, to: SetProperty.self)
+            guard setProperty(connection, connection, "SetsCursorInBackground" as CFString, kCFBooleanTrue) == 0 else { return nil }
+            let display = CGMainDisplayID()
+            guard CGDisplayHideCursor(display) == .success else {
+                _ = setProperty(connection, connection, "SetsCursorInBackground" as CFString, kCFBooleanFalse)
+                return nil
+            }
+            return Self(connection: connection, setProperty: setProperty,
+                        cursorVisible: unsafeBitCast(visible, to: CursorVisible.self), display: display)
+        }
+
+        func restore() {
+            CGDisplayShowCursor(display)
+            _ = setProperty(connection, connection, "SetsCursorInBackground" as CFString, kCFBooleanFalse)
         }
     }
 
