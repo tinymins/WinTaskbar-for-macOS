@@ -12,6 +12,7 @@ struct MouseScrollDynamics: Sendable {
         private var accelerationRemainder = 0.0
         private var immediateLines: Int64 = 0
         private var pendingLines: Int64 = 0
+        private var tailEmittedEarly = false
         private var remaining = 0.0
         private var filtered = 0.0
         private var outputRemainder = 0.0
@@ -76,8 +77,18 @@ struct MouseScrollDynamics: Sendable {
                 filtered = 0
                 outputRemainder = 0
             }
+            // Keep the original curve's pending distance for deciding whether
+            // flicks overlap, even when the last line is displayed sooner.
+            if tailEmittedEarly, lines > 0 {
+                lines -= 1
+                tailEmittedEarly = false
+            }
             lines += immediateLines
             immediateLines = 0
+            if lines > 0, pendingLines == 1, !tailEmittedEarly {
+                lines += 1
+                tailEmittedEarly = true
+            }
             return direction * lines
         }
 
