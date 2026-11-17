@@ -22,9 +22,9 @@ struct MouseScrollDynamics: Sendable {
         private static let roundInterval = 0.12
         private static let cooldown = 0.8
         private static let fastInterval = 0.04
-        private static let sustainedThreshold = 0.6
+        private static let sustainedThreshold = 0.8
         private static let flickGracePeriod = 0.24
-        private static let sustainedRamp = 0.12
+        private static let sustainedRamp = 0.36
 
         mutating func add(_ input: Double, at time: Double, speed: Double) {
             guard input != 0 else { return }
