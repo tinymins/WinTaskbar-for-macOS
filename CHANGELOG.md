@@ -2,6 +2,14 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.42] - 2026-11-20
+
+### Fixed
+
+- Press the Windows key repeatedly to open and close the Start menu, even while it is animating.
+- Type to search as soon as the Start menu opens, whether the search field is at the top or bottom.
+- Closing the Start menu with the Windows key or Esc returns keyboard focus to the previous app’s text field, even when the Important messages panel is visible.
+
 ## [0.0.41] - 2026-11-17
 
 ### Added
