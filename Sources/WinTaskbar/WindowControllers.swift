@@ -1658,6 +1658,11 @@ final class StartMenuController: NSObject, NSWindowDelegate {
                 display: false
             )
             panel.alphaValue = 0
+        }
+        if let searchField = panel.initialFirstResponder {
+            panel.makeFirstResponder(searchField)
+        }
+        if !panel.isVisible || !panel.isKeyWindow {
             panel.makeKeyAndOrderFront(nil)
         }
         applyBlur()

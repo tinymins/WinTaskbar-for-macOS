@@ -425,6 +425,15 @@ private struct StartMenuAppRow: View {
     }
 }
 
+private final class MenuSearchTextField: NSTextField {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let panel = window as? StartMenuPanel else { return }
+        panel.initialFirstResponder = self
+        if panel.isKeyWindow { panel.makeFirstResponder(self) }
+    }
+}
+
 private struct MenuSearchField: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String
@@ -436,7 +445,7 @@ private struct MenuSearchField: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField()
+        let field = MenuSearchTextField()
         field.delegate = context.coordinator
         field.target = context.coordinator
         field.action = #selector(Coordinator.submit)
