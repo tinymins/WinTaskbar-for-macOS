@@ -327,7 +327,6 @@ final class NotificationAlertPresenter {
     private func makePanel(size: NSSize, interactive: Bool) -> NotificationAlertPanel {
         let panel = NotificationAlertPanel(contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.canReceiveKeys = interactive
         panel.isReleasedWhenClosed = false
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -500,9 +499,21 @@ final class NotificationAlertPresenter {
 }
 
 private final class NotificationAlertPanel: NSPanel {
-    var canReceiveKeys = false
-    override var canBecomeKey: Bool { canReceiveKeys }
+    private var handlingMouseDown = false
+    override var canBecomeKey: Bool { isKeyWindow || handlingMouseDown }
     override var canBecomeMain: Bool { false }
+
+    override func sendEvent(_ event: NSEvent) {
+        guard !ignoresMouseEvents, event.type == .leftMouseDown || event.type == .rightMouseDown else {
+            super.sendEvent(event)
+            return
+        }
+        // A clicked alert can receive keys, but AppKit must not pick an idle overlay as the next key window.
+        handlingMouseDown = true
+        defer { handlingMouseDown = false }
+        if !isKeyWindow { makeKey() }
+        super.sendEvent(event)
+    }
 }
 
 private struct NotificationTextOverlay: View {

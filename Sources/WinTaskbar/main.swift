@@ -74,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let settings = SettingsWindowController(preferences: preferences, apps: apps)
 
-        actions.toggleStartMenuHandler = { [weak startMenu] screen in startMenu?.toggle(on: screen) }
+        actions.toggleStartMenuHandler = { [weak startMenu] screen in startMenu?.toggleFromStartButton(on: screen) }
         actions.closeStartMenuHandler = { [weak startMenu] in startMenu?.hide() }
         settings.onVisibilityChanged = { [weak startMenu, weak taskbar] visible in
             startMenu?.setSettingsObservationMode(visible)

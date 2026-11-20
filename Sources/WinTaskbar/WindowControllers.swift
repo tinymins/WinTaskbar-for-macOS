@@ -1596,10 +1596,8 @@ final class StartMenuController: NSObject, NSWindowDelegate {
     private let panel: NSPanel
     private let backdrop = NSView()
     private var cancellable: AnyCancellable?
-    private var lastResignDate = Date.distantPast
+    private var dismissingMouseDownCount: UInt32?
     private var isPresented = false
-    private var targetFrame: NSRect?
-    private var orderOutTask: Task<Void, Never>?
     private var keepsVisibleForSettings = false
 
     init(
@@ -1633,32 +1631,34 @@ final class StartMenuController: NSObject, NSWindowDelegate {
         }
     }
 
+    func toggleFromStartButton(on screen: NSScreen?) {
+        let eventType = NSApp.currentEvent?.type
+        if eventType == .leftMouseDown || eventType == .leftMouseUp,
+           dismissingMouseDownCount == CGEventSource.counterForEventType(.combinedSessionState, eventType: .leftMouseDown) {
+            dismissingMouseDownCount = nil
+            return
+        }
+        toggle(on: screen)
+    }
+
     func toggle(on screen: NSScreen? = nil) {
         if isPresented {
             hide()
         } else {
-            guard Date().timeIntervalSince(lastResignDate) >= 0.3 else { return }
             show(on: screen ?? taskbar.activeScreen)
         }
     }
 
     private func show(on screen: NSScreen) {
         guard !taskbar.isCompletelyHidden(on: screen) else { return }
-        orderOutTask?.cancel()
-        orderOutTask = nil
+        dismissingMouseDownCount = nil
         isPresented = true
         taskbar.dismissTransientSurfaces()
         taskbar.setStartMenuPresented(true, on: screen)
 
-        let finalFrame = frame(on: screen)
-        targetFrame = finalFrame
-        if !panel.isVisible {
-            panel.setFrame(
-                StartMenuMotion.dismissedFrame(from: finalFrame, position: preferences.position),
-                display: false
-            )
-            panel.alphaValue = 0
-        }
+        panel.animationBehavior = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? .none : .utilityWindow
+        let targetFrame = frame(on: screen)
+        if panel.frame != targetFrame { panel.setFrame(targetFrame, display: false) }
         if let searchField = panel.initialFirstResponder {
             panel.makeFirstResponder(searchField)
         }
@@ -1666,43 +1666,13 @@ final class StartMenuController: NSObject, NSWindowDelegate {
             panel.makeKeyAndOrderFront(nil)
         }
         applyBlur()
-
-        animateFrame(
-            to: finalFrame,
-            duration: StartMenuMotion.entranceDuration,
-            timingFunction: StartMenuMotion.entranceTimingFunction()
-        )
-        animateAlpha(to: 1)
     }
 
     func hide() {
         guard isPresented else { return }
         isPresented = false
         taskbar.setStartMenuPresented(false)
-        guard panel.isVisible, let targetFrame else {
-            panel.orderOut(nil)
-            panel.alphaValue = 1
-            return
-        }
-
-        let duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            ? StartMenuMotion.fadeDuration
-            : StartMenuMotion.exitDuration
-        animateFrame(
-            to: StartMenuMotion.dismissedFrame(from: targetFrame, position: preferences.position),
-            duration: duration,
-            timingFunction: StartMenuMotion.exitTimingFunction()
-        )
-        animateAlpha(to: 0)
-
-        orderOutTask?.cancel()
-        orderOutTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
-            guard !Task.isCancelled, self?.isPresented == false else { return }
-            self?.panel.orderOut(nil)
-            self?.panel.setFrame(targetFrame, display: false)
-            self?.panel.alphaValue = 1
-        }
+        panel.orderOut(nil)
     }
 
     func setSettingsObservationMode(_ enabled: Bool) {
@@ -1713,8 +1683,10 @@ final class StartMenuController: NSObject, NSWindowDelegate {
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        lastResignDate = Date()
-        if !keepsVisibleForSettings { hide() }
+        guard isPresented, !keepsVisibleForSettings else { return }
+        // A click on Start can dismiss the menu on mouse-down and invoke its button on mouse-up.
+        dismissingMouseDownCount = CGEventSource.counterForEventType(.combinedSessionState, eventType: .leftMouseDown)
+        hide()
     }
 
     private func applyAppearance() {
@@ -1779,30 +1751,6 @@ final class StartMenuController: NSObject, NSWindowDelegate {
             heightMode: preferences.menuHeightMode,
             oppositeEnd: preferences.startButtonAtEnd || preferences.menuButtonPlacement != .standard
         )
-    }
-
-    private func animateFrame(
-        to frame: NSRect,
-        duration: TimeInterval,
-        timingFunction: CAMediaTimingFunction
-    ) {
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
-            panel.setFrame(frame, display: true)
-            return
-        }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = duration
-            context.timingFunction = timingFunction
-            panel.animator().setFrame(frame, display: true)
-        }
-    }
-
-    private func animateAlpha(to alphaValue: CGFloat) {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = StartMenuMotion.fadeDuration
-            context.timingFunction = CAMediaTimingFunction(name: .linear)
-            panel.animator().alphaValue = alphaValue
-        }
     }
 }
 
