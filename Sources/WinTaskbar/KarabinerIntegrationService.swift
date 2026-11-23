@@ -302,15 +302,18 @@ final class KarabinerIntegrationService: ObservableObject {
 
         do {
             keyboards = isAvailable ? try Self.readConnectedKeyboards() : []
-            let storedMappings = try readKeyboardMappings()
-            keyboardMappings = KeyboardMappingProfile.coalescingLegacyDeviceIdentities(storedMappings)
-            if keyboardMappings != storedMappings {
-                try writeKeyboardMappings(keyboardMappings)
-            }
-            if keyboardMappings.isEmpty,
-               let builtInKeyboard = keyboards.first(where: \.isBuiltIn) {
-                keyboardMappings = [Self.defaultBuiltInMapping(for: builtInKeyboard)]
-            }
+        } catch {
+            keyboards = []
+            lastError = error.localizedDescription
+        }
+
+        do {
+            keyboardMappings = try loadKeyboardMappings()
+        } catch {
+            lastError = error.localizedDescription
+        }
+
+        do {
             let root = try readConfiguration()
             guard let profile = Self.selectedProfile(in: root) else {
                 isEnabled = false
@@ -340,6 +343,7 @@ final class KarabinerIntegrationService: ObservableObject {
                 return
             }
 
+            let keyboardMappings = try loadKeyboardMappings()
             let originalData = try canonicalData(root)
             let previousPreferences = StoredPreferences(preferences: preferences)
             let removal = Self.removingConflicts(from: profiles[selectedIndex], mappings: keyboardMappings)
@@ -395,6 +399,7 @@ final class KarabinerIntegrationService: ObservableObject {
             guard var profiles = root["profiles"] as? [[String: Any]],
                   let selectedIndex = profiles.firstIndex(where: { ($0["selected"] as? Bool) == true }),
                   Self.containsManagedRule(profiles[selectedIndex]) else { return }
+            let keyboardMappings = try loadKeyboardMappings()
             preferences.migrateAllTabModifierForWindowsKeyboardLayoutIfNeeded()
             guard !Self.containsCurrentManagedRule(
                 profiles[selectedIndex],
@@ -449,7 +454,7 @@ final class KarabinerIntegrationService: ObservableObject {
         lastError = nil
         do {
             let stableDevice = device.withStableIdentity()
-            var updatedMappings = keyboardMappings.filter {
+            var updatedMappings = try loadKeyboardMappings().filter {
                 $0.device.stableIdentifier != stableDevice.stableIdentifier
             }
             updatedMappings.append(KeyboardMappingProfile(device: stableDevice, assignments: assignments))
@@ -475,8 +480,14 @@ final class KarabinerIntegrationService: ObservableObject {
     ) -> Bool {
         lastError = nil
         guard previousMapping != updatedMapping else { return true }
-        let previousKeyboardMappings = keyboardMappings
-        let updatedKeyboardMappings = keyboardMappings.map {
+        let previousKeyboardMappings: [KeyboardMappingProfile]
+        do {
+            previousKeyboardMappings = try loadKeyboardMappings()
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+        let updatedKeyboardMappings = previousKeyboardMappings.map {
             $0.preservingLogicalOutputs(from: previousMapping, to: updatedMapping)
         }
         do {
@@ -601,10 +612,30 @@ final class KarabinerIntegrationService: ObservableObject {
         return try JSONDecoder().decode(IntegrationState.self, from: data)
     }
 
-    private func readKeyboardMappings() throws -> [KeyboardMappingProfile] {
-        guard fileManager.fileExists(atPath: keyboardMappingsURL.path) else { return [] }
-        let data = try Data(contentsOf: keyboardMappingsURL)
-        return try JSONDecoder().decode([KeyboardMappingProfile].self, from: data)
+    private func loadKeyboardMappings() throws -> [KeyboardMappingProfile] {
+        let storedMappings: [KeyboardMappingProfile]
+        do {
+            let data = try Data(contentsOf: keyboardMappingsURL)
+            storedMappings = try JSONDecoder().decode([KeyboardMappingProfile].self, from: data)
+        } catch CocoaError.fileReadNoSuchFile {
+            storedMappings = []
+        }
+
+        if !storedMappings.isEmpty {
+            let mappings = KeyboardMappingProfile.coalescingLegacyDeviceIdentities(storedMappings)
+            if mappings != storedMappings {
+                try writeKeyboardMappings(mappings)
+            }
+            return mappings
+        }
+
+        // A built-in default cannot reconstruct device mappings already installed in Karabiner.
+        if fileManager.fileExists(atPath: configURL.path),
+           let profile = Self.selectedProfile(in: try readConfiguration()),
+           Self.containsManagedDeviceMappings(profile) {
+            throw IntegrationError.missingKeyboardMappings
+        }
+        return keyboards.first(where: \.isBuiltIn).map { [Self.defaultBuiltInMapping(for: $0)] } ?? []
     }
 
     private func writeKeyboardMappings(_ mappings: [KeyboardMappingProfile]) throws {
@@ -756,6 +787,18 @@ final class KarabinerIntegrationService: ObservableObject {
         let complexModifications = profile["complex_modifications"] as? [String: Any]
         let rules = complexModifications?["rules"] as? [[String: Any]] ?? []
         return rules.contains(where: isManagedRule)
+    }
+
+    private static func containsManagedDeviceMappings(_ profile: [String: Any]) -> Bool {
+        let complexModifications = profile["complex_modifications"] as? [String: Any]
+        let rules = complexModifications?["rules"] as? [[String: Any]] ?? []
+        return rules.filter(isManagedRule).contains { rule in
+            let manipulators = rule["manipulators"] as? [[String: Any]] ?? []
+            return manipulators.contains { manipulator in
+                let conditions = manipulator["conditions"] as? [[String: Any]] ?? []
+                return conditions.contains { $0["type"] as? String == "device_if" }
+            }
+        }
     }
 
     private static func containsCurrentManagedRule(
@@ -1060,6 +1103,7 @@ private enum IntegrationError: LocalizedError {
     case invalidConfiguration
     case selectedProfileMissing
     case invalidRecoveryState
+    case missingKeyboardMappings
     case deviceDiscoveryFailed(String)
     case configurationChanged(backupPath: String)
 
@@ -1078,6 +1122,8 @@ private enum IntegrationError: LocalizedError {
             NSLocalizedString("Karabiner-Elements has no selected profile.", comment: "Karabiner integration error")
         case .invalidRecoveryState:
             NSLocalizedString("WinTaskbar's Karabiner recovery data is invalid.", comment: "Karabiner integration error")
+        case .missingKeyboardMappings:
+            NSLocalizedString("Karabiner contains device remappings, but WinTaskbar’s saved keyboard mappings are missing.", comment: "Karabiner integration error")
         case let .deviceDiscoveryFailed(message):
             String(
                 format: NSLocalizedString(

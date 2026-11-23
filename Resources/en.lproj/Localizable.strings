@@ -580,6 +580,8 @@
 	<string>Karabiner-Elements configuration is not valid JSON.</string>
 	<key>Karabiner-Elements has no selected profile.</key>
 	<string>Karabiner-Elements has no selected profile.</string>
+	<key>Karabiner contains device remappings, but WinTaskbar’s saved keyboard mappings are missing.</key>
+	<string>Karabiner contains device remappings, but WinTaskbar’s saved keyboard mappings are missing.</string>
 	<key>WinTaskbar's Karabiner recovery data is invalid.</key>
 	<string>WinTaskbar's Karabiner recovery data is invalid.</string>
 	<key>Karabiner settings changed after Windows keyboard mode was enabled. To protect those changes, WinTaskbar did not overwrite them. Original backup: %@</key>
