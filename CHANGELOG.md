@@ -2,6 +2,12 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.43] - 2026-11-23
+
+### Fixed
+
+- Keep custom keyboard mappings after a restart, even if Karabiner-Elements is still starting or an external keyboard is unplugged.
+
 ## [0.0.42] - 2026-11-20
 
 ### Fixed
