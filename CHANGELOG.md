@@ -2,11 +2,12 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
-## [0.0.43] - 2026-11-23
+## [0.0.43] - 2026-11-24
 
 ### Fixed
 
 - Keep custom keyboard mappings after a restart, even if Karabiner-Elements is still starting or an external keyboard is unplugged.
+- Refresh the input source list in the taskbar tray and Win+Space picker when input sources are added or removed in macOS, even while WinTaskbar is in the background.
 
 ## [0.0.42] - 2026-11-20
 
