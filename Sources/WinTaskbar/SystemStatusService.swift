@@ -133,6 +133,10 @@ private final class AudioPropertyObservation {
 
 @MainActor
 final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDelegate, CWEventDelegate {
+    private static let enabledInputSourcesChangedNotification = Notification.Name(
+        kTISNotifyEnabledKeyboardInputSourcesChanged as String
+    )
+
     @Published private(set) var batteryLevel: Int?
     @Published private(set) var isCharging = false
     @Published private(set) var isLowPowerModeEnabled = false
@@ -195,6 +199,9 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
     }
 
     isolated deinit {
+        DistributedNotificationCenter.default().removeObserver(
+            self, name: Self.enabledInputSourcesChangedNotification, object: nil
+        )
         statusTimer?.invalidate()
         if let powerSourceObserver { CFRunLoopSourceInvalidate(powerSourceObserver) }
         try? wifiClient.stopMonitoringAllEvents()
@@ -235,13 +242,14 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
             DistributedNotificationCenter.default().publisher(
                 for: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String)
             ).receive(on: DispatchQueue.main).sink { [weak self] _ in self?.readInputSource() },
-            DistributedNotificationCenter.default().publisher(
-                for: Notification.Name(kTISNotifyEnabledKeyboardInputSourcesChanged as String)
-            ).receive(on: DispatchQueue.main).sink { [weak self] _ in
-                self?.reloadInputSources()
-                self?.readInputSource()
-            }
         ]
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(enabledInputSourcesDidChange(_:)),
+            name: Self.enabledInputSourcesChangedNotification,
+            object: nil,
+            suspensionBehavior: .deliverImmediately
+        )
         audioOutputObserver = AudioPropertyObservation(
             objectID: AudioObjectID(kAudioObjectSystemObject),
             selector: kAudioHardwarePropertyDefaultOutputDevice,
@@ -252,6 +260,10 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
         }
         wifiClient.delegate = self
         startWiFiMonitoring()
+    }
+
+    @objc private func enabledInputSourcesDidChange(_ notification: Notification) {
+        refreshInputSources()
     }
 
     private func observeAudioDevice() {
@@ -443,13 +455,22 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
         if enabled { scanWiFi() }
     }
 
+    func refreshInputSources() {
+        reloadInputSources()
+        readInputSource()
+    }
+
     func selectInputSource(id: String) {
-        guard let source = inputSourceRefs[id] else { return }
-        TISSelectInputSource(source)
+        guard let source = inputSourceRefs[id],
+              TISSelectInputSource(source) == noErr else {
+            refreshInputSources()
+            return
+        }
         readInputSource()
     }
 
     func selectNextInputSource() {
+        refreshInputSources()
         guard let nextID = InputSourceCycling.nextID(
             sourceIDs: inputSources.map(\.id),
             currentID: inputSourceID
@@ -458,6 +479,7 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
     }
 
     func selectPreviousInputSource() {
+        refreshInputSources()
         guard let previousID = InputSourceCycling.previousID(
             sourceIDs: inputSources.map(\.id),
             currentID: inputSourceID
@@ -554,8 +576,8 @@ final class SystemStatusService: NSObject, ObservableObject, CLLocationManagerDe
             ))
             refs[id] = source
         }
-        inputSources = options
         inputSourceRefs = refs
+        update(\.inputSources, to: options)
     }
 
     private func stringProperty(_ source: TISInputSource, _ key: CFString) -> String? {

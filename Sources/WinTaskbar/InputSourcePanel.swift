@@ -99,6 +99,7 @@ final class InputSourcePanelController: ObservableObject {
         screen: NSScreen,
         appearance: NSAppearance?
     ) {
+        service.refreshInputSources()
         let contentSize = InputSourcePanelMetrics.contentSize(inputSourceCount: service.inputSources.count)
         let rootView = InputSourcePanelView(
             service: service,
