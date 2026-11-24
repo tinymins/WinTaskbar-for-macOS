@@ -2,6 +2,12 @@
 
 All notable changes to WinTaskbar for macOS are documented here.
 
+## [0.0.44] - 2026-11-24
+
+### Fixed
+
+- Fix Alt+Tab recent-use ordering for apps such as iTerm2. If macOS cannot report the focused window and the foreground app has exactly one eligible visible window, WinTaskbar records that window as recently used.
+
 ## [0.0.43] - 2026-11-24
 
 ### Fixed
@@ -444,6 +450,7 @@ All notable changes to WinTaskbar for macOS are documented here.
 - Show window previews immediately when hovering over a taskbar app while retaining a short dismissal delay.
 - Match Windows preview thumbnail proportions and refine preview panel styling.
 
+[0.0.44]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.43...v0.0.44
 [0.0.20]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.19...v0.0.20
 [0.0.19]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.18...v0.0.19
 [0.0.18]: https://github.com/tinymins/WinTaskbar-for-macOS/compare/v0.0.17...v0.0.18
