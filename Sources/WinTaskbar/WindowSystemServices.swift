@@ -465,6 +465,25 @@ private struct WindowSnapshotCandidate: Sendable {
     let hasWindowTitle: Bool
     let frame: CGRect
     let isOnScreen: Bool
+
+    func isEligibleForSwitcher(
+        using snapshot: AccessibilityWindowSnapshot?,
+        wasPreviouslyEligible: Bool = false,
+        isOnOtherSpace: Bool = false,
+        isApplicationHidden: Bool = false
+    ) -> Bool {
+        WindowPreviewWindowPolicy.shouldIncludeInSwitcher(
+            windowID: windowID,
+            isOnScreen: isOnScreen,
+            hasWindowTitle: hasWindowTitle,
+            accessibilityWindows: snapshot?.states,
+            classifiedWindowIDs: snapshot?.classifiedWindowIDs ?? [],
+            wasPreviouslyEligible: wasPreviouslyEligible,
+            isOnOtherSpace: isOnOtherSpace,
+            isApplicationHidden: isApplicationHidden,
+            isFullScreen: snapshot?.fullScreenWindowIDs.contains(windowID) == true
+        )
+    }
 }
 
 struct AccessibilityWindowSnapshot: Sendable {
@@ -483,6 +502,7 @@ struct CachedWindowFilterResult {
     let windows: [WindowInfo]
     let liveWindowIDs: Set<CGWindowID>?
     let hasUnclassifiedWindows: Bool
+    let fallbackFocusedWindowID: CGWindowID?
 }
 
 @MainActor
@@ -614,7 +634,8 @@ final class WindowsService {
 
     func switcherWindowSnapshot(
         forPIDs pids: [pid_t],
-        focusedWindow: FocusedAccessibilityWindow?
+        focusedWindow: FocusedAccessibilityWindow?,
+        fallbackFocusPID: pid_t?
     ) -> CachedWindowFilterResult {
         captureService.removeClosedWindows()
         let windowList = Self.windowList()
@@ -632,6 +653,7 @@ final class WindowsService {
             }
         )
         var hasUnclassifiedWindows = false
+        var visibleFocusCandidates: [CGWindowID] = []
         let windows: [WindowInfo] = candidates.compactMap { candidate in
             var snapshot = accessibilitySnapshotsByPID[candidate.pid]
             if candidate.isOnScreen,
@@ -655,20 +677,18 @@ final class WindowsService {
                     }
                 }
             }
-            guard WindowPreviewWindowPolicy.shouldIncludeInSwitcher(
-                windowID: candidate.windowID,
-                isOnScreen: candidate.isOnScreen,
-                hasWindowTitle: candidate.hasWindowTitle,
-                accessibilityWindows: snapshot?.states,
-                classifiedWindowIDs: snapshot?.classifiedWindowIDs ?? [],
+            guard candidate.isEligibleForSwitcher(
+                using: snapshot,
                 wasPreviouslyEligible: switcherEligibilityCache.contains(
                     candidate.windowID, forPID: candidate.pid
                 ),
                 isOnOtherSpace: !candidate.isOnScreen
                     && spaceSnapshot?.isOnOtherSpace(candidate.windowID) == true,
-                isApplicationHidden: hiddenPIDs.contains(candidate.pid),
-                isFullScreen: snapshot?.fullScreenWindowIDs.contains(candidate.windowID) == true
+                isApplicationHidden: hiddenPIDs.contains(candidate.pid)
             ) else { return nil }
+            if candidate.pid == fallbackFocusPID, candidate.isOnScreen {
+                visibleFocusCandidates.append(candidate.windowID)
+            }
             return WindowInfo(
                 windowID: candidate.windowID,
                 title: candidate.title,
@@ -680,8 +700,24 @@ final class WindowsService {
         return CachedWindowFilterResult(
             windows: windows,
             liveWindowIDs: liveWindowIDs,
-            hasUnclassifiedWindows: hasUnclassifiedWindows
+            hasUnclassifiedWindows: hasUnclassifiedWindows,
+            fallbackFocusedWindowID: visibleFocusCandidates.count == 1 ? visibleFocusCandidates.first : nil
         )
+    }
+
+    func cachedAccessibilityWindowSnapshot(forPID pid: pid_t) -> AccessibilityWindowSnapshot? {
+        accessibilitySnapshotsByPID[pid]
+    }
+
+    nonisolated static func soleVisibleSwitcherWindowID(
+        forPID pid: pid_t,
+        accessibilitySnapshot: AccessibilityWindowSnapshot?
+    ) -> CGWindowID? {
+        let candidates = windowCandidates(forPIDs: [pid], in: windowList() ?? [])
+        let visibleCandidates = candidates.lazy.filter {
+            $0.isOnScreen && $0.isEligibleForSwitcher(using: accessibilitySnapshot)
+        }.prefix(2)
+        return visibleCandidates.count == 1 ? visibleCandidates.first?.windowID : nil
     }
 
     nonisolated static func windowClassificationSnapshot(

@@ -14,7 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let externalStatusItems = ExternalStatusItemService()
     private let actions = AppActions()
     private lazy var windowActivator = WindowActivationService(windowsService: windowsService)
-    private let windowActivationHistory = WindowActivationHistory()
+    private lazy var windowActivationHistory = WindowActivationHistory(windowsService: windowsService)
     private lazy var windowSwitcherController = WindowSwitcherPanelController(
         windowsService: windowsService,
         activationService: windowActivator,

@@ -70,6 +70,7 @@ final class WindowActivationHistory {
     }
 
     private let workspace: NSWorkspace
+    private let windowsService: WindowsService
     private var activationOrder = WindowActivationOrder()
     private var observations: [pid_t: Observation] = [:]
     private var workspaceObservers: [NSObjectProtocol] = []
@@ -78,8 +79,9 @@ final class WindowActivationHistory {
     private var focusedWindowCaptureGeneration = 0
     var onWindowChanged: ((pid_t) -> Void)?
 
-    init(workspace: NSWorkspace = .shared) {
+    init(workspace: NSWorkspace = .shared, windowsService: WindowsService) {
         self.workspace = workspace
+        self.windowsService = windowsService
     }
 
     func start() {
@@ -141,15 +143,20 @@ final class WindowActivationHistory {
         workspaceObservers.removeAll()
     }
 
-    func captureCurrentFocusedWindow() -> FocusedAccessibilityWindow? {
-        guard let pid = workspace.frontmostApplication?.processIdentifier,
-              let window = Self.focusedWindow(forPID: pid),
-              workspace.frontmostApplication?.processIdentifier == pid else { return nil }
+    func captureCurrentFocusedWindow() -> (pid: pid_t, accessibilityWindow: FocusedAccessibilityWindow?)? {
+        guard let pid = workspace.frontmostApplication?.processIdentifier else { return nil }
+        let window = Self.focusedWindow(forPID: pid)
+        guard workspace.frontmostApplication?.processIdentifier == pid else { return nil }
+        return (pid, window)
+    }
+
+    func recordCurrentFocusedWindow(_ windowID: CGWindowID?, forPID pid: pid_t) -> CGWindowID? {
+        guard let windowID, workspace.frontmostApplication?.processIdentifier == pid else { return nil }
         focusedWindowCaptureTask?.cancel()
         focusedWindowCaptureTask = nil
         focusedWindowCaptureGeneration &+= 1
-        activationOrder.record(window.windowID)
-        return window
+        activationOrder.record(windowID)
+        return windowID
     }
 
     func orderedWindows(
@@ -191,9 +198,13 @@ final class WindowActivationHistory {
             activationOrder.record(windowID)
             return
         }
+        let accessibilitySnapshot = windowsService.cachedAccessibilityWindowSnapshot(forPID: pid)
         focusedWindowCaptureTask = Task { [weak self] in
             let windowID = await Task.detached(priority: .userInitiated) {
                 Self.focusedWindow(forPID: pid)?.windowID
+                    ?? WindowsService.soleVisibleSwitcherWindowID(
+                        forPID: pid, accessibilitySnapshot: accessibilitySnapshot
+                    )
             }.value
             guard let self else { return }
             defer {
@@ -777,10 +788,18 @@ final class WindowSwitcherPanelController {
             )
         }
         let applicationPIDs = applications.map(\.processIdentifier)
-        let focusedWindow = activationHistory.captureCurrentFocusedWindow()
+        let focus = activationHistory.captureCurrentFocusedWindow()
         let cachedFilter = windowsService.switcherWindowSnapshot(
-            forPIDs: applicationPIDs, focusedWindow: focusedWindow
+            forPIDs: applicationPIDs,
+            focusedWindow: focus?.accessibilityWindow,
+            fallbackFocusPID: focus?.accessibilityWindow == nil ? focus?.pid : nil
         )
+        let focusedWindowID = focus.flatMap {
+            activationHistory.recordCurrentFocusedWindow(
+                $0.accessibilityWindow?.windowID ?? cachedFilter.fallbackFocusedWindowID,
+                forPID: $0.pid
+            )
+        }
         needsWindowCacheRefresh = cachedFilter.hasUnclassifiedWindows
         windows = activationHistory.orderedWindows(
             from: cachedFilter.windows,
@@ -793,7 +812,7 @@ final class WindowSwitcherPanelController {
         }
         selectedIndex = WindowSwitcherSelection.initialIndex(
             windowIDs: windows.map(\.windowID),
-            focusedWindowID: focusedWindow?.windowID,
+            focusedWindowID: focusedWindowID,
             reverse: reverse
         )
         updateSelection(disablesAnimations: true)
